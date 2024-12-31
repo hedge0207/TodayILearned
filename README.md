@@ -46,8 +46,6 @@
 
 - SSL과 TLS
 
-- 프로세스와 스레드
-
 - 동시성 병렬성
 
 <br/>
@@ -737,8 +735,6 @@
 
 - Hash
 
-- 해시 충돌 발생시 회피 기법
-
 - 그래프
 
 - 최단 경로 문제
@@ -866,6 +862,9 @@
 <br/>
 
 # devops
+<br/>
+<br/>
+
 ## AWS
 - EC2
 
@@ -888,6 +887,26 @@
 <br/>
 <br/>
 
+## Kubernetes_part1
+- Kubernates
+
+- Kubernetes 기초
+
+- Volume
+
+- Kubelet을 Standalone mode로 실행하기
+
+<br/>
+<br/>
+
+## Kubernetes_part2
+- Configuration
+
+- Load balancer 사용하기
+
+<br/>
+<br/>
+
 ## MinIO
 - MinIO 개요
 
@@ -897,7 +916,9 @@
 
 - MinIO Client
 
-- AWS CLI 사용하기
+- AWS CLI
+
+- Rclone
 
 <br/>
 <br/>
@@ -911,7 +932,7 @@
 
 - Action 사용하기
 
-- 참고
+- Github Container Registry
 
 <br/>
 <br/>
