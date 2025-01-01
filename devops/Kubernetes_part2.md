@@ -1172,3 +1172,344 @@
   Hostname: hello-world-4ttdc175u3-m2b4t
   ```
 
+
+
+
+
+
+
+
+# StatefulSets
+
+- StatefulSets
+  - StatefulSet은 데이터를 보존해야 하는 저장소나 잘 변하지 않고, 고유한 network가 필요할 때 유용하게 사용할 수 있다.
+    - Deployment와 유사하게 StatefulSet은 Pod들을 관리하는 역할을 한다.
+    - 그러나 Deployment와는 달리 StatefulSet은 각 Pod에 대한 고정된 identity를 함께 관리한다.
+    - Pod들은 같은 spec으로 생성되지만, 각기 다른 identity를 가지고 있으므로 서로 교체될 수 없다.
+  - Stateful application(DB 등) 또는 distributed system(Elasticsearch 등)을 위해 사용한다.
+
+
+
+- StatefulSet과 headless Service의 관계
+  - StatefulSet
+    - StatefulSet은 각 Pod에 고유한 이름과 순서를 보장하는데, 이를 활용하려면 각 Pod의 DNS name이 고유해야한다.
+    - 이를 지원하기 위해 headless Service가 사용된다.
+  - Headless Service
+    - 일반적인 Service는 cluster 내부에서 load balancing을 제공하고, 모든 Pod를 단일 DNS name으로 노출한다.
+    - 반면 headless Service는 load balancing을 하지 않고, DNS record만 생성하여 개별 Pod에 직접 접근할 수 있게 해준다.
+  - 아래와 같은 이유로 둘을 함께 사용한다.
+    - StatefulSet의 Pod는 고유한 이름과 함께 headless Service를 통해 DNS 이름이 생성되는데, 이를 통해 특정 Pod에 직접 접근이 가능해진다.
+    - 또한 headless Service는 load balancing 없이 Pod의 개별 DNS entry를 제공하므로, Pod간 직접 통신이 필요한 application에서 유용하다.
+    - 그리고 StatefulSet의 주요 특징 중 하나는 각 Pod의 안정적인 network ID인데(예를 들어, pod-0이 삭제되었다 재생성되더라도 동일한 DNS name이 유지된다), headless Service가 이를 지원한다.
+
+
+
+- StatefulSet과 headless Service 생성하기
+
+  - 생성을 위한 yaml 파일
+    - 윗 부분은 `nginx`라는 이름의 Headless Service를 생성하는 것으로 `spec.clusterIP`를 보면 `None`으로 설정된 것을 볼 수 있다.
+    - 아래는 `web`이라는 이름의 StatefulSet을 생성하는 것이다.
+    - `spec.volumeClaimTempates`를 설정하면 PersistentVolumeClaim이 생성된다.
+
+  ```yaml
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: nginx
+    labels:
+      app: nginx
+  spec:
+    ports:
+    - port: 80
+      name: web
+    clusterIP: None
+    selector:
+      app: nginx
+  ---
+  apiVersion: apps/v1
+  kind: StatefulSet
+  metadata:
+    name: web
+  spec:
+    serviceName: "nginx"
+    replicas: 2
+    selector:
+      matchLabels:
+        app: nginx
+    template:
+      metadata:
+        labels:
+          app: nginx
+      spec:
+        containers:
+        - name: nginx
+          image: registry.k8s.io/nginx-slim:0.21
+          ports:
+          - containerPort: 80
+            name: web
+          volumeMounts:
+          - name: www
+            mountPath: /usr/share/nginx/html
+    volumeClaimTemplates:
+    - metadata:
+        name: www
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 1Gi
+  ```
+
+  - Service와 StatefulSet을 생성하기 전에, 생성 과정을 보기 위해 별도의 terminal에서 아래 명령어를 수행한다.
+    - `--watch` flag는 상태 변경을 실시간으로 보여준다.
+    - `-l`은 label로 Pod를 filtering한다.
+    - 결과적으로 `nginx`라는 label을 가진 Pod들의 상태 변경 과정이 출력된다.
+
+  ```bash
+  $ kubectl get pods --watch -l app=nginx
+  ```
+
+  - Service와 StatefulSet을 생성한다.
+
+  ```bash
+  $ kubectl apply -f https://k8s.io/examples/application/web/web.yaml
+  ```
+
+  - 위에서 생성한 `nginx` Service와 `web` StatefulSet을 확인한다.
+    - `nginx` Service의 `CLUSTER-IP`의 값이 None인 것을 볼 수 있다.
+
+  ```bash
+  $ kubectl get service nginx
+  # output
+  NAME      TYPE         CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
+  nginx     ClusterIP    None         <none>        80/TCP    12s
+  
+  $ kubectl get statefulset web
+  # output
+  NAME   READY   AGE
+  web    2/2     37s
+  ```
+
+  - 위에서 실행했던 `kubectl get pods --watch -l app=nginx`의 출력은 아래와 같다.
+    - n개의 replica를 가진 StatefulSet에 대해 Pod들이 배포되면, {0..n-1}의 순서로 순차적으로 생성된다.
+    - 아래 출력 결과를 보면 `web-0` Pod가 `Running` 상태가 되기 전까지 `web-1`이 실행되지 않는 것을 확인할 수 있다.
+
+  ```bash
+  NAME      READY     STATUS    RESTARTS   AGE
+  web-0     0/1       Pending   0          0s
+  web-0     0/1       Pending   0         0s
+  web-0     0/1       ContainerCreating   0         0s
+  web-0     1/1       Running   0         19s
+  web-1     0/1       Pending   0         0s
+  web-1     0/1       Pending   0         0s
+  web-1     0/1       ContainerCreating   0         0s
+  web-1     1/1       Running   0         18s
+  ```
+
+
+
+- StatefulSet 내부의 Pod
+
+  - StatefulSet 내부의 Pod들은 고유한 ordinal index와 고정된 network identity를 가진다.
+  - Pod의 ordinal index 확인하기
+    - Pod의 이름은 `<stateful_name>-<ordinal_index>`의 형식으로 생성된다.
+
+  ```bash
+  $ kubectl get pods -l app=nginx
+  
+  # output
+  NAME      READY     STATUS    RESTARTS   AGE
+  web-0     1/1       Running   0          1m
+  web-1     1/1       Running   0          1m
+  ```
+
+  - 각 Pod는 ordinal index에 기반한 고정된 hostname을 가지고 있다.
+    - 아래 명령어를 실행하면 각 Pod에 `hostname` 명령어를 실행해 볼 수 있다.
+
+  ```bash
+  $ for i in 0 1; do kubectl exec "web-$i" -- sh -c 'hostname'; done
+  
+  # output
+  web-0
+  web-1
+  ```
+
+  - 각 Pod의 IP를 확인하기 위해  `busybox` container를 실행한다.
+    - `busybox`는 소형 Linux 기반 도구 모음으로 네트워크 테스트 및 디버깅에 자주 사용된다.
+    - `busybox`에는 `dnsutils` package가 포함되어 있으며, 해당 package의  `nslookup` 명령어를 통해 도메인 이름을 IP 주소로 변환하거나, IP 주소를 기반으로 도메인 이름을 확인할 수 있다.
+
+  ```bash
+  $ kubectl run -it --image busybox:1.28 dns-test --restart=Never --rm
+  ```
+
+  - Pod의 hostname에 `nslookup` 명령어를 실행하여 각 Pod의 cluster 내부 DNS address를 확인할 수 있다.
+
+  ```sh
+  $ nslookup web-0.nginx
+  # output
+  Server:    10.0.0.10
+  Address 1: 10.0.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  Name:      web-0.nginx
+  Address 1: 10.244.1.6
+  
+  
+  $ nslookup web-1.nginx
+  # output
+  Server:    10.0.0.10
+  Address 1: 10.0.0.10 kube-dns.kube-system.svc.cluster.local
+  
+  Name:      web-1.nginx
+  Address 1: 10.244.2.6
+  ```
+
+  - StatefulSet에 속한 Pod에서 아래와 같은 것들은 변하지 않는다.
+    - Ordinals
+    - Hostname
+    - SRV record
+    - A record
+  - 그러나 Pod와 연관된 IP 주소는 변경될 수도 있다.
+    - 따라서 application이 StatefulSet 내의 특정 Pod의 IP 주소로 직접 연결하도록 해선 안된다.
+    - 단, hostname은 변하지 않으므로 Pod의 hostname으로는 직접 연결해도 된다.
+  - StatefulSet 내의 Pod들 찾기
+    - 만약 StatefulSet 내의 Pod들 중 active Pod들을 찾고자 한다면, headless Service의 CNAME(예시의 경우 `nginx.default.svc.cluster.local`)에 query를 전송해야 한다. CNAME과 관련된 SRV record는 오직 `Running` 혹은 `Ready` 상태인 Pod들만 포함하고 있다.
+    - 만약 application에 connection의 활성화 상태와 준비 상태를 확인할 수 있는 logic이 구현되어 있고, Pod가 안정된 상태라면, SRV record(예시의 경우 `web-0.nginx.default.svc.cluster.local`, `web-1.nginx.default.svc.cluster.local`)를 사용할 수 도 있다.
+
+
+
+- Stable storage에 쓰기
+
+  - Stateful set을 생성할 때 함께 생성된 PVC 정보를 확인한다.
+    - StatefulSet controller는 두 개의 PV에 binding된 두 개의 PVC를 생성했다.
+    - 현재 사용하는 cluster에서는 PV를 dynamic하게 provisioning하도록 설정했기 때문에, PV는 자동으로 생성되고 binding된다.
+
+  ```bash
+  $ kubectl get pvc -l app=nginx
+  
+  # output
+  NAME        STATUS    VOLUME                                     CAPACITY   ACCESSMODES   AGE
+  www-web-0   Bound     pvc-15c268c7-b507-11e6-932f-42010a800002   1Gi        RWO           48s
+  www-web-1   Bound     pvc-15c79307-b507-11e6-932f-42010a800002   1Gi        RWO           48s
+  ```
+
+  - Nginx에 요청 보내보기
+    - 아래와 같이 요청을 보내면 Nginx web server는 `/usr/share/nginx/html/index.html` 파일을 읽어서 반환하고, 없으면 404 Not Found를 반환한다.
+    - 혹은 `/usr/share/nginx/html` 경로 혹은 `/usr/share/nginx/html/index.html` 파일에 대한 접근 권한이 없으면 403 Forbidden을 반환한다.
+
+  ```bash
+  $ kubectl exec -i -t "web-0" -- curl http://localhost/
+  
+  # output
+  <html>
+  <head><title>403 Forbidden</title></head>
+  <body bgcolor="white">
+  <center><h1>403 Forbidden</h1></center>  
+  <hr><center>nginx/1.13.3</center>        
+  </body>
+  </html>
+  ```
+
+  - `index.html` 파일에 쓰기
+    - Nginx webserver는 기본적으로 `/usr/share/nginx/html/index.html` 파일을 serve한다.
+    - 아래와 같이 `/usr/share/nginx/html/index.html` 파일을 작성한 후 다시 요청을 보낸다.
+    - 위에서 Statefulset을 생성할 때 설정한 `spec.template.spec.volumeMounts` 값으로 인해 `/usr/share/nginx/html` directory가 PV에 의해 지원된다는 것이 보장되므로, directory 생성 없이 바로 file을 생성할 수 있다.
+
+  ```bash
+  # /usr/share/nginx/html/index.html 파일에 hostname을 작성한다.
+  $ kubectl exec "web-0" -- sh -c 'echo "$(hostname)" > /usr/share/nginx/html/index.html'
+  
+  # 다시 요청을 보낸다.
+  kubectl exec -i -t "web-0" -- curl http://localhost/
+  
+  # output
+  web-0
+  ```
+
+  - Pod 삭제하기
+    - Pod를 모두 삭제하고 새로운 Pod가 다시 생성될 때 까지 기다린다.
+
+  ```bash
+  $ kubectl delete pod -l app=nginx
+  ```
+
+  - Pod 삭제 이후에도 PV에 작성한 값이 남아 있는지 확인하기
+    - 이전 Pod에서 PV에 작성한 내용이 삭제되지 않고 그대로 남아있는 것을 확인할 수 있다.
+    - 이는 PVC와 연결된 PV가 `spec.template.spec.volumeMounts`에 설정된 경로로 다시 mount되었기 때문이다.
+
+  ```bash
+  $ kubectl exec -it "web-0" -- curl http://localhost/
+  
+  # output
+  web-0
+  ```
+
+
+
+
+
+## Scaling a StatefulSet
+
+- StatefuleSet의 scaling
+  - StatefulSet을 scaling한다는 것은 replica의 개수를 늘리거나 줄이는 것을 의미한다.
+  - Scaling을 위해서는 `replica` field의 값을 수정해야한다.
+    - `kubectl scale` 혹은 `kubectl patch`로 가능하다.
+
+
+
+- Scaling up
+
+  - `kubectl scale` 명령어를 통해 scaling up 한다.
+    - `sts`는 StatefulSet의 약어이다.
+    - 아래 명령어는 `web`이라는 StatefulSet의 replica를 5로 변경한다는 의미이다.
+
+  ```bash
+  $ kubectl scale sts web --replicas=5
+  ```
+
+  - 확인
+    - 기존의 `web-0`, `web-1` 외에 `web-[2..4]`가 추가된 것을 볼 수 있다.
+
+  ```bash
+  $ kubectl get pod -l app=nginx
+  ```
+
+
+
+- Scaling down
+
+  - `kubectl patch` 명령어를 통해 scaling down한다.
+
+  ```bash
+  $ kubectl patch sts web -p '{"spec":{"replicas":3}}'
+  ```
+
+  - 확인
+    - 새로 추가된 `web-[2..4]` 중 `web-3`과 `web-4`가 삭제된 것을 볼 수 있다.
+
+  ```bash
+  $ kubectl get pod -l app=nginx
+  ```
+
+  - Pod의 종료 순서
+    - Control plane은 Pod를 한 번에 하나씩만 제거한다.
+    - 이 때 Pod의 ordinal index에 따라 역순으로 제거한다(즉, index가 큰 Pod부터 제거한다).
+    - 위 예시의 경우 `web-3`과 `web-4`중 `web-4`가 먼저 제거된다.
+  - PVC 확인하기
+    - 아래와 같이 PVC를 확인해보면, Pod가 제거된 이후에도 PVC는 여전히 남아있는 것을 확인할 수 있다.
+
+  ```bash
+  $ kubectl get pvc -l app=nginx
+  
+  # output
+  NAME        STATUS    VOLUME                                     CAPACITY   ACCESSMODES   AGE
+  www-web-0   Bound     pvc-15c268c7-b507-11e6-932f-42010a800002   1Gi        RWO           13h
+  www-web-1   Bound     pvc-15c79307-b507-11e6-932f-42010a800002   1Gi        RWO           13h
+  www-web-2   Bound     pvc-e1125b27-b508-11e6-932f-42010a800002   1Gi        RWO           13h
+  www-web-3   Bound     pvc-e1176df6-b508-11e6-932f-42010a800002   1Gi        RWO           13h
+  www-web-4   Bound     pvc-e11bb5f8-b508-11e6-932f-42010a800002   1Gi        RWO           13h
+  ```
+
+
+
+
+
