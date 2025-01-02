@@ -1513,3 +1513,247 @@
 
 
 
+
+
+ ## StatefulSet update하기
+
+- StatefulSet controller는 자동 update를 지원한다.
+  - 이는 container image, resource request 혹은 limit, label, 그리고 Pod의 annotation을 수정할 때 사용할 수 있다.
+  - 자동 update시에 사용하는 전략은 `spec.updateStratgy`값에 따라 결정된다.
+    - `RollingUpdate`와 `OnDelete`라는 두 가지 전략을 사용할 수 있다.
+
+
+
+- RollingUpdate
+
+  - StatefulSet 내부의 모든 Pod들을 ordinal order의 역순으로 update한다.
+  - StatefulSet을 update하기 전에, Pod들을 watch하기
+
+  ```bash
+  $ kubectl get pod -l app=nginx --watch
+  ```
+
+  - `web` StatefulSet을 update하기
+    - 위에서 watch를 실행한 terminal과 다른 terminal에서 아래 명령어를 실행한다.
+    - `web` StatefulSet에 있는 container들의 image를 변경한다.
+
+  ```bash
+  $ kubectl patch statefulset web --type='json' -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/image", "value":"registry.k8s.io/nginx-slim:0.24"}]'
+  ```
+
+  - `--watch`를 실행한 terminal을 확인하면 아래와 같은 결과를 볼 수 있다.
+    - 각 Pod들이 ordinal index의 역순으로(2에서 0으로) update된다.
+    - StatefulSet controller는 하나의 Pod를 종료하고, 다시 생성하여 새로운 Pod가 실행 상태가 되면, 다음 Pod를 종료하고 다시 생성하는 과정을 반복한다.
+    - 만약 update 전에 에러가 발생할 경우, 실패한 Pod는 기존 version으로 복원한다.
+    - 반면에 update 후에 에러가 발생할 경우, 실패한 Pod는 update된 version으로 복원한다.
+
+  ```bash
+  NAME      READY     STATUS    RESTARTS   AGE
+  web-0     1/1       Running   0          7m
+  web-1     1/1       Running   0          7m
+  web-2     1/1       Running   0          8m
+  web-2     1/1       Terminating   0         8m
+  web-2     1/1       Terminating   0         8m
+  web-2     0/1       Terminating   0         8m
+  web-2     0/1       Terminating   0         8m
+  web-2     0/1       Terminating   0         8m
+  web-2     0/1       Terminating   0         8m
+  web-2     0/1       Pending   0         0s
+  web-2     0/1       Pending   0         0s
+  web-2     0/1       ContainerCreating   0         0s
+  web-2     1/1       Running   0         19s
+  web-1     1/1       Terminating   0         8m
+  web-1     0/1       Terminating   0         8m
+  web-1     0/1       Terminating   0         8m
+  web-1     0/1       Terminating   0         8m
+  web-1     0/1       Pending   0         0s
+  web-1     0/1       Pending   0         0s
+  web-1     0/1       ContainerCreating   0         0s
+  web-1     1/1       Running   0         6s
+  web-0     1/1       Terminating   0         7m
+  web-0     1/1       Terminating   0         7m
+  web-0     0/1       Terminating   0         7m
+  web-0     0/1       Terminating   0         7m
+  web-0     0/1       Terminating   0         7m
+  web-0     0/1       Terminating   0         7m
+  web-0     0/1       Pending   0         0s
+  web-0     0/1       Pending   0         0s
+  web-0     0/1       ContainerCreating   0         0s
+  web-0     1/1       Running   0         10s
+  ```
+
+  - Image가 정상적으로 update 되었는지 확인한다.
+    - 모든 Pod에서 image update가 성공적으로 완료된 것을 볼 수 있다.
+
+  ```bash
+  $ for p in 0 1 2; do kubectl get pod "web-$p" --template '{{range $i, $c := .spec.containers}}{{$c.image}}{{end}}'; echo; done
+  
+  # output
+  registry.k8s.io/nginx-slim:0.24
+  registry.k8s.io/nginx-slim:0.24
+  registry.k8s.io/nginx-slim:0.24
+  ```
+
+
+
+- Staging an update
+
+  - `RollingUpdate` 전략을 사용하는 StatefulSet의 경우 update를 parition으로 나눠서 실행할 수 있다.
+    - `.spec.updateStrategy.rollingUpdate.partition`의 값을 정의하면 된다.
+  - StatefulSet에서 update를 staging할 수 있다.
+    - 이 방식은 StatefulSet에 대한 Pod template을 변경하는 동안 StatefulSet의 기존 Pod를 변경하지 않는다.
+    - 이후 직접 혹은 자동적으로 trigger를 작동시켜 update를 수행할 수 있다.
+    - `.spec.updateStrategy.rollingUpdate.partition`를 통해 정의할 수 있다.
+  - 먼저 partition을 설정한다.
+    - 아래에서 `partition`의 값은 update가 적용될 ordinal을 설정하는 것으로, 현재 StatefulSet 내부의 마지막 ordinal 보다 큰 값을 설정해야 한다.
+
+  ```bash
+  $ kubectl patch statefulset web -p '{"spec":{"updateStrategy":{"type":"RollingUpdate","rollingUpdate":{"partition":3}}}}'
+  ```
+
+  - 그 후에 container의 image를 변경한다.
+
+  ```bash
+  $ kubectl patch statefulset web --type='json' -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/image", "value":"registry.k8s.io/nginx-slim:0.21"}]'
+  ```
+
+  - Pod에 대한 watch를 실행한다.
+
+  ```bash
+  $ kubectl get pod -l app=nginx --watch
+  ```
+
+  - StatefulSet 내부의 Pod를 삭제한다.
+
+  ```bash
+  $ kubectl delete pod web-2
+  ```
+
+  - Watch의 결과는 아래와 같다.
+    - Pod가 재생성 되었다.
+
+  ```bash
+  NAME      READY     STATUS              RESTARTS   AGE
+  web-0     1/1       Running             0          4m
+  web-1     1/1       Running             0          4m
+  web-2     0/1       ContainerCreating   0          11s
+  web-2     1/1       Running   			0          18s
+  ```
+
+  - Container의 image가 변경되었는지 확인한다.
+    - Image가 변경되지 않았다.
+    - 이는 `web-2` Pod의 ordinal이 `partition`에 설정된 값보다 작기 때문이다.
+
+  ```bash
+  $ kubectl get pod web-2 --template '{{range $i, $c := .spec.containers}}{{$c.image}}{{end}}'
+  
+  # output
+  registry.k8s.io/nginx-slim:0.24
+  ```
+
+
+
+- Rolling out a canary
+
+  - Pod에 대한 watch를 실행한다.
+
+  ```bash
+  $ kubectl get pod -l app=nginx --watch
+  ```
+
+  - 위에서 stage했던 update를 canary rollout을 실행할 것이다.
+    - `partition`의 값을 점차 감소시키는 방법으로 실행한다.
+
+  ```bash
+  $ kubectl patch statefulset web -p '{"spec":{"updateStrategy":{"type":"RollingUpdate","rollingUpdate":{"partition":2}}}}'
+  ```
+
+  - Watch의 결과는 아래와 같다.
+    - `partition`의 값이 2로 감소하면서 `web-2` Pod가 update 대상이 됐고, 위에서 staging되어 있던 update가 `web-2` Pod에 적용됐다.
+
+  ```bash
+  NAME    READY   STATUS    RESTARTS   AGE
+  web-0   1/1     Running   0          25m
+  web-1   1/1     Running   0          25m
+  web-2   1/1     Running   0          7m41s
+  web-2   1/1     Terminating   0          7m49s
+  web-2   0/1     Completed     0          7m50s
+  web-2   0/1     Completed     0          7m50s
+  web-2   0/1     Completed     0          7m50s
+  web-2   0/1     Pending       0          0s
+  web-2   0/1     Pending       0          0s
+  web-2   0/1     ContainerCreating   0          0s
+  web-2   1/1     Running             0          1s
+  ```
+
+  - Image가 update 되었는지 확인한다.
+    - 정상적으로 변경된 것을 확인할 수 있다.
+
+  ```bash
+  $ kubectl get pod web-2 --template '{{range $i, $c := .spec.containers}}{{$c.image}}{{end}}'
+  
+  # output
+  registry.k8s.io/nginx-slim:0.21
+  ```
+
+  - `partition`에 속하지 않는 Pod를 종료시켜본다.
+
+  ```bash
+  $ kubectl delete pod web-1
+  ```
+
+  - 재실행된 Pod의 image가 update 되었는지 확인한다.
+    - 변경되지 않은 것을 확인할 수 있다.
+    - 이처럼, `partition` 보다 낮은 ordinal을 가지고 있는 Pod들은 삭제되거나 종료되더라도, 원래 설정으로 복원된다.
+
+  ```bash
+  $ kubectl get pod web-1 --template '{{range $i, $c := .spec.containers}}{{$c.image}}{{end}}'
+  
+  # output
+  registry.k8s.io/nginx-slim:0.24
+  ```
+
+
+
+- Phased roll out
+
+  - Partitioned rolling update를 활용하면 linear, geometric, exponential roll out 등의 phased roll out을 수행할 수 있다.
+    - 예를 들어 0~9까지 9개의 Pod가 있다고 가정해보자.
+    - 먼저 `partition`의 값을 `10`으로 설정한 후 update를 수행한다.
+    - 이 경우, `partition`의 값이 모든 Pod의 ordinal 보다 크기에 어떤 Pod도 update되지 않는다.
+    - 먼저 1개의 Pod에만 적용하기로 결정이 되어 `partition`의 값을 9로 변경한다.
+    - 9번 Pod에만 update가 적용되고, 9번 Pod를 대상으로 정상 동작하는지 확인한다.
+    - 정상 동작하는 것이 확인되어 `partition`의 값을 7로 변경하고 7~8번 Pod가 update된 후 정상 동작 여부를 확인한다.
+    - 정상 동작하면 `partition`의 값을 4로 변경하고 4~6번  Pod가 update된 후 정상 동작 여부를 확인한다.
+    - 정상 동작하면 `partition`의 값을 0으로 변경하고 0~3번  Pod가 update된 후 정상 동작 여부를 확인한다.
+
+  - 아래와 같이 `partition`의 값을 수정한다.
+    - 예시의 경우 0으로 설정한다.
+
+  ```bash
+  $ kubectl patch statefulset web -p '{"spec":{"updateStrategy":{"type":"RollingUpdate","rollingUpdate":{"partition":0}}}}'
+  ```
+
+  - 모든 Pod가 update되었는지 확인한다.
+
+  ```bash
+  $ for p in 0 1 2; do kubectl get pod "web-$p" --template '{{range $i, $c := .spec.containers}}{{$c.image}}{{end}}'; echo; done
+  
+  # output
+  registry.k8s.io/nginx-slim:0.21
+  registry.k8s.io/nginx-slim:0.21
+  registry.k8s.io/nginx-slim:0.21
+  ```
+
+
+
+- OnDelete 전략
+
+  - `spec.template.updateStrategy.type`을 `OnDelete`로 설정하면 사용할 수 있다.
+
+  ```bash
+  $ kubectl patch statefulset web -p '{"spec":{"updateStrategy":{"type":"OnDelete"}}}'
+  ```
+
+  - 이 전략은 `spec.template`이 수정되더라도 Pod를 자동으로 update하지 않는다.
+    - Update를 적용하려면 Pod를 수동 혹은 자동으로 삭제해야 한다.
