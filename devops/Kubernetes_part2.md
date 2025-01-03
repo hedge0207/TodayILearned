@@ -1757,3 +1757,267 @@
 
   - 이 전략은 `spec.template`이 수정되더라도 Pod를 자동으로 update하지 않는다.
     - Update를 적용하려면 Pod를 수동 혹은 자동으로 삭제해야 한다.
+
+
+
+
+
+## StatefulSet 삭제하기
+
+- StatefulSet 삭제하기
+  - StatefulSet은 non-cascading과 cascading 삭제를 모두 지원한다.
+  - Non-cascading delete
+    - StatefulSet의 Pod는 StatefulSet이 삭제되더라도 삭제되지 않는다.
+  - Cascading delete
+    - StatefulSet이 삭제되면 Pod도 함께 삭제된다.
+
+
+
+- Non-cascading delete
+
+  - `kubectl delete` command를 `--cascade=orphan` parameter와 함께 사용한다.
+
+  ```bash
+  $ kubectl delete statefulset web --cascade=orphan
+  ```
+
+  - Pod의 상태를 확인한다.
+    - StatefulSet `web`이 삭제되었음에도, Pod는 남아있는 것을 확인할 수 있다.
+
+  ```bash
+  $ kubectl get pods -l app=nginx
+  
+  # output
+  NAME      READY     STATUS    RESTARTS   AGE
+  web-0     1/1       Running   0          6m
+  web-1     1/1       Running   0          7m
+  web-2     1/1       Running   0          5m
+  ```
+
+  - Pod는 직접 삭제해야한다.
+
+  ```bash
+  $ kubectl delete pod web-0
+  ```
+
+  - Pod가 삭제되었는지 확인한다.
+    - StatefulSet이 삭제되었으므로, `web-0` Pod는 재실행되지 않는다.
+
+  ```bash
+  $ kubectl get pods -l app=nginx 
+  
+  # output
+  NAME      READY     STATUS    RESTARTS   AGE
+  web-1     1/1       Running   0          10m
+  web-2     1/1       Running   0          7m
+  ```
+
+  - `web` StatefulSet을 다시 생성한다.
+    - `web/web.yaml`에 설정된 `replicas`의 값이 2이므로, `web-0` Pod가 생성되고, `web-2` Pod는 종료된다.
+
+  ```bash
+  $ kubectl apply -f https://k8s.io/examples/application/web/web.yaml
+  ```
+
+  - PV가 여전히 유지되는지 확인한다.
+    - StatefulSet과 `web-0` Pod를 삭제했음에도, 여전히 PV가 유지되고 있는 것을 확인할 수 있다.
+    - 이는 StatefulSet이 삭제되더라도 PV는 삭제되지 않기 때문이다.
+    - StatefulSet이 재생성되고, `web-0` Pod가 재실행되면서 PV역시 remount된다.
+
+  ```bash
+  $ kubectl exec -i -t "web-0" -- curl http://localhost/
+  
+  # output
+  web-0
+  ```
+
+
+
+- Cascading delete
+
+  - Watch를 실행한다.
+
+  ```bash
+  $ kubectl get pods --watch -l app=nginx
+  ```
+
+  - Cascading delete를 실행한다.
+    - 이번에는 `--cascade=orphan` parameter를 주지 않는다.
+
+  ```bash
+  $ kubectl delete statefulset web
+  ```
+
+  - Watch의 결과는 아래와 같다.
+    - Scaling down할 때와 마찬가지로 한 번에 하나의 Pod만 종료되며, ordinal index의 역순으로 종료된다.
+
+  ```bash
+  NAME    READY   STATUS    RESTARTS   AGE
+  web-0   1/1     Running   0          4m53s
+  web-1   1/1     Running   0          62m
+  web-1   1/1     Terminating   0          63m
+  web-0   1/1     Terminating   0          5m29s
+  web-0   0/1     Completed     0          5m29s
+  web-1   0/1     Completed     0          63m
+  web-0   0/1     Completed     0          5m30s
+  web-1   0/1     Completed     0          63m
+  web-0   0/1     Completed     0          5m30s
+  web-1   0/1     Completed     0          63m
+  ```
+
+  - Service 삭제하기
+    - Cascading delete는 StatefulSet과 그 Pod들을 함께 삭제하지만, StatefulSet과 관련된 Service를 함께 삭제하지는 않는다.
+    - 따라서 Service는 수동으로 삭제해야한다.
+
+  ```bash
+  $ kubectl delete service nginx
+  ```
+
+  - StatefulSet과 headless Service를 다시 생성한다.
+
+  ```bash
+  $ kubectl apply -f https://k8s.io/examples/application/web/web.yaml
+  ```
+
+  - PV가 여전히 적용되는지 확인한다.
+    - 적용되는 것을 확인할 수 있다.
+
+  ```bash
+  $ for i in 0 1; do kubectl exec -i -t "web-$i" -- curl http://localhost/; done
+  
+  # output
+  web-0
+  web-1
+  ```
+
+  - 다시 StatefulSet과 Service를 삭제한다.
+
+  ```bash
+  $ kubectl delete service nginx
+  $ kubectl delete statefulset web
+  ```
+
+
+
+
+
+## Pod management policy
+
+- Pod management policy
+  - 분산 시스템 중에는 StatefulSet의 순서 보장이 불필요하거나 순서 보장이 되면 안 되는 경우가 있을 수 있다.
+  - Kubernetes는 이런 경우를 위해 Pod management policy를 설정할 수 있게 해준다.
+    - `OrderReady`(default)나 `Parallel` 둘 중 하나의 값으로 설정할 수 있다.
+
+
+
+- OrderReady Pod management
+  - 위에서 살펴본 방식으로 동작한다.
+  - 정확한 순서로 update를 진행해야 하는 application에 사용한다.
+
+
+
+- `Parallel Pod management`
+
+  - 모든 Pod를 병렬적으로 처리하도록 설정한다.
+    - Pod들은 순차적으로 처리되지 않으며, 따라서 하나의 Pod가 `Running`, `Ready` 상태가 될 때까지 다른 Pod가 기다리지 않는다.
+    - `Parallel` Pod management option은 오직 scaling 작업의 동작에만 영향을 미치며 update에는 영향을 미치지 않는다.
+    - 따라서 순서에 따라 roll out을 수행하는 것이 가능하다.
+
+  - StatefulSet을 생성을 위한 `web/web-parallel.yaml` 파일은 아래와 같다.
+    - `spec.podManagementPolicy`를 `Parallel`로 설정한다.
+
+  ```yaml
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: nginx
+    labels:
+      app: nginx
+  spec:
+    ports:
+    - port: 80
+      name: web
+    clusterIP: None
+    selector:
+      app: nginx
+  ---
+  apiVersion: apps/v1
+  kind: StatefulSet
+  metadata:
+    name: web
+  spec:
+    serviceName: "nginx"
+    podManagementPolicy: "Parallel"
+    replicas: 2
+    selector:
+      matchLabels:
+        app: nginx
+    template:
+      metadata:
+        labels:
+          app: nginx
+      spec:
+        containers:
+        - name: nginx
+          image: registry.k8s.io/nginx-slim:0.24
+          ports:
+          - containerPort: 80
+            name: web
+          volumeMounts:
+          - name: www
+            mountPath: /usr/share/nginx/html
+    volumeClaimTemplates:
+    - metadata:
+        name: www
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 1Gi
+  ```
+
+  - Watch를 실행한다.
+
+  ```bash
+  $ kubectl get pod -l app=nginx --watch
+  ```
+
+  - StatefulSet과 Service를 생성한다.
+
+  ```bash
+  $ $ kubectl apply -f https://k8s.io/examples/application/web/web-parallel.yaml
+  ```
+
+  - StatefulSet의 replica를 변경한다.
+
+  ```bash
+  $ kubectl scale statefulset/web --replicas=5
+  ```
+
+  - Watch의 결과는 아래와 같다.
+    - 하나의 Pod가 완전히 생성될 때까지 기다리지 않고, 세 개의 추가 Pod를 병렬적으로 생성한다.
+
+  ```bash
+  NAME    READY   STATUS    RESTARTS   AGE
+  web-0   0/1     Pending   0          0s
+  web-1   0/1     Pending   0          0s
+  web-0   0/1     Pending   0          0s
+  web-1   0/1     Pending   0          0s
+  web-0   0/1     ContainerCreating   0          0s
+  web-1   0/1     ContainerCreating   0          0s
+  web-0   1/1     Running             0          1s
+  web-1   1/1     Running             0          1s
+  web-2   0/1     Pending             0          0s
+  web-2   0/1     Pending             0          0s
+  web-4   0/1     Pending             0          0s
+  web-3   0/1     Pending             0          0s
+  web-4   0/1     Pending             0          0s
+  web-3   0/1     Pending             0          0s
+  web-2   0/1     ContainerCreating   0          0s
+  web-3   0/1     ContainerCreating   0          0s
+  web-4   0/1     ContainerCreating   0          0s
+  web-4   1/1     Running             0          1s
+  web-2   1/1     Running             0          2s
+  web-3   1/1     Running             0          2s
+  ```
+
