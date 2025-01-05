@@ -1322,6 +1322,389 @@ https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-discover
 
 
 
+
+
+# Kubernetes를 사용하여 Elasticsearch 배포하기
+
+- Minikube 실행하기
+
+  - Minikube를 실행한다.
+
+  ```bash
+  $ minikube start --nodes 3
+  ```
+
+  - 정상적으로 실행 됐는지 확인한다.
+
+  ```bash
+  $ minikube status
+  ```
+
+
+
+- Master Node 배포
+
+  - Master node를 위한 manifest를 작성한다.
+
+  ```yaml
+  # elasticsearch-master.yaml
+  apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: elasticsearch-master-config
+    labels:
+      app: elasticsearch
+      role: master
+  data:
+    elasticsearch.yml: |
+      cluster.name: ${CLUSTER_NAME}
+      node.name: ${NODE_NAME}
+      discovery.seed_hosts: ${NODE_LIST}
+      cluster.initial_master_nodes: ${MASTER_NODES}
+      network.host: 0.0.0.0
+      node.roles: [ master ]
+      xpack.security.enabled: false
+      xpack.security.enrollment.enabled: false
+  ---
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: elasticsearch-master
+    labels:
+      app: elasticsearch
+      role: master
+  spec:
+    ports:
+    - port: 9300
+      name: transport
+    selector:
+      app: elasticsearch
+      role: master
+  ---
+  apiVersion: apps/v1
+  kind: StatefulSet
+  metadata:
+    name: elasticsearch-master
+    labels:
+      app: elasticsearch
+      role: master
+  spec:
+    selector:
+      matchLabels:
+        app: elasticsearch
+        role: master
+    template:
+      metadata:
+        labels:
+          app: elasticsearch
+          role: master
+      spec:
+        containers:
+        - name: elasticsearch-master
+          image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+          env:
+          - name: CLUSTER_NAME
+            value: elasticsearch
+          - name: NODE_NAME
+            value: elasticsearch-master
+          - name: NODE_LIST
+            value: elasticsearch-master,elasticsearch-data,elasticsearch-data2
+          - name: MASTER_NODES
+            value: elasticsearch-master
+          - name: "ES_JAVA_OPTS"
+            value: "-Xms128m -Xmx128m"
+          ports:
+          - containerPort: 9300
+            name: transport
+          volumeMounts:
+          - name: config
+            mountPath: /usr/share/elasticsearch/config/elasticsearch.yml
+            readOnly: true
+            subPath: elasticsearch.yml
+          - name: storage
+            mountPath: /data
+        volumes:
+        - name: config
+          configMap:
+            name: elasticsearch-master-config
+        - name: "storage"
+          emptyDir:
+            medium: ""
+  ```
+
+  - 위에서 작성한 manifest로 object들을 생성한다.
+
+  ```bash
+  $ kubectl apply -f elasticsearch-master.yml
+  ```
+
+
+
+- 1번 Data Node 배포
+
+  - Manifest를 작성한다.
+
+  ```yaml
+  # elasticsearch-data.yaml
+  apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: elasticsearch-data-config
+    labels:
+      app: elasticsearch
+      role: data
+  data:
+    elasticsearch.yml: |
+      cluster.name: ${CLUSTER_NAME}
+      node.name: ${NODE_NAME}
+      discovery.seed_hosts: ${NODE_LIST}
+      cluster.initial_master_nodes: ${MASTER_NODES}
+      network.host: 0.0.0.0
+      node.roles: [ data, master ]
+      xpack.security.enabled: false
+      xpack.security.enrollment.enabled: false
+  ---
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: elasticsearch-data
+    labels:
+      app: elasticsearch
+      role: data
+  spec:
+    ports:
+    - port: 9300
+      name: transport
+    selector:
+      app: elasticsearch
+      role: data
+  ---
+  apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: es-pvc-data1
+    labels:
+      app: elasticsearch
+  spec:
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: 1Gi
+  ---
+  apiVersion: apps/v1
+  kind: StatefulSet
+  metadata:
+    name: elasticsearch-data
+    labels:
+      app: elasticsearch
+      role: data
+  spec:
+    selector:
+      matchLabels:
+        app: elasticsearch
+        role: data
+    replicas: 1
+    template:
+      metadata:
+        labels:
+          app: elasticsearch
+          role: data
+      spec:
+        containers:
+        - name: elasticsearch-data
+          image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+          env:
+          - name: CLUSTER_NAME
+            value: elasticsearch
+          - name: NODE_NAME
+            value: elasticsearch-data
+          - name: NODE_LIST
+            value: elasticsearch-master,elasticsearch-data,elasticsearch-data2
+          - name: MASTER_NODES
+            value: elasticsearch-master
+          - name: "ES_JAVA_OPTS"
+            value: "-Xms128m -Xmx128m"
+          ports:
+          - containerPort: 9300
+            name: transport
+          volumeMounts:
+          - name: config
+            mountPath: /usr/share/elasticsearch/config/elasticsearch.yml
+            readOnly: true
+            subPath: elasticsearch.yml
+          - name: es-persistent-storage1
+            mountPath: /data
+        volumes:
+        - name: config
+          configMap:
+            name: elasticsearch-data-config
+        - name: es-persistent-storage1
+          persistentVolumeClaim:
+            claimName: es-pvc-data1
+  ```
+
+  - 위에서 작성한 manifest로 object들을 생성한다.
+
+  ```bash
+  $ kubectl apply -f elasticsearch-data.yml
+  ```
+
+
+
+- 2번 Data Node 배포
+
+  - Manifest를 작성한다.
+    - 2번 data node를 통해 cluster와 통신할 것이므로  Service에 9200 port도 추가한다.
+
+  ```yaml
+  # elasticsearch-data2.yaml
+  apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: elasticsearch-data2-config
+    labels:
+      app: elasticsearch
+      role: data2
+  data:
+    elasticsearch.yml: |-
+      cluster.name: ${CLUSTER_NAME}
+      node.name: ${NODE_NAME}
+      discovery.seed_hosts: ${NODE_LIST}
+      cluster.initial_master_nodes: ${MASTER_NODES}
+      network.host: 0.0.0.0
+      node.roles: [ data, master ]
+      xpack.security.enabled: false
+      xpack.security.enrollment.enabled: false
+  ---
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: elasticsearch-data2
+    labels:
+      app: elasticsearch
+      role: data2
+  spec:
+    ports:
+    - port: 9200
+      name: data2
+    - port: 9300
+      name: transport
+    selector:
+      app: elasticsearch
+      role: data2
+  ---
+  apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: es-pvc-data2
+    labels:
+      app: elasticsearch
+  spec:
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: 1Gi
+  ---
+  apiVersion: apps/v1
+  kind: StatefulSet
+  metadata:
+    name: elasticsearch-data2
+    labels:
+      app: elasticsearch
+      role: data2
+  spec:
+    selector:
+      matchLabels:
+        app: elasticsearch
+        role: data2
+    template:
+      metadata:
+        labels:
+          app: elasticsearch
+          role: data2
+      spec:
+        containers:
+        - name: elasticsearch-data2
+          image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+          env:
+          - name: CLUSTER_NAME
+            value: elasticsearch
+          - name: NODE_NAME
+            value: elasticsearch-data2
+          - name: NODE_LIST
+            value: elasticsearch-master,elasticsearch-data,elasticsearch-data2
+          - name: MASTER_NODES
+            value: elasticsearch-master
+          - name: "ES_JAVA_OPTS"
+            value: "-Xms128m -Xmx128m"
+          ports:
+          - containerPort: 9200
+            name: data2
+          - containerPort: 9300
+            name: transport
+          volumeMounts:
+          - name: config
+            mountPath: /usr/share/elasticsearch/config/elasticsearch.yml
+            readOnly: true
+            subPath: elasticsearch.yml
+          - name: es-persistent-storage2
+            mountPath: /data
+        volumes:
+        - name: config
+          configMap:
+            name: elasticsearch-data2-config
+        - name: es-persistent-storage2
+          persistentVolumeClaim:
+            claimName: es-pvc-data2
+  ```
+
+  - 위에서 작성한 manifest로 object들을 생성한다.
+
+  ```bash
+  $ kubectl apply -f elasticsearch-data2.yml
+  ```
+
+
+
+- 확인
+
+  - 모든 Pod가 정상 실행 중인지 확인한다.
+
+  ```bash
+  $ kubectl get pod
+  
+  # output
+  NAME                     READY   STATUS    RESTARTS   AGE
+  elasticsearch-data-0     1/1     Running   0          13m
+  elasticsearch-data2-0    1/1     Running   0          12m
+  elasticsearch-master-0   1/1     Running   0          15m
+  ```
+
+  - 위에서 생성한 `elasticsearch-data2` Service에 요청을 위한 URL을 받아온다.
+    - `elasticsearch-data2`의 경우 9200, 9300 두 개의 port를 설정했으므로 결과도 두 개가 나온다.
+
+  ```bash
+  $ kubectl service elasticsearch-data2 --url
+  
+  # output
+  http://127.0.0.1:51222
+  http://127.0.0.1:51223
+  ```
+
+  - 9200 port에 해당하는 URL로 요청을 보내 clustering이 되었는지 확인한다.
+
+  ```bash
+  $ curl http://127.0.0.1:51222/_cat/nodes
+  ```
+
+
+
+
+
+
+
 # Error
 
 - `vm.max_map_count is too low` error
