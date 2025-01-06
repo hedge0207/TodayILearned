@@ -7,6 +7,11 @@
   - Kafka라는 이름은 소설가 프란츠 카프카에서 따왔다.
   - Pub-Sub 모델의 메시지 큐
   - 분산 환경에 특화되어 있다는 특징을 가지고 있다.
+  - Kafka는 Confluent Kafka와 Apache Kafka가 있으며 각기 다른 version으로 관리된다.
+  
+    - 각 버전 별 호환 정보는 아래에서 확인할 수 있다.
+  
+    > https://docs.confluent.io/platform/current/installation/versions-interoperability.html#cp-and-apache-ak-compatibility
 
 
 

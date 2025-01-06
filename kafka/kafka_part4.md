@@ -1380,6 +1380,125 @@
 
 
 
+- Kafka source connector 성능 튜닝 과정
+
+  > https://www.confluent.io/blog/how-to-increase-throughput-on-kafka-connect-source-connectors/?session_ref=https://www.google.com/
+
+  - Kafka Connect에 JDBC source connect를 생성하고, source connect에 대한 성능 테스트를 진행한 결과가 아래와 같았다고 가정해보자.
+
+  | Metric                                                     | Value       |
+  | ---------------------------------------------------------- | ----------- |
+  | kafka_connect_source_task_metrics_source_record_poll_rate  | 53.1K ops/s |
+  | kafka_connect_source_task_metrics_poll_batch_avg_time_ms   | 0.981ms     |
+  | kafka_connect_source_task_metrics_source_record_write_rate | 53.1K ops/s |
+  | kafka_producer_producer_metrics_record_size_avg            | 1.09 KiB    |
+  | kafka_producer_producer_metrics_batch_size_avg             | 15.1 KiB    |
+  | kafka_producer_producer_metrics_records_per_request_avg    | 14.8        |
+  | kafka_producer_producer_metrics_records_send_rate          | 71.6K       |
+
+  - Connector가 bottleneck인지 확인하기
+    - Source connector의 구성 요소 중 connector가 bottleneck인지 확인하는 방법은 아래와 같다.
+    - Producer의 설정을 변경해도 throughput이 증가하지 않거나, `records_send_rate`이 일정하게 유지되면 producer가 connector로부터 data를 기다리는 시간이 있다는 의미이므로, connector가 bottleneck이라고 볼 수 있다.
+  - Producer 관련 metrics 확인하기
+    - `batch_size_avg`와 `records_per_request_avg`를 확인해보면 문제가 발생할 위험이 있다는 것을 알 수 있다.
+    - `batch_size_avg`의 값인 15.1 KiB가 `batch.size`의 기본 값인 16384에 거의 근접하고 있다.
+    - 이 때, `batch_size_avg`의 값이 1.09 KiB이기 때문에, 추가적인 record가 batch에 포함되기 어려울 수 있다.
+    - 또한 `records_per_request_avg`를 보면 connector는 `batch.max.rows`의 기본값인 100만큼 producer에게 반환하지만, producer는 request 당 평균적으로 14.8개의 record를 전송하고 있다는 것을 확인할 수 있다.
+
+
+
+- Producer 튜닝하기
+
+  - Producer를 튜닝하기 위해서는 `batch.size`를 증가시킬 필요가 있다.
+  - 현재 한 번 polling할 때 `batch.max.rows`의 기본값인 100만큼 가져오고, record size의 평균인 `record_size_avg`의 값이 1.09 KiB이므로 `batch_size`는 `100*1.09*1024=111616`(KiB를 bytes로 변환하기위해 1024를 곱함)이 되어야한다.
+  - 만약 poll 할 때 더 많은 record를 poll 하고자 한다면 `batch.max.rows`의 값도 함께 수정하면 된다.
+  - `batch_max_rows`의 값을 변경할 경우 `batch_size`도 다시 계산해야한다. 
+  - 예를 들어 `batch_max_rows`를  500으로 증가시키면, `batch_size`는 `500*1.09*1024=558080`이 된다.
+  - Kafka source connector 설정에서 아래와 같이 `batch.size`와 `batch_max_rows`의 값을 조정한다.
+
+  ```json
+  {
+      "producer.override.batch.size": 111616,
+      "batch.max.rows": 500
+  }
+  ```
+
+  - 튜닝 후 지표 확인하기
+    - `records_per_request_avg`의 값이 `batch.max.rows`에 미치지 않는 것을 확인할 수 있다.
+    - `records_per_request_avg`의 값이 `batch.max.rows`에 미치지 않는 다는 것은, producer가 batch가 채워질 때 까지 좀 더 기다려야 한다는 것을 나타낸다.
+    - 이는 `linger.ms`의 값이 증가해야 한다는 것을 의미한다.
+
+  | Metric                                                     | Value       |
+  | ---------------------------------------------------------- | ----------- |
+  | kafka_connect_source_task_metrics_source_record_poll_rate  | 61.5K ops/s |
+  | kafka_connect_source_task_metrics_poll_batch_avg_time_ms   | 4.41 ms     |
+  | kafka_connect_source_task_metrics_source_record_write_rate | 61.4K ops/s |
+  | kafka_producer_producer_metrics_record_size_avg            | 1.09 KiB    |
+  | kafka_producer_producer_metrics_batch_size_avg             | 95.3 KiB    |
+  | kafka_producer_producer_metrics_records_per_request_avg    | 95.9        |
+  | kafka_producer_producer_metrics_records_send_rate          | 60.8K       |
+
+  - `linger.ms` 증가시키기
+    - `linger.ms`의 값은 환경에 따라 다르기 때문에 특별히 정하는 규칙이 있지는 않다.
+    - 아래와 같이 `linger.ms`의 값을 기본값인 0에서 10으로 증가시킨다.
+
+  ```json
+  {
+      "producer.override.linger.ms": 10
+  }
+  ```
+
+  - 다시 producer 지표 확인하기
+    - `records_per_request_avg`의 값이 `batch.max.rows` 이상으로 증가한 것을 확인할 수 있다.
+    - 다만 `records_send_rate`의 값은 거의 변화가 없는 것을 확인할 수 있는데, 이는 connector가 producer에게 충분히 빠르게 record들을 전송하지 못하고 있다는 것을 가리킨다.
+
+  | Metric                                                  | Value   |
+  | ------------------------------------------------------- | ------- |
+  | kafka_producer_producer_metrics_batch_size_avg          | 543 KiB |
+  | kafka_producer_producer_metrics_records_per_request_avg | 534     |
+  | kafka_producer_producer_metrics_records_send_rate       | 58.0K   |
+
+
+
+- Connector 튜닝하기
+
+  - 위에서 connector가 bottleneck임을 확인했다.
+    - Producer의 설정을 변경했음에도 `records_send_rate`이 상대적으로 일정한 것을 통해 확인할 수 있다.
+  - Connector의 throughput과 관련 있는 설정은 아래 두 개가 있다.
+    - `batch.max.rows`: 새로운 data를 polling할 때 한 번의 batch에 포함될 row의 최대 개수를 설정한다.
+    - `poll.interval.ms`: 각 테이블에서 새로운 data를 polling하는 빈도를 설정한다.
+  - `poll.interval.ms` 값을 수정한다.
+    - 위에서 `batch.max.rows`의 값을 수정했음에도 throughput이 증가하지 않았으므로, `poll.interval.ms`만 수정한다.
+    - `poll.interval.ms`의 값을 기존보다 감소시킨다.
+
+  ```json
+  {
+      "poll.interval.ms": 1,
+  }
+  ```
+
+  - 다시 지표를 확인해보면 `records_send_rate`이 증가한 것을 확인할 수 있다.
+
+
+
+- Kafka connect 생성시에 producer 관련 설정을 변경하려면 아래와 같이 설정하면 된다.
+
+  - `producer.override`를 prefix로 producer 관련 설정을 할 수 있다.
+
+  ```json
+  {
+      "name":"name",
+      "config":{
+          "producer.override.linger.ms":"100",
+  				"producer.override.batch.size": "10000000"
+      }
+  }
+  ```
+
+
+
+
+
 
 
 ## 성능 테스트
