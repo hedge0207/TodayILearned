@@ -1356,6 +1356,80 @@
 
 
 
+- Async가 sync보다 더 빠른가?
+
+  > https://blog.miguelgrinberg.com/post/sync-vs-async-python-what-is-the-difference
+
+  - 여러 작업을 동시에 수행해야 하는 경우가 아니라면, 두 방식 사이에 속도 차이는 거의 없다.
+    - 오히려 아래와 같이 병렬 처리도 아니고, I/O 작업도 아닌 경우 async에 비해 sync가 더 빠를 수 있다.
+    - 또한 비동기 함수의 경우 `async`로 정의된 coroutine을 생성하고, `await` keyword를 통해 비동기적으로 작업 결과를 기다리는데, 이 괴정에서 Python의 coroutine 객체 관리와 event loop가 관여하여 추가적인 처리 시간으로 인한 오버헤드가 발생한다.
+
+
+  ```python
+import asyncio
+import time
+
+
+async def async_fibo(n):
+    if n <= 1:
+        return n
+    else:
+        return await async_fibo(n-1) + await async_fibo(n-2)
+
+
+def sync_fibo(n):
+    if n <= 1:
+        return n
+    else:
+        return sync_fibo(n-1) + sync_fibo(n-2)
+
+
+async def main():
+    async_time_total = 0
+    for _ in range(100):
+        st = time.time()
+        await async_fibo(30)
+        async_time_total += time.time()-st
+    print("async:", async_time_total / 100)
+
+
+
+if __name__ == "__main__":
+    sync_time_total = 0
+    for _ in range(100):
+        st = time.time()
+        sync_fibo(30)
+        sync_time_total += time.time()-st
+    
+    print("sync:", sync_time_total / 100)
+    asyncio.run(main())
+
+ 
+"""
+sync: 0.1715003728866577
+async: 0.4084389281272888
+"""
+  ```
+
+  - Context-Switching
+    - Sync로 동작하는 application의 경우 OS에 의해 context-switching이 자동으로 실행되며, 이는 기본적으로 black box로 설정이나 fine tuning의 여지가 거의 없다.
+    - 반면에 async로 동작하는 application의 경우 context-switching은 loop에 의해 실행된다.
+    - `asyncio` package에 구현되어 있는 loop는 매우 효율적으로 동작하지는 않으며, `uvloop`에 구현되어 있는 loop는 보다 나은 성능을 위해 부분적으로 C로 구현되어 있다.
+    - 최적화가 잘 된 async loop의 경우 OS보다 context-switching을 잘 수행할 수도 있긴 하다.
+
+  - CPU bound task
+    - Sync로 처리되는 4개의 API 서버가 있다고 가정해보자.
+    - 이 때 LB를 통해 100개의 요청이 들어올 경우 4대의 서버는 한 번에 하나의 요청만 처리할 수 있으므로, 96개의 요청은 큐에 보관될 것이다.
+    - 반면에 async로 처리되는 4대의 서버가 있다고 가정해보자.
+    - 마찬가지로 LB를 통해 100개의 요청이 들어올 경우, 각 async server는 즉시 25개의 task를 생성하고, 이를 loop에 등록 후 번갈아가며 실행할 것이다.
+    - 그런데, 만약 처리해야 하는 요청이 CPU를 사용해야 하는 작업일 경우, sync와 async는 거의 유사한 속도로 요청을 처리하게 된다.
+    - 이는 CPU가 실행되는 속도와 Python이 code를 싱행하는 속도는 고정되어 있기 때문이다.
+    - 그러나 만약 처리해야하는 작업이 I/O 작업이라면, async server는 각 작업을 번갈아가면서 빠르게 실행할 수 있다.
+
+  - Async가 sync보다 빠른 경우는 아래와 같다.
+    - 높은 부하가 있는 경우.
+    - 수행해야 하는 task가 I/O bound인 경우(만약 CPU bound일 경우, CPU가 처리할 수 있는 개수를 넘어 서는 task는 동시에 처리가 불가능하다).
+
 
 
 

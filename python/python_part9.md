@@ -818,6 +818,26 @@
 
 
 
+- Python GIL이 Python의 속도를 느리게 만드는가?
+
+  > https://blog.miguelgrinberg.com/post/is-python-really-that-slow
+
+  - Python이 multithreaded program의 성능에 악영향일 미친다는 것은 사실이다.
+  - 그러나 multithreaded program이 아닐 경우에는 GIL이 성능에 악영향을 미치지는 않는다.
+    - GIL의 목적은 multithread 환경에서 여러 개의 thread들이 동시에 같은 data에 접근하여 data가 일관성을 잃는 것을 막는데 있다.
+    - 꼭 GIL이 아니더라도, 이는 반드시 필요한 작업이며, GIL 이외의 다른 방법을 사용하더라도 방식에 따라 오버헤드가 발생할 수 있다.
+    - 따라서 GIL 이외의 방식을 사용한 multithreaded program이라 하더라도, GIL 이외의 방식이 발생시키는 오버헤드에 비해 GIL로 인해 발생하는 성능 저하가 더 클 경우에만 GIL을 사용하지 않음으로써 오는 성능상의 이점을 누릴 수 있다.
+  - GIL 이외의 방식으로 data의 일관성을 유지하려 할 경우 오히려 성능 저하가 생길 수 있다.
+    - Python 3.13.0에서는 free-threading이라는 GIL을 없앤 실험적인 기능을 도입했다.
+    - Python 3.13.0에서 free-threading을 활성화 시켰을 때와, 비활성화 시켰을 때 Fibonacci number를 계산하는 함수를 실행하는 데 걸리는 시간을 확인해보면, GIL을 활성화 한 쪽이 약 2배 더 빠른 것을 볼 수 있다.
+    - 그러나 아직 실험적인 단계이므로 완전히 성숙한 기능이라고 볼 수는 없어, 추후에 성능 향상을 기대해 볼 수 있다.
+
+
+
+
+
+
+
 # Multi processing
 
 - Python에서의 multi processing
