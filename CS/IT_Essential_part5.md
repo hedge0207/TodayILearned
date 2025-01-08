@@ -342,6 +342,141 @@
 
 
 
+
+
+# Cache Replacement Policies
+
+- Cache Replacement Policy(Cache Replacement Algorithm)
+  - Cache는 자주 사용되는 data에 더 빠르게 접근할 수 있게 해줌으로써, 성능을 향상시켜주지만, cache에 활용할 수 있는 영역은 한정되어 있다.
+  - 따라서 cache에 저장된 data를 무엇을 기준으로 새로운 data로 교체할 것인지를 정해야 하는데, 이 정책을 정한 것이 cache replacement policy이다.
+  - 이 때, 어떤 data를 cache에서 추방할건지 결정하는 algorithm을 eviction altorithm이라 한다.
+
+
+
+- Cache를 평가하는 지표들
+  - 효율성(Efficiency)
+    - Cache에 요청이 들어왔을 때 필요한 정보가 얼마나 자주 cache에 남아 있는가를 의미한다.
+    - 일반적으로 cache miss rate으로 평가한다.
+  - 처리율(Throughput)
+    - Cache가 초당 얼마나 많은 요청을 소화할 수 있는지 나타낸다.
+    - QPS(Queries Per Seconds)라는 단위로 표현한다.
+  - 확장성(Scalaility)
+    - Cache에 동시에 접근할 때 Cache의 성능인 QPS가 얼마나 증가하는지를 가지고 상대적인 확장성의 높낮이를 비교할 수 있다.
+  - 플래시 친화성(Flash Friendly)
+    - Cache가 얼마나 flash에 친화적인지를 나타낸다.
+    - Flash의 경우 쓰기 횟수가 제한되어 있고, random access가 쓰기 증폭을 유발하기도하여 자칫하면 flash의 수명을 줄일 수 있다.
+  - 단순함(Simplicity)
+    - Cache가 얼마나 쉽게 구현되어 있는지를 나타낸다.
+    - 구현이 간단할수록 유지보수가 쉬워진다.
+
+
+
+- Random Replacement Policy
+
+  - 무선적으로 기존에 cache에 저장된 data를 교체한다.
+
+  - 예시
+
+  | Timer           | 0    | 1    | 2    | 3    | 4                                | 5                                | 6                                  | 7                                  | 8                                |
+  | --------------- | ---- | ---- | ---- | ---- | -------------------------------- | -------------------------------- | ---------------------------------- | ---------------------------------- | -------------------------------- |
+  | Access Sequence | 2    | 3    | 4    | 7    | 6                                | 3                                | 4                                  | 7                                  | 5                                |
+  | Frame1          | 2    | 2    | 2    | 2    | 2                                | <span style="color:red">3</span> | 3                                  | 3                                  | 3                                |
+  | Frame2          |      | 3    | 3    | 3    | <span style="color:red">6</span> | 6                                | 6                                  | 6                                  | 6                                |
+  | Frame3          |      |      | 4    | 4    | 4                                | 4                                | <span style="color:green">4</span> | 4                                  | 4                                |
+  | Frame4          |      |      |      | 7    | 7                                | 7                                | 7                                  | <span style="color:green">7</span> | <span style="color:red">5</span> |
+
+
+
+- First in, First out(FIFO)
+
+  - 가장 오래된(가장 먼처 추가된) data부터 순차적으로 교체한다.
+    - Queue 기반의 정책이다.
+    - 가장 오래 변경되지 않은 frame이 무엇인지에 대한 정보를 추적해야한다.
+
+  - 예시
+
+  | Timer           | 0    | 1    | 2    | 3    | 4                                | 5                                  | 6                                  | 7                                  | 8                                |
+  | --------------- | ---- | ---- | ---- | ---- | -------------------------------- | ---------------------------------- | ---------------------------------- | ---------------------------------- | -------------------------------- |
+  | Access Sequence | 2    | 3    | 4    | 7    | 6                                | 3                                  | 4                                  | 7                                  | 5                                |
+  | Frame1          | 2    | 2    | 2    | 2    | <span style="color:red">6</span> | 6                                  | 6                                  | 6                                  | 6                                |
+  | Frame2          |      | 3    | 3    | 3    | 3                                | <span style="color:green">3</span> | 3                                  | 3                                  | <span style="color:red">5</span> |
+  | Frame3          |      |      | 4    | 4    | 4                                | 4                                  | <span style="color:green">4</span> | 4                                  | 4                                |
+  | Frame4          |      |      |      | 7    | 7                                | 7                                  | 7                                  | <span style="color:green">7</span> | 7                                |
+
+
+
+- Beledy's Anomaly
+
+  - FIFIO policy를 사용할 때, cache size를 늘리면 오히려 cache hit가 떨어지는 현상을 의미한다.
+  - 예를 들어, 아래와 같은 상황이 있다고 가정해보자.
+    - PF(Page Fault)는 cache miss를 의미하고, X는 cache hit를 의미한다.
+
+  | Timer           | 0    | 1    | 2    | 3                                | 4                                | 5                                | 6                                | 7                                  | 8                                  | 9                                | 10                               | 11                                 |
+  | --------------- | ---- | ---- | ---- | -------------------------------- | -------------------------------- | -------------------------------- | -------------------------------- | ---------------------------------- | ---------------------------------- | -------------------------------- | -------------------------------- | ---------------------------------- |
+  | Access Sequence | 1    | 2    | 3    | 4                                | 1                                | 2                                | 5                                | 1                                  | 2                                  | 3                                | 4                                | 5                                  |
+  | Frame1          | 1    | 1    | 1    | <span style="color:red">4</span> | 4                                | 4                                | <span style="color:red">5</span> | 5                                  | 5                                  | 5                                | 5                                | <span style="color:green">5</span> |
+  | Frame2          |      | 2    | 2    | 2                                | <span style="color:red">1</span> | 1                                | 1                                | <span style="color:green">1</span> | 1                                  | <span style="color:red">3</span> | 3                                | 3                                  |
+  | Frame3          |      |      | 3    | 3                                | 3                                | <span style="color:red">2</span> | 2                                | 2                                  | <span style="color:green">2</span> | 2                                | <span style="color:red">4</span> | 4                                  |
+  | Result          | PF   | PF   | PF   | PF                               | PF                               | PF                               | PF                               | X                                  | X                                  | PF                               | PF                               | X                                  |
+
+  - 이 때 cache의 크기를 늘리면, 오히려 cache miss가 증가할 수 있다.
+    - 동일한 순서로 입력이 들어왔으나, cache miss는 오히려 증가한 것을 확인할 수 있다.
+
+  | Timer           | 0    | 1    | 2    | 3    | 4                                  | 5                                  | 6                                | 7                                | 8                                | 9                                | 10                               | 11                               |
+  | --------------- | ---- | ---- | ---- | ---- | ---------------------------------- | ---------------------------------- | -------------------------------- | -------------------------------- | -------------------------------- | -------------------------------- | -------------------------------- | -------------------------------- |
+  | Access Sequence | 1    | 2    | 3    | 4    | 1                                  | 2                                  | 5                                | 1                                | 2                                | 3                                | 4                                | 5                                |
+  | Frame1          | 1    | 1    | 1    | 1    | <span style="color:green">1</span> | 1                                  | <span style="color:red">5</span> | 5                                | 5                                | 5                                | <span style="color:red">4</span> | 4                                |
+  | Frame2          |      | 2    | 2    | 2    | 2                                  | <span style="color:green">2</span> | 2                                | <span style="color:red">1</span> | 1                                | 1                                | 1                                | <span style="color:red">5</span> |
+  | Frame3          |      |      | 3    | 3    | 3                                  | 3                                  | 3                                | 3                                | <span style="color:red">2</span> | 2                                | 2                                | 2                                |
+  | Frame4          |      |      |      | 4    | 4                                  | 4                                  | 4                                | 4                                | 4                                | <span style="color:red">3</span> | 3                                | 3                                |
+  | Result          | PF   | PF   | PF   | PF   | X                                  | X                                  | PF                               | PF                               | PF                               | PF                               | PF                               | PF                               |
+
+  - 위와 같은 현상이 발생하는 이유
+    - Cache에서 교체할 data를 선택할 때 우선순위를 고려하지 않아서 발생한다.
+    - 이런 현상은 아래에서 살펴볼 LRU에서는 발생하지 않는다.
+
+
+
+- Least Recently Used(LRU)
+
+  - 가장 오랫동안 사용되지 않은 data부터 순차적으로 교체한다.
+    - Recency-based policy 중 하나이다.
+    - Access 내역을 추적해야한다.
+
+  - 예시
+
+  | Timer           | 0    | 1    | 2    | 3                                  | 4    | 5                                | 6                                | 7                                | 8                                  | 9                                |
+  | --------------- | ---- | ---- | ---- | ---------------------------------- | ---- | -------------------------------- | -------------------------------- | -------------------------------- | ---------------------------------- | -------------------------------- |
+  | Access Sequence | 2    | 3    | 4    | 2                                  | 7    | 6                                | 3                                | 4                                | 7                                  | 5                                |
+  | Frame1          | 2    | 2    | 2    | <span style="color:green">2</span> | 2    | 2                                | 2                                | <span style="color:red">4</span> | 4                                  | 4                                |
+  | Frame2          |      | 3    | 3    | 3                                  | 3    | <span style="color:red">6</span> | 6                                | 6                                | 6                                  | <span style="color:red">5</span> |
+  | Frame3          |      |      | 4    | 4                                  | 4    | 4                                | <span style="color:red">3</span> | 3                                | 3                                  | 3                                |
+  | Frame4          |      |      |      |                                    | 7    | 7                                | 7                                | 7                                | <span style="color:green">7</span> | 7                                |
+
+  - Request workload는 최근 데이터에 더 자주 접근한다는 temporal locality 성징을 가지고 있어 LRU가 많이 사용되고 있다.
+  - 일반적으로 doubly linked list를 사용하여 구현된다.
+
+
+
+- Least Frequently Used(LFU)
+
+  - 가장 적게 사용된 data부터 순차적으로 교체한다.
+    - Frequency-based policy 중 하나이다.
+    - Access 빈도를 추적해야한다.
+
+  - 예시
+
+  | Timer           | 0    | 1    | 2    | 3                                  | 4                                | 5                                  | 6                                | 7                                | 8                                | 9                                |
+  | --------------- | ---- | ---- | ---- | ---------------------------------- | -------------------------------- | ---------------------------------- | -------------------------------- | -------------------------------- | -------------------------------- | -------------------------------- |
+  | Access Sequence | 3    | 5    | 6    | 6                                  | 1                                | 1                                  | 4                                | 2                                | 3                                | 4                                |
+  | Frame1          | 3    | 3    | 3    | 3                                  | <span style="color:red">1</span> | <span style="color:green">1</span> | 1                                | 1                                | 1                                | 1                                |
+  | Frame2          |      | 5    | 5    | 5                                  | 5                                | 5                                  | <span style="color:red">4</span> | <span style="color:red">2</span> | <span style="color:red">3</span> | <span style="color:red">4</span> |
+  | Frame3          |      |      | 6    | <span style="color:green">6</span> | 6                                | 6                                  | 6                                | 6                                | 6                                | 6                                |
+
+
+
+
+
 # Shorts
 
 - Type system
