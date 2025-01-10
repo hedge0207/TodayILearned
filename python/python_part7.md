@@ -1916,3 +1916,249 @@ async: 0.4084389281272888
           do_something()
   ```
 
+
+
+- Python에서 Error를 다루는 두 가지 방식
+
+  - LBYL
+
+  ```python
+  if os.path.exists(file_path):
+      os.remove(file_path)
+  else:
+      print(f"Error: file {file_path} does not exist!")
+  ```
+
+  - LBYL을 사용한 위 방식에는 실질적인 문제가 있다.
+    - 위 방식의 경우 file을 삭제하기 위해 충족되어야 하는 모든 가정이 충족되는지 확인한 후에 `os.remove()` method를 실행해야 한다는 점이다.
+    - 예를 들어 위에서는 file의 유무만 확인을 했지만, 입력된 경로가 file이 아닌 directory일 수도 있고, 다른 user의 소유라서 삭제 권한이 없을 수도 있으며, file이 저장된 disk가 read-only volume으로 mount되어 있을 수도 있고, 다른 process가 file을 사용중이라 lock이 걸려있을 수도 있다.
+    - File을 삭제한다는 단순한 작업을 위해 위의 모든 가정을 충족하는지 확인하는 조건문을 넣는 것은 매우 비효율적이다.
+    - 이처럼 LBYL 방식을 사용하면서 견고한 logic을 작성하는 것은 상당히 어려운 일이다.
+  - LBYL과 race condition
+    - LBYL을 사용할 때의 또 다른 문제는 race condition이다.
+    - 조건문을 통해 가정을 모두 충족되는지 확인을 한 후, 최종적으로 수행하기 직전에 상황이 바뀔 경우 실행이 실패하게 된다.
+    - 예를 들어 위 예시에서, file이 있는 것을 확인했을 때는 file이 있었으나, `os.remove()`가 실행되기 직전에 삭제된다면, error가 발생하게 된다.
+  - EAFP
+
+  ```python
+  try:
+      os.remove(file_path)
+  except OSError as error:
+      print(f"Error deleting file: {error}")
+  ```
+
+  - 대부분의 상황에서 LBYL보다 EAFP가 낫다.
+    - 정상 실행 여부를 확인하고, error를 보고하는 역할은 target function(예시의 경우 `os.remove`)이 맡는다.
+    - 우리는 그저 호출자로서 함수를 호출하고 호출된 함수가 그 결과를 우리에게 알려주게 된다.
+  - EAFP의 경우 어떤 exception이 발생할 수 있는지를 알아야한다.
+    - `except` 절에 catch할 exception들을 나열해야하기 때문이며, 예상치 못한 exception이 발생할 경우 application에 crush가 발생하게 된다.
+    - 위 예시의 경우 파일 삭제와 관련해서 발생할 수 있는 모든 error는 `OSError`이거나 이를 상속 받는 error이기에 위 처럼만 해도 모든 error를 catch할 수 있다.
+    - 상황에 따라 어떤 예외가 발생할 수 있는지를 알아야한다.
+  - 모든 exception을 전부 catch하려고 해선 안 된다.
+    - 대부분의 bug는 예상치 못한 방식으로 발생한다.
+    - 모든 exception을 전부 catch할 경우 이러한 예상치 못 한 bug를 잡지 못한 채 지나칠 수 있다.
+    - 따라서 가능한 가장 적은 수의 exception class만 사용하여 exception을 catch해야한다.
+    - 물론 예외적인 상황도 있다.
+
+
+
+- Error의 종류
+
+  > https://blog.miguelgrinberg.com/post/the-ultimate-guide-to-error-handling-in-python
+
+  - New Error와 Bubbled-Up Error
+    - Code에서 문제를 찾아서 새로운 error를 생성해야 할 때, 이러한 error를 new error라 부를 것이다.
+    - Code가 실행되면서 호출한 함수에서 error가 발생했을 때, 이러한 error를 bubbled-up error라 부를 것이다.
+    - Bubbled-up이라 부르는 이유는 error가 발생할 경우 error를 처리할 함수를 만날때 까지 call stack을 따라 올라가기 때문이다.
+  - Recoverable Error외 Non-Recoverable Error
+    - Recoverable error는 해당 error를 처리하는 code가 error 발생 후에도 다음 logic을 계속 실행할 수 있는 error이다.
+    - 예를 들어 file을 삭제하려 하는데, 삭제하려는 file이 없어서 error가 발생한 경우, 해당 error를 처리하는 code는 file을 삭제할 file이 이미 없으므로 error를 무시해도 무방하다.
+    - Non-recoverable error는 error를 처리하는 code가 더 이상 다음 logic을 수행할 수 없는 error이다.
+    - 예를 들어 DB로부터 data를 읽어와서 수정하는 function이 있을 때, 이 function은 읽어오는 데 실패하면 다음 단계인 수정도 불가능하다.
+  - 위와 같이 종류별로 2개씩 총 4개의 error가 존재하며, 두 종류의 error가 어떻게 조합되느냐에 따라 처리 방법도 달라진다.
+    - New Recoverable
+    - Bubbled-up Recoverable
+    - New Non-Recoverable
+    - Bubbled-up Non-Recoverable
+
+
+
+- New Recoverable
+
+  - DB에 data를 삽입하는 function이 있다고 가정해보자.
+    - DB schema에서 year는 null이어선 안 되는 상황이다.
+    - LBYL 방식에 따라 아래와 같이 year의 값이 None인지 check하고, None일 경우 임의의 값을 넣어주어 DB에 삽입할 때 error가 발생하지 않게 한다.
+
+  ```python
+  def add_song_to_database(song):
+      # ...
+      if song.year is None:
+          song.year = 'Unknown'
+      # ...
+  ```
+
+  - 이처럼 복구가 가능한 error가 있고 굳이 error를 raise시키지 않아도 된다면, 굳이 error를 raise하지 않고 적절한 처리를 실행한 후 다음 logic을 계속 실행한다.
+
+
+
+- Bubbled-Up Recoverable
+
+  - 마찬가지로 DB에 data를 삽입하는 function이 있다고 가정해보자.
+    - `artist` 정보를 DB에서 받아와서 이 정보를 활용해야하는 상황이다.
+    - EAFP 방식에 따라 error를 catch하고, 적절한 처리를 한 후 계속 진행한다.
+
+  ```python
+  def add_song_to_database(song):
+      # ...
+      try:
+          # DB에 artist 정보가 없으면
+          artist = get_artist_from_database(song.artist)
+      except NotFound:
+          # DB에 artist 정보를 추가한다.
+          artist = add_artist_to_database(song.artist)
+      # ...
+  ```
+
+  - 첫 번째 사례와 마찬가지로, 복구가 가능한 error이므로, 호출함 함수에서 반환한 error를 catch하여 이를 적절히 처리한 후 다음 logic을 계속 실행한다.
+    - 예외 처리가 마무리 되었으므로, call stack의 더 위에 있는 계층에서는, error가 발생했다는 것을 알 필요가 없다.
+    - 따라서 error의 bubbling up도 이 단계에서 종료된다.
+
+
+
+- New Non-Recoverable
+
+  - 앞의 두 경우와 다르게, 이 경우는 error 처리하기 위해 뭘 해야하는지 모르는 경우이다.
+    - 이 경우에 할 수 있는 유일한 일은 call stack의 한 단계 위에 있는 level에게 경고를 보내고, 해당 단계가 error를 처리할 수 있기를 바라는 것이다.
+    - 대부분의 경우에 non-recoverable error는 call stack을 따라 올라가다보면 recoverable한 상태가 되기에, 이 전략은 잘 동작한다.
+    - 즉 call stack을 따라 올라가다보면 new non-recoverable error는 bubbled-up recoverable error가 된다.
+    - 따라서 어떻게 처리해야하는 지 알 수 있게 되고, 적절하게 처리할 수 있게 된다.
+  - DB에 data를 삽입하는 function이 있다고 가정해보자.
+    - 첫 번째 유형에서는 year가 없는 경우를 가정했으나, 이번에는 name이 없는 경우를 가정할  것이다.
+    - name은 year와는 달리 단순히 null이어서는 안 되는 값이 아니라 반드시 있어야 하는 값인 상황이다.
+    - 현재 단계에서는 name이 없을 경우 어떻게 처리해야 하는지 알 수 없으므로, 아래와 같이 error를 raise하여 상위 call stack으로 보낸다.
+
+  ```python
+  def add_song_to_database(song):
+      # ...
+      if song.name is None:
+          raise ValueError('The song must have a name')
+      # ...
+  ```
+
+  - 만약 Python 내장 exception중 적절한 것이 없다면, 아래와 같이 exception class를 생성하면 된다.
+
+  ```python
+  class ValidationError(Exception):
+      pass
+  
+  # ...
+  
+  def add_song_to_database(song):
+      # ...
+      if song.name is None:
+          raise ValidationError('The song must have a name')
+      # ...
+  ```
+
+  - 주목해야할 점은 `raise` keyword가 function의 실행을 중단시킨다는 것이다.
+    - Error를 처리할 수 있는 방법을 모르는 상황이므로 function의 실행을 중단시키는 것이 자연스럽다.
+    - Exception을 raise하여 현재 함수의 실행이 중단되고, 해당 exception을 처리할 수 있는 계층에 도달할 때 까지 call stack을 따라 올라가게 된다.
+
+
+
+- Bubbled-Up Non-Recoverable Error
+
+  - 아래와 같이 특정 function을 호출하는코드가 있다고 가정해보자.
+    - 호출한 함수에서 exception이 raise되고, 이를 어떻게 처리해야하는지 모르는 상황이다.
+    - 이 상황에서는 아무것도 하지 않아야한다.
+
+  ```python
+  def new_song():
+      song = get_song_from_user()
+      add_song_to_database(song)
+  ```
+
+  - Error를 hadnling하지 않는 것은 좋은 error handling 전략일 수 있다.
+    - `new_song()`에서 호출되는 두 개의 function은 실패후에 exception을 raise할 수 있다.
+    - 만약 우리가 이 error들을 처리할 방법을 모른다면 error를 catch할 이유도 없다.
+    - 다만, 이것이 error를 무시해야한다는 것을 의미하지는 않는다.
+    - 아무것도 하지 않고, 그저 error가 call stack을 따라 올라가도록 함으로써, 해당 error를 처리할 수 있는 단계에 도달하도록 해야한다.
+    - 가능한 한 많은 function이 error 처리를 신경쓰지 않도록 하고, error 처리와 관련된 code를 상위 계층으로 옮기는 것은 clean code를 작성하는 좋은 전략이다.
+  - 관심사의 분리와 error handling
+    - 누군가는 그래도 error와 관련된 log라도 남겨서 사용자에게 error가 발생했다는 사실을 알려야 하는 것이 아니냐고 물을 수 있다.
+    - 그러나, 만약 application이 CLI가 아닌 GUI라면, 혹은 web application이라면 print를 통해 stdout을 남기는 것은 소용이 없다.
+    - GUI라면 alert 창이나 modal 창을 통해 error message를 보여줘야 할 것이고, web application이라면 HTTP 통해 error를 응답으로 반환해야 할 것이다.
+    - 문제는, function 그 자체는 현재 자신이 CLI에서 실행되는지, GUI에서 실행되는지, web application에서 실행되는지 알 필요가 없다는 것이다.
+    - Error가 발생했다는 것을 사용자에게 알리는 방식은 application의 종류에 따라 달라지게 되지만, function은 application의 종류와 무관하게 동일한 logic을 수행해야한다.
+    - 따라서 관심사의 분리를 통해 사용자에게 error 발생 사실을 알리는 것은 더 상위 계층에서 처리하도록 하고, 하위 계층의 function들은 자신이 맡은 역할만 수행하게 하는 것이 바람직하다.
+
+
+
+- Catching All Exceptions
+
+  - 정말 bubbled-up non-recoverable error 아무 처리 없이 그냥 둬도 되는가
+    - 이런 불안감을 느끼는 이유는, error가 처리되지 않은 채로 call stack을 타고 올라가다 결국 아무 계층에서도 처리되지 않고 맨 위 계층까지 도달하여 application에 crash를 일으킬 것이라 생각하기 때문이다.
+    - 이는 할만한 걱정이지만 간단하게 해결이 가능하다.
+  - Error가 가장 높은 계층에서는 무조건 잡을 수 있도록 application을 설계해야한다.
+    - 최상위 계층에 모든 exception을 catch할 수 있는 `try`/`catch`문을 추가한다.
+    - 아래와 같이 최상위 계층에 모든 error를 잡을 수 있는 `try`/`catch`를 추가하고, 사용자에게 message를 출력하며, exit code 1과 함께 exit 되도록 해 shell이나 다른 parent process가 application이 실패했다는 것을 알 수 있게 한다.
+
+  ```python
+  import sys
+  
+  def my_cli()
+      # ...
+  
+  if __name__ == '__main__':
+      try:
+          my_cli()
+      except Exception as error:
+          print(f"Unexpected error: {error}")
+          sys.exit(1)
+  ```
+
+  - 모든 exception을 catch하는 것은 부절절한 것 아닌가?
+    - 위에서 말했듯 모든 exception을 catch하는 것이 적절한 예외가 존재하며, 이 경우가 그에 해당한다.
+    - 실제로 상위 계층에서 모든 exception을 catch하는 것은 흔한 pattern이며 많은 application에서 사용하고 있다.
+  - 모든 errror를 catch하는 계층이 있다는 것을 활용하지 않으면, 아래와 같은 code를 작성하게 된다.
+    - 아래 코드는 DB에 데이터를 추가하는 코드다.
+    - 예외가 발생할 경우 log에 error가 발생했다는 사실을 남기고, rollback을 수행한다.
+    - 그런데, rollback도 실패할 수 있으므로, 이 경우에도 마찬가지로 log에 error가 발생했다는  사실을 남기고 500 error를 반환한다.
+
+  ```python
+  @app.put('/songs/{id}')
+  def update_song(id):
+      # ...
+      try:
+          db.session.add(song)
+          db.session.commit()
+      except SQLAlchemyError:
+          current_app.logger.error('failed to update song %s, %s', song.name, e)
+          try:
+              db.session.rollback()
+          except SQLAlchemyError as e:
+              current_app.logger.error('error rolling back failed update song, %s', e)
+          return 'Internal Service Error', 500
+      return '', 204
+  ```
+
+  - 위 방식은 아래와 같은 문제점들이 있다.
+    - Rollback이 실패했다는 것은 DB에 심각한 문제가 생겼다는 것이므로, DB와 관련된 log를 남기는 것이 의미가 없다.
+    - 또한 commit이 실패했을 때도 log에 stack trace와 관련된 정보를 남기지 않아 무엇 때문에 commit이 실패했는지 추적이 어렵다.
+  - 반면 모든 errror를 catch하는 계층이 있다는 것을 활용하면 보다 깔끔한 코드를 작성할 수 있다.
+    - 아래와 같이 작성할 경우, stack  trace는 framework에서 로그로 남겨주므로 보다 깔끔한 코드를 작성할 수 있다.
+
+  ```python
+  @app.put('/songs/{id}', status_code=204)
+  def update_song(id):
+      # ...
+      db.session.add(song)
+      db.session.commit()
+      return
+  ```
+
+
+
+
+
+ 
