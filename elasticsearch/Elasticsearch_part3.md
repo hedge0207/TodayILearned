@@ -935,7 +935,236 @@
     - 이로 인해 TF 값은 올라가게 된다.
     - 따라서 위 방식을 사용할 때는, 사라진 token들로 인해 `dl` 값이 감소하여 TF값을 증가시킬 수 있다는 것을 염두에 둬야한다.
 
+
+
+
+- Shard의 개수와 score의 관계
+
+  - Shard의 개수에 따라 score가 달라질 수 있다.
+  - 예를 들어 아래와 같이 shard가 1개인 index가 있다고 가정해보자.
+
+  ```json
+  // PUT test
+  {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0
+    }
+  }
+  ```
+
+  - 위 index에 문서를 색인한다.
+
+  ```json
+  // POST _bulk
+  {"index":{"_index":"test"}}
+  {"title":"Hello"}
+  {"index":{"_index":"test"}}
+  {"title":"Hello World"}
+  {"create":{"_index":"test"}}
+  {"title":"Hello Tom"}
+  {"create":{"_index":"test"}}
+  {"title":"Hello John"}
+  ```
+
+  - 그 후 검색을 실행하면
+
+  ```json
+  // GET test/_search
+  {
+    "query": {
+      "match": {
+        "title": "hello"
+      }
+    }
+  }
+  ```
+
+  - 아래와 같은 결과가 나온다.
+
+  ```json
+  {
+      "hits" : [
+        {
+          "_index" : "test",
+          "_type" : "_doc",
+          "_id" : "SoiHwZIB02CLrgcgzYKI",
+          "_score" : 0.12776,
+          "_source" : {
+            "title" : "Hello"
+          }
+        },
+        {
+          "_index" : "test",
+          "_type" : "_doc",
+          "_id" : "S4iHwZIB02CLrgcgzYKI",
+          "_score" : 0.099543065,
+          "_source" : {
+            "title" : "Hello World"
+          }
+        },
+        {
+          "_index" : "test",
+          "_type" : "_doc",
+          "_id" : "TIiHwZIB02CLrgcgzYKI",
+          "_score" : 0.099543065,
+          "_source" : {
+            "title" : "Hello Tom"
+          }
+        },
+        {
+          "_index" : "test",
+          "_type" : "_doc",
+          "_id" : "TYiHwZIB02CLrgcgzYKI",
+          "_score" : 0.099543065,
+          "_source" : {
+            "title" : "Hello John"
+          }
+        }
+      ]
+  }
+  ```
+
+  - 이번에는 shard의 개수를 3개로 변경해서 index를 다시 생성하고
+
+  ```json
+  // PUT test
+  {
+    "settings": {
+      "number_of_shards": 3,
+      "number_of_replicas": 0
+    }
+  }
+  ```
+
+  - 이전과 동일한 문서를 색인한 뒤
+
+  ```json
+  // POST _bulk
+  {"index":{"_index":"test"}}
+  {"title":"Hello"}
+  {"index":{"_index":"test"}}
+  {"title":"Hello World"}
+  {"create":{"_index":"test"}}
+  {"title":"Hello Tom"}
+  {"create":{"_index":"test"}}
+  {"title":"Hello John"}
+  ```
+
+  - 동일한 query로 다시 검색을 해보면
+
+  ```json
+  // GET test/_search
+  {
+    "query": {
+      "match": {
+        "title": "hello"
+      }
+    }
+  }
+  ```
+
+  - 점수가 달라진 것을 확인할 수 있다.
+    - 점수가 달라지면서 순위도 달라졌다.
+
+  ```json
+  {
+      "hits" : [
+        {
+          "_index" : "test",
+          "_type" : "_doc",
+          "_id" : "VIiKwZIB02CLrgcgJIL0",
+          "_score" : 0.2876821,
+          "_source" : {
+            "title" : "Hello Tom"
+          }
+        },
+        {
+          "_index" : "test",
+          "_type" : "_doc",
+          "_id" : "UoiKwZIB02CLrgcgJIL0",
+          "_score" : 0.15965708,
+          "_source" : {
+            "title" : "Hello"
+          }
+        },
+        {
+          "_index" : "test",
+          "_type" : "_doc",
+          "_id" : "U4iKwZIB02CLrgcgJIL0",
+          "_score" : 0.12343237,
+          "_source" : {
+            "title" : "Hello World"
+          }
+        },
+        {
+          "_index" : "test",
+          "_type" : "_doc",
+          "_id" : "VYiKwZIB02CLrgcgJIL0",
+          "_score" : 0.12343237,
+          "_source" : {
+            "title" : "Hello John"
+          }
+        }
+      ]
+  }
+  ```
+
+  - 위와 같은 결과가 나오게 된 원인은 아래와 같다.
+    - Elasticsearch는 문서를 여러 개의 shard에 분산해서 저장한다.
+    - Elasticsearch는 문서의 점수를 매길 때 BM25를 사용하는데, 이는 전체 문서에서 term이 얼마나 빈번하게 등장하는지, 특정 문서에 term이 얼마나 빈번하게 등장하는지를 가지고 점수를 계산한다.
+    - 검색은 각 shard별로(Lucene index별로) 실행되므로, 점수 역시 각 shard별로 매겨진다.
+    - 이 때, 전체 문서에서 term이 얼마나 빈번하게 등장하는지, 특정 문서에 term이 얼마나 빈번하게 등장하는지는 index 전체에 색인된 문서들을 대상으로 계산되는 것이 아니라, 각 shard에 색인된 문서들을 대상으로 계산된다.
+    - 따라서 shard의 개수가 달라지면(정확히는 문서가 shard에 분산되어 저장되면) 점수가 달라질 수 있다.
+  - 핵심은 문서가 shard에 분산되어 저장될 때 점수가 달라질 수 있다는 것이다.
+    - 문서의 분산 없는 shard 개수의 증가 만으로는 점수가 달라지지 않는다.
+    - 예를 들어 아래와 같이 모두 하나의 shard에 색인되도록 한 뒤 검색을 하면, shard가 1개일 때와 점수가 같다.
+
+  ```json
+  // PUT test
+  {
+    "settings": {
+      "number_of_shards": 3,
+      "number_of_replicas": 0
+    }
+  }
   
+  // POST _bulk
+  {"index":{"_index":"test", "routing":"1"}}
+  {"title":"Hello"}
+  {"index":{"_index":"test", "routing":"1"}}
+  {"title":"Hello World"}
+  {"create":{"_index":"test", "routing":"1"}}
+  {"title":"Hello Tom"}
+  {"create":{"_index":"test", "routing":"1"}}
+  {"title":"Hello John"}
+  
+  // GET _cat/shards/test
+  test 2 p STARTED 4 4.3kb 10.0.0.73 es
+  test 1 p STARTED 0  226b 10.0.0.73 es
+  test 0 p STARTED 0  226b 10.0.0.73 es
+  ```
+
+  - 검색 API에서 `search_type` query parameter에 `dfs_query_then_fetch` 값을 주면, 점수를 shard별이 아닌 전체 index를 대상으로 계산하도록 할 수 있다.
+    - `search_type`의 기본값은 `query_then_fetch`로 shard별로 점수를 계산한다.
+    - 단, 기본값(`query_then_fetch`)을 사용하는 것이 권장되는데, 전체 index를 대상으로 점수를 계산하는 것은 검색 속도를 느리게 할 수 있기 때문이다.
+
+  ```json
+  // GET test/_search?search_type=dfs_query_then_fetch
+  {
+    "query": {
+      "match": {
+        "title": "hello"
+      }
+    }
+  }
+  ```
+
+  - 각 shard에 문서가 분산 저장되어 점수가 달라지는 현상 자체는 실제 서비스를 운영할 때 크게 문제가 되지는 않는다.
+    - 색인되는 문서의 개수가 많아질수록 문서의 shard별 분산 저장이 점수에 미치는 영향은 작아진다.
+    - 만약 문서의 개수가 적어 분산 저장이 점수에 미치는 영향이 클 것으로 예상되는 경우에는 shard 수를 줄이는 것을 고려할 수 있다.
+
+
 
 
 
