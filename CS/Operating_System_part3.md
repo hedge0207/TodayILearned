@@ -920,3 +920,115 @@
 
 
 
+
+
+
+
+## 프로세스와 메모리 영역
+
+> https://st-lab.tistory.com/198
+
+- 프로세스의 메모리 영역은 일반적으로 아래와 같이 구성된다.
+  - Text
+    - 프로그램을 구성하는 것들이 저장되는 영역으로 제어문, 함수, 상수 등이 이 영역에 저장된다.
+    - 코드 영역이라고 부르기도 한다.
+  - Data
+    - 전역 변수, 정적 변수 등이 저장되는 영역으로 일반적으로 프로그램이 종료될때까지 남아있는 데이터들이 저장되는 공간이다.
+    - 초기화 된 변수 영역(initialized data segment)과 초기화되지 않은 변수 영역(uninitialized data segment)으로 나뉘며. 이 중 초기화되지 않은 변수 영역은 BSS(Block Started by Symbol) 이라고도 한다.
+    - 먼저 초기화 된 변수들이 더 낮은주소에 위치하고 모두 메모리에 올려지면 그 다음으로 초기화 되지 않은 변수들이 할당된다.
+  - Heap
+    - 사용자에 의해 관리되는 영역으로, 동적으로 할당하는 변수들이 저장된다.
+    - 일반적으로 낮은 주소에서 높은 주소 순서로 할당된다.
+  - Stack
+    - 함수를 호출할 때 지역 변수, 매개 변수 들이 저장되는 영역이다.
+    - 함수가 종료되면 메모리에서 할당이 해제 된다.
+    - 일반적으로 높은 주소에서 낮은 주소 순서로 할당된다.
+  - Text - Data - Heap - Stack의 순서로 낮은 주소부터 할당된다.
+  - Stack과 heap에 대한 더 자세한 정보는 [ITPL_part4](https://github.com/hedge0207/TodayILearned/blob/main/ITPL/Introduction_To_Programming_Language_part4.md)참고
+
+
+
+- 프로세스의 메모리 할당 예시
+
+  - 예를 들어 아래와 같은 C코드가 있다고 가정해보자
+
+  ```c
+  #include <stdio.h>
+  #include <stdlib.h>
+   
+  const int constval = 30;    // 상수
+   
+  int uninitial;  // 초기화되지 않은 전역변수
+  int initial = 30;   // 초기화된 전역변수
+  static int staticval = 70;  // 정적변수
+   
+  int function() {    // 함수
+      return 20;
+  }
+   
+  int main(int argc, const char * argv[]) {
+      
+      int localval1 = 30;   // 지역변수 1
+      int localval2;      // 지역변수 2
+      
+      printf("숫자 입력 : ");
+      scanf("%d", &localval2);
+      
+      char *arr = malloc(sizeof(char) * 10);  // 동적 할당 변수
+      
+      /* 포인터 출력 영역 */
+      printf("상수 Memory Address : \t\t %p, %lu (10진수)\n", &constval, (unsigned long)&constval);
+      printf("비초기화 변수 Memory Address :\t %p, %lu (10진수)\n", &uninitial, (unsigned long)&uninitial);
+      printf("초기화 변수 Memory Address : \t %p, %lu (10진수)\n", &initial, (unsigned long)&initial);
+      printf("정적 변수 Memory Address : \t %p, %lu (10진수)\n", &staticval, (unsigned long)&staticval);
+      printf("함수 Memory Address : \t\t %p, %lu (10진수)\n", function, (unsigned long)function);
+      printf("지역변수1 Memory Address : \t %p, %lu (10진수)\n", &localval1, (unsigned long)&localval1);
+      printf("지역변수2 Memory Address : \t %p, %lu (10진수)\n", &localval2, (unsigned long)&localval2);
+      printf("동적할당변수 Memory Address : \t %p, %lu (10진수)\n\n", arr, (unsigned long)arr);
+      
+      free(arr); // 동적 메모리 해제
+      
+      return 0;
+  }
+  ```
+
+  - 위 코드를 실행하면, 아래와 같은 결과가 나오게 된다.
+
+  > 64 bit로 컴파일 했기에, 16자리수의 16진수(64자리수의 2진수)로 표현된다.
+  >
+  > 높은 자리수의 은 생략되어 출력되므로, 0x1021dfddc의 경우 정확하게 표현하면 0x00000001021dfddc이다.
+
+  | 타입           | 16진수         | 10진수          |
+  | -------------- | -------------- | --------------- |
+  | 상수           | 0x1021dfddc    | 4330487260      |
+  | 비초기화 변수  | 0x1021e4008    | 4330504200      |
+  | 초기화 변수    | 0x1021e4000    | 4330504192      |
+  | 정적 변수      | 0x1021e4004    | 4330504196      |
+  | 함수           | 0x1021dfbd8    | 4330486744      |
+  | 지역변수1      | 0x16dc2373c    | 6136411964      |
+  | 지역변수2      | 0x16dc23738    | 6136411960      |
+  | 동적 할당 변수 | 0x600000790000 | 105553124196352 |
+
+  - 결과를 통해 확인할 수 있는 것들
+    - Text영역에 속하는 상수와 함수가 가장 낮은 주소에 배치된 것을 확인할 수 있다.
+    - 전역 변수(비초기화 변수, 초기화 변수)와 정적변수는 모두 Text영역 보다는 높은 주소에 할당된 것을 볼 수 있다.
+    - 또한 전역 변수 중에서도 초기화 변수가 비초기화 변수보다 낮은 주소에 먼저 할당된 것을 확인할 수 있다.
+    - 높은 주소부터 먼저 할당하는 stack 영역의 특성으로 먼저 선언된 지역 변수1보다 지역 변수2가 더 낮은 주소로 할당된 것을 확인할 수 있다.
+    - 반면에 앞서 말한 것과 달리 heap 영역에 저장되는 동적 할당 변수의 메모리 주소가 stack 영역에 저장되는 메모리 주소보다 더 높은 것을 확인할 수 있다.
+  - Heap 영역에 저장되는 데이테의 메모리 주소가 stack 영역에 저장되는 데이터의 메모리 주소보다 높은 이유
+    - 앞에서 Text-Data-Heap-Stack의 순서로 메모리가 할당된다고 했지만, 현대 OS에서는 꼭 그렇지만은 않다.
+    - 현대 OS는 가상 메모리를 사용하기 때문에 heap이 stack보다 높은 메모리 주소를 할당 받을 수 있다.
+    - 또한 ASLR(Address Space Layout Randomization, 보안을 강화하기 위해 메모리 레이아웃을 무작위화하는 기술)을 사용할 경우 전통적인 Text-Data-Heap-Stack의 순서를 따르지 않을 수도 있다.
+
+
+
+- Buffer Overflow(Buffer Overrun)
+  - Buffer(메모리)가 감당할 수 있는 용량 이상의 데이터가 저장되어 buffer가 넘치게 되어 인접한 영역을 침범하는 현상이다.
+    - 일반적으로 stack과 heap 영역에서 발생하게 되는데, 이는 이 두 영역이 프로그램이 실행되면서 생성되는 데이터들이 저장되는 공간이기 때문이다.
+    - 어디서 발생하느냐에 따라 stack overflow, heap overflow라고 부른다.
+  - Stack Overflow
+    - 호출 스택이 할당 된 스택 영역 경계선 밖으로 넘어갈 때 발생한다.
+    - 재귀 호출시에 가장 흔하게 발생한다.
+  - Heap Overflow
+    - 힙 영역에서 할당 된 영역의 경계선 밖으로 넘어갈 때 발생한다.
+    - 일반적으로 매우 큰 데이터를 생성하려 할 때 발생하며, Java의 OOM error가 heap overflow에 해당한다.
