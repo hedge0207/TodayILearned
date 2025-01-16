@@ -1378,7 +1378,86 @@
   1 3 7 6 5 2 4
   ```
   
+
+
+
+- Monotonic stack
+
+  - Element들을 증가 혹은 감소하는 순서로 가지고 있는 stack을 의미한다.
+    - 일반적인 stack과는 달리 monotonic stack은 stack내의 element들이 순서대로 정렬되어 있다는 것이 보장된다.
+    - 일반적으로 특정 element보다 크거나 작은 다음 element를 찾기 위해 사용한다.
+  - 구현 방법
+    - 빈 stack을 초기화한다.
+    - 배열을 순회하면서 stack에 element들을 추가하는데, 이 때 배열의 각 element마다 아래 과정을 수행한다.
+    - Stack 내부의 element가 비어 있지 않고, stack의 top이 현재 element보다 크면 stack의 top을 pop한다.
+
+  - 구현
+    - 아래와 같이 구현한다.
+    - 출력 결과를 확인해보면, stack내의 element들이 오름차순으로 정렬되어 있는 것을 확인할 수 있다.
+
+  ```python
+  def monotonic_increaseing_stack(arr: list[int]):
+      print("Monotonic Increasing Stack")
+      stack = []
+      for num in arr:
+          while stack and stack[-1] > num:
+              stack.pop()
+          stack.append(num)
+          print(stack)
   
+  def monotonic_decreaseing_stack(arr: list[int]):
+      print("Monotonic Decreasing Stack")
+      stack = []
+      for num in arr:
+          while stack and stack[-1] < num:
+              stack.pop()
+          stack.append(num)
+          print(stack)
+  
+  monotonic_increaseing_stack([7, 5, 1, 8, 10, 0, 3, 4])
+  """
+  Monotonic Increasing Stack
+  [7]
+  [5]
+  [1]
+  [1, 8]
+  [1, 8, 10]
+  [0]
+  [0, 3]
+  [0, 3, 4
+  """
+  monotonic_decreaseing_stack([7, 5, 1, 8, 10, 0, 3, 4])
+  """
+  Monotonic Decreasing Stack
+  [7]
+  [7, 5]
+  [7, 5, 1]
+  [8]
+  [10]
+  [10, 0]
+  [10, 3]
+  [10, 4]
+  """
+  ```
+
+  - 일반적으로 특정 element보다 뒤에 위치한 element중 더 첫 번째로 등장하는 큰(작은) element를 찾기 위해 사용한다.
+
+  ```python
+  arr = [7, 5, 11, 1, 8, 10, 0, 3, 4]
+  stack = []
+  next_greater_element = [-1] * len(arr)
+  for i in range(len(arr)):
+      num = arr[i]
+      while stack and arr[stack[-1]] < num:
+          idx = stack.pop()
+          next_greater_element[idx] = num
+      stack.append(i)
+  print(next_greater_element)		# [11, 11, -1, 8, 10, -1, 3, 4, -1]
+  ```
+
+
+
+
 
 
 
