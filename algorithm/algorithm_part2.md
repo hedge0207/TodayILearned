@@ -1021,9 +1021,9 @@
 
 - 서로소 집합(Disjoint-set)
 
-- 서로소 또는 상호 배타 집합들은 서로 중복 포함된 원소가 없는 집합들이다.  다시 말해 교집합이 없다.
+  - 서로소 또는 상호 배타 집합들은 서로 중복 포함된 원소가 없는 집합들이다.  다시 말해 교집합이 없다.
 
-- 집합에 속한 하나의 특정 멤버를 통해 각 집합들을 구분한다. 이를 대표자라 한다.
+  - 집합에 속한 하나의 특정 멤버를 통해 각 집합들을 구분한다. 이를 대표자라 한다.
 
 - 상호 배타 집합을 표현하는 방법
 
@@ -1166,7 +1166,8 @@
   #깊이를 고려하면  union(1,2)를 실행해도 1이 2의 자식 노드가 된다.
   ```
 
-  
+
+
 
 
 
@@ -1373,9 +1374,8 @@
       #무향그래프일 경우
       adj[s][e]=1
       adj[e][s]=1
-    
-  out
-  1 3 7 6 5 2 4
+  
+  dfs(1)	# 1 3 7 6 5 2 4
   ```
   
 
@@ -1383,7 +1383,7 @@
 
 - Monotonic stack
 
-  - Element들을 증가 혹은 감소하는 순서로 가지고 있는 stack을 의미한다.
+  - Element들을 non-decreasing 혹은 non-increasing 순서로 가지고 있는 stack을 의미한다.
     - 일반적인 stack과는 달리 monotonic stack은 stack내의 element들이 순서대로 정렬되어 있다는 것이 보장된다.
     - 일반적으로 특정 element보다 크거나 작은 다음 element를 찾기 위해 사용한다.
   - 구현 방법
@@ -1396,7 +1396,7 @@
     - 출력 결과를 확인해보면, stack내의 element들이 오름차순으로 정렬되어 있는 것을 확인할 수 있다.
 
   ```python
-  def monotonic_increaseing_stack(arr: list[int]):
+  def monotonic_increasing_stack(arr: list[int]):
       print("Monotonic Increasing Stack")
       stack = []
       for num in arr:
@@ -1405,7 +1405,7 @@
           stack.append(num)
           print(stack)
   
-  def monotonic_decreaseing_stack(arr: list[int]):
+  def monotonic_decreasing_stack(arr: list[int]):
       print("Monotonic Decreasing Stack")
       stack = []
       for num in arr:
@@ -1484,11 +1484,91 @@
 
 - BFS 구현에 사용된다.
 
+  - 구현
+
+  ```python
+  from collections import deque
+  
+  def bfs(v):
+      q = deque()
+      visited = [0] * (V + 1)
+      q.append(v)
+      while q:
+          u = q.popleft()
+          if visited[u] == 0:
+              print(u, end=" ")
+              visited[u] = 1
+              for i in range(1, V + 1):
+                  if adj[u][i] == 1 and visited[i] == 0:
+                      q.append(i)
+  
+  V, E = map(int, input().split())
+  edges = list(map(int, input().split()))
+  
+  # 인접행렬을 생성
+  adj = [[0] * (V + 1) for _ in range(V + 1)]
+  
+  for i in range(E):
+      s, e = edges[2 * i], edges[2 * i + 1]
+      # 무향그래프일 경우
+      adj[s][e] = 1
+      adj[e][s] = 1
+  
+  bfs(1)		# 1 2 3 4 5 7 6
+  ```
+
+
+
+
+- Queue와 관련된 자료 구조
+
+  - 우선순위 큐
+    - 먼저 삽입된 순서가 아닌 우선 순위가 높은 데이터를 먼저 꺼낸다.
+
+  - 데크(Deque)
+    - Queue 두 개를 좌우로 뒤집어서 붙인 구조.
+    - Queue의 양쪽 끝에서 삽입과 삭제를 수행할 수 있도록 확장한 구조.
+
+
+
+
+- Monotonic queue
+
+  - Element들을 non-decreasing 혹은 non-increasing 순서로 가지고 있는 queue를 의미한다.
+    - 따라서 queue의 가장 앞에는 가장 큰(작은) element가 위치하고, 가장 뒤에는 가장 작은(큰) element가 위치하게 된다.
+    - 일반적으로 슬라이딩 윈도우에서 최대/최소값을 구하기 위해 사용한다.
+    - 또한 DP 최적화에 사용되는 자료구조이다.
+  - 구현
+    - 맨 마지막에 추가된 element부터 제거하는 부분이 있어 queue가 아닌 stack이라고 생각할 수도 있지만, 해당 부분은 단조성을 유지하기 위한 것일 뿐이다.
+    - 아래 구조에서 핵심적인 부분(queue의 FIFO 속성을 보여주는 부분)은 window 밖으로 벗어난 값을 queue에 추가된 순서대로 제거하는 부분이다.
+
+  ```python
+  from collections import deque
+  
+  def max_sliding_window(nums, k):
+      result = []
+      q = deque()  # Monotonic decreasing queue
+  
+      for i in range(len(nums)):
+  				# window 밖으로 벗어난 값을 queue에 추가된 순서대로 제거한다(FIFO)
+          if q and q[0] < i - k + 1:
+              q.popleft()
+  
+          while q and nums[q[-1]] < nums[i]:
+              q.pop()
+  
+          q.append(i)
+  
+          if i >= k - 1:
+              result.append(nums[q[0]])
+  
+      return result
+  
+  nums = [1, 3, -1, -3, 5, 3, 6, 7]
+  k = 3
+  print(max_sliding_window(nums, k))  # [3, 3, 5, 5, 6, 7]
+  ```
+
   
 
-- 우선순위 큐: 우선순위를 기준으로 순위가 높은 데이터를 먼저 꺼낸다.
-
-
-
-- 데크(Deque): 큐 두 개 중 하나를 좌우로 뒤집어서 붙인 구조, 큐의 양쪽 끝에서 삽입과 삭제를 수행할 수 있도록 확장한 구조
-
+  
