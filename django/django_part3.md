@@ -502,114 +502,7 @@
 >
 > https://meetup.toast.com/posts/92참고
 
-- REST(Representational State Transfer): URL을 사람마다 중구난방으로 적는 것을 막기 위한 규칙
-  - http verb(method)에는 GET,POST,PUT/PATCH,DELETE가 있다. 
-  - `http verb+복수형 명사(혹은 복수형 명사+pk)`로 구성되면 RESTful하다고 할 수 있다.
-  - 기존에 django에서 url을 설정할 때 new,update, create 등을 썼던 것은 지금까지 개발 한 것이 REST API가 아니었기 때문이다. REST API를 개발하고자 한다면 `http verb+복수형 명사(혹은 복수형 명사+pk)`형식을 맞춰야 한다.
-
-
-
-- API(Application Programming Interface):개발자용 접점, 일반 사용자를 위한 것이 아닌 개발자를 위한 것 
-  - 프로그램 사이의 데이터 교환을 위한 접점을 뜻한다.
-  - 결국 데이터 교환은 개발자의 요청에 의해 이루어지므로 개발자용 접점이라고 할 수 있다. 
-  - 구성
-    - 자원: URL
-    - 행위: HTTP method
-    - 표현
-
-- `REST API`를 사용하는 이유: 결국 개발자에게 진정으로 필요한 것은 data뿐이다. template은 사용자에게 보여주기 위한 것이므로 굳이 html, Js, css를 쓰면서 django로 구현할 필요는 없다. 따라서 django를 통해 JSON 형식에 맞춰 데이터만 제공하는 서버를 구현하기 위해 사용하는 것이다. 여기서 데이터를 제공 받고 Vue js를 활용하여 사용자에게 template을 보여주게 된다.
-  - data만 주고 받으면 되는 것이므로 가장 효율적으로 데이터를 주고 받을 수 있는 JSON을 사용한다.
-  - api서버란 개발자들이 요청을 보내고 응답을 받아오는 서버를 말한다. 개발자가 URL을 통해 api서버로 요청을 보내면 서버는 요청에 대한 응답을 JSON 형식으로 보내게 된다.
-  - 기존에는 사용자에게 요청을 받은 django가 MTV를 거쳐 사용자에게 HTML파일로 데이터를 제공했다면, 지금부터는 사용자는 Vue js에게 요청을 보내고 Vue js는 django에 사용자에게 받은 요청을 보낸다. django에서는 MV만 거치고 T는 거치지 않은 상태로 Vue js에게 JSON 형태의 데이터를 넘기게 되고 Vue js는 JSON 형태의 데이터를 사용자에게 HTML파일로 제공한다.
-  - 기존: 사용자 -> django(MTV), django(MTV)->사용자
-  - api: 사용자 -> Vue js -> django(MV),  django(MV) -> Vue js(T) -> 사용자
-
-
-
-- REST API 디자인 가이드
-
-  - URI는 정보의 자원을 표현해야 한다.
-  - 자원에 대한 행위는 HTTP Method(GET, POST, PUT, DELETE)로 표현한다.
-
-  ```
-  GET /members/delete/1
-  ```
-
-  - 위와 같은 URI는 REST를 제대로 적용하지 않은 URI, delete는 자원을 표현하는데 중점을 두어야 하고 delete 같은 행위에 대한 표현은 method를 사용해아 한다. 수정하면 아래와 같다.
-
-  ```
-  DELETE /members/1
-  ```
-
-
-
-- JSON(JavaScript Obeject Notation):자바스크립트 객체식 표기법, 저마다 제각각인 데이터 표기법을 표준화
-
-  - chrome 확장프로그램 중 JSON 데이터의 가시성을 개선시켜주는` JSON Viewer`가 있다.
-  - 예를 들어 청첩장을 만들기 위해 데이터를 받는다고 할 경우 사람마다 표기법이 제각각일 수 있다.
-
-  ```python
-  #1
-  누가:영희가
-  누구와:철수와
-  언제:2020.05.15
-  어디서: A호텔 예식장
-      
-  #2
-  누가 => 영희가
-  누구와 => 철수와
-  언제 => 2020.05.15
-  어디서 => A호텔 예식장
-  
-  #즉 동일한 키와 밸류를 연결하는 방식이 다 제각각이다.
-  ```
-
-  - html을 쓰지 못하는 이유: html은 태그가 정해져 있다.
-
-  ```html
-  <h1>청첩장</h1>
-  
-  <h2>영희</h2>
-  <h2>철수</h2>
-  <h2>2020.05.12</h2>
-  <h2>A호텔 예식장</h2>
-  
-  <!--위 처럼 HTML은 태그가 정해져 있어 key를 표기할 수 없다.-->
-  ```
-
-  - 이러한 단점을 보완하기 위해서 JSON 이전에 XML(eXtended Markup Language)이 활용되었다.
-    - XML은 태그에 제약이 없다.
-
-  ```xml
-  <제목>청첩장</제목>
-  
-  <누가>영희</누가>
-  <누구와>철수</누구와>
-  <언제>2020.05.12</언제>
-  <어디서>A호텔 예식장</어디서>
-  ```
-
-  - JSON은 XML 보다 짧은 길이로 데이터를 받아올 수 있어 더 많이 사용되기 시작
-    - 닫는 태그도 없을 뿐더러 XML은 HTML처럼 문서의 구조를 잡아줘야 해서 길이가 길어진다.
-    - 데이터가 많아질 수록 길이 차이가 커진다.
-    - 또한 빈번하게 데이터가 교환되는 웹의 특성상 약간의 길이 차이도 큰 차이를 불러올 수 있다.
-
-  ```python
-  #JSON은 Object가 아니라 문자열이다.
-  #다만 프로그래밍 언어의 해석(파이썬은 load(), JS는 parse())에 의해 dict(파이썬의 경우), object(JS의 경우)로 해석되는 것이다.
-  {
-      "제목":"청첩장",
-      "누가":"영희가",
-      "누구와":"철수와",
-      "언제":"2020.05.12",
-      "어디서":"A호텔 예식장"
-  }
-  #JSON은 반드시 쌍따옴표를 써야 한다. 위 처럼 중괄호에 담아도 되고, 대괄호에 담아도 된다.
-  ```
-
-
-
-- Django에서의 활용
+- Django에서 JSON을 반환하기
 
   ```python
   from django.views.decorators.http import require_GET
@@ -914,55 +807,10 @@
           })
   ```
 
-  
 
-- Postman
 
-  > https://www.postman.com/
-  >
-  > https://chrome.google.com/webstore/detail/postman-interceptor/aicmkgpgakddgnaphhhpliifpcfhicfo
 
-  - 첫 번째 사이트로 접속하여 다운로드 후, 두 번째 사이트로 접속하여 확장 프로그램 설치, 확장 프로그램이 없으면 쿠키에 대한 정보가 없어 요청을 보낼 수 없다.
-  - 프로그램 실행 후 우측 상단의 안테나 버튼을 클릭 후 `Cookies` - `Capture Cookies`를 on으로 - `Install Intercepter Briedge`클릭 - `Domain`에 https는 빼고 요청을 보내려는 url을 입력(ex.3fdd4...vfs.cloud9....amazonaws.com)후 추가 - request탭으로 가서 `Intercepter`클릭 후 `Capture Requests`를 on으로 변경
-    - c9을 사용하는 것이 아닌 local에서 진행할 경우 이렇게 복잡한 과정을 거치지 않아도 된다.
-  - 메인화면에서  `+` 버튼을 클릭하여 탭을 열고 요청을 보내고자 하는 url(`urls.py`에 작성한 url)을 `Enter request URL`창에 입력.
-  - 데이터를 함께 넘기려면 URL 적는 input창 아래에 Body탭-`from-data` 클릭 후 key에는 변수명, Value에는 넣으려는 값을 넣으면 된다. 혹은 Body탭의 `raw` 클릭 후 타입을 JSON으로 바꿔  JSON 형식으로 보내도 된다. 
-  - Body탭은 요청에 담아 보낸 data를 적는 곳이고, Headers는 요청을 보내는 사용자에 대한 정보를 적는 곳이다.
 
-  ```python
-  #실제 코드는 django-api_pract2참고
-  #urls.py
-  from django.contrib import admin
-  from django.urls import path,include
-  
-  urlpatterns = [
-      path('admin/', admin.site.urls),
-      path('posts/',include('posts.urls')),
-  ]
-  
-  #posts/urls.py
-  from django.urls import path
-  from . import views
-  
-  urlpatterns = [
-      #url이 restful하지 않지만 편의상 아래와 같이 쓴다.
-      path('post_check/',views.create_post)
-  ]
-  ```
-
-  ```python
-  #views.py
-  
-  from rest_framework.decorators import api_view
-  from .models import Post
-  
-  # Create your views here.
-  
-  @api_view(['POST'])
-  def post_check(request):
-      print('wow')
-      #만일 post 요청이 정상적으로 온다면 terminal창에 wow가 출력될 것이다.
-  ```
 
 ## Django rest-auth
 
