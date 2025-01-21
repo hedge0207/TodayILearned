@@ -746,6 +746,8 @@
 > https://shoark7.github.io/programming/knowledge/what-is-rest
 >
 > https://blog.npcode.com/2017/04/03/rest%ec%9d%98-representation%ec%9d%b4%eb%9e%80-%eb%ac%b4%ec%97%87%ec%9d%b8%ea%b0%80/
+>
+> https://pages.apigee.com/rs/apigee/images/api-design-ebook-2012-03.pdf
 
 - REST(REpresentational State Transfer)
 
@@ -944,6 +946,7 @@
     - 대문자보다는 소문자를 사용한다.
     - Document 이름으로는 단수명사를 사용해야한다.
     - Collection과  store 이름으로는 복수명사를 사용해야 한다.
+    - 추상적인 resource name 보다는 구체적인 resource name이 낫다.
   - 자원에 대한 행위는 HTTP method로 표현한다.
     - URI에 HTTP method가 들어가면 안 된다(e.g. `GET /members/get/1` X).
     - URI에 행위에 대한 동사 표현이 들어가면 안 된다(e.g. `GET /members/find/1` X).
@@ -954,6 +957,141 @@
     - `-`은 가독성을 높이는데 사용한다.
     - `_`은 사용하지 않는다.
     - 파일의 확장자는 포함하지 않는다.
+
+
+
+- 명사가 아닌 동사를 쓰는 것이 허용되는 경우들
+
+  - 도메인에 따라 API를 통해 서버에 resource가 아닌 response를 요청해야하는 경우가 있을 수 있다.
+    - 예를 들어 특정 값을 계산해서 해당 결과를 반환 받는 다던가, 문자를 다른 언어로 번역하는 경우 등이 있다.
+    - 계산 결과와 번역 결과 모두 그 자체로 resource는 아니지만, 클라이언트가 서버에 반환을 요청한 값이다.
+  - 이럴 경우 예외적으로 동사를 사용하는 것이 허용된다.
+    - 예를 들어 아래 요청은 유로화를 한화로 변경하는 요청이다.
+    - 유로화와 한화 모두 서버가 가지고 있는 resource는 아니며, 서버는 클라이언트로부터 요청을 받으면 정해진 로직에 따라 환율을 계산하여 그 결과를 반환하면 된다.
+
+  ```http
+  GET /convert?from=EUR&to=KRW&amount=100
+  ```
+
+  - 또 다른 경우는 검색이 필요할 경우이다.
+    - 일반적으로 단순한 검색은 resource 뒤에 query parameter를 사용하여 아래와 같이 요청한다.
+
+  ```http
+  GET dogs/?q=red
+  ```
+
+  - 그러나, 특정 resource에 대한 검색이 아닌, 모든 resource에 대해 검색을 해야 하는 경우, resource명이 아닌 동사 `search`를 사용한다.
+
+  ``` http
+  GET /search?q=fluffy+fur
+  ```
+
+  - 단, 이 경우 동사를 사용한 이유를 API 문서에 명시해야한다.
+
+
+
+- Response의 attribute name
+
+  - 서버 개발자는 response로 반환될 attribute name늘 지정해야한다.
+    - 예를 들어 아래 예시에서는 `created_dt`라는 attribute name을 지정했다.
+
+  ```json
+  {
+    "created_dt": "Thu Nov 03 05:19;38 +0000 2011"
+  }
+  ```
+
+  - 이 때 attribute name의 형식을 어떤 형식으로 할지가 문제가 될 수 있다.
+    - 같은 값을 반환하더라도 아래와 같이 다양한 형식으로 attribute name을 지정할 수 있기 때문이다.
+
+  ```json
+  {
+    "created_dt": "Thu Nov 03 05:19;38 +0000 2011",
+    "CreatedAt": "Thu Nov 03 05:19;38 +0000 2011",
+    "createdAt": "Thu Nov 03 05:19;38 +0000 2011"
+  }
+  ```
+
+  - Attribute name의 형식은 camelCase를 따르는 것이 권장된다.
+    - 팀 내에서 정한 규칙이 있다면, 해당 규칙을 따르는 것이 가장 좋다.
+    - 만일 정해진 규칙이 없거나 규칙을 정해야 하는 상황이라면, camelCase를 사용하는 것이 권장된다.
+    - 이는 response를 받아서 처리하는 언어인 JavaScript가 camelCase를 사용하기 때문이다.
+
+  ```javascript
+  // JavaScript에서 response를 받아서 처리할 때는, 아래와 같은 attribute name 형식 보다는
+  var timing = myObject.created_at;
+  var timing - myObject.CreatedAt;
+  
+  // 아래와 같은 camelCase가 더 자연스럽다.
+  var timing - myObject.createdAt;
+  ```
+
+
+
+- 예외 처리
+
+  - 클라이언트의 요청을 처리하는 중에 에러가 발생한 경우 서버는 아래와 같은 정보를 클라이언트에 반환해야한다.
+    - 에러를 표현할 수 있는 적절한 HTTP status code
+    - 에러가 발생한 원인
+    - 에러를 해결할 수 있는 방법(관련된 문서의 링크나 간략한 설명 등)
+
+  - 예시
+    - 첫 번째는 에러가 발생했음에도 정상 처리 되었다는 200 status code를 반환하고, 두 번째는 해당 error를 어떻게 처리해야하는지에 대한 설명이 누락되어 있다.
+    - 세 번째는 올바른 HTTP status code를 반환하고, error의 원인과 해결 방법에 대해 알 수 있도록 링크를 제공한다.
+
+  ```json
+  // HTTP Status Code: 200
+  {
+    "type" : "OauthException", 
+    "message":"(#803) Some of the aliases you requested do not exist: foo.bar"
+  }
+  
+  // HTTP Status Code: 401
+  {
+    "code" : 401, 
+    "message": "Authentication Required"
+  }
+  
+  // HTTP Status Code: 401
+  {
+    "status" : "401", 
+    "message":"Authenticate",
+    "code": 20003, 
+    "moreinfo": "http://www.twilio.com/docs/errors/20003"
+  }
+  ```
+
+
+
+- Version 정보 표기하기
+
+  - Version은 API에서 매우 중요한 요소 중 하나이다.
+  - Version은 다양한 방식으로 표현할 수 있다.
+    - 첫 번째와 같이 날짜를 사용할 수도 있고
+    - 두 번째와 같이 중간에 넣을 수도 있고
+    - 세 번째와 같이 query parameter로 받을 수도 있다.
+
+  ```http
+  /2010-04-01/Accounts/
+  /services/data/v20.0/sobjects/Account
+  ?v=1.0
+  ```
+
+  - 가장 바람직한 방식은 URL의 가장 앞쪽에 `v` prefix를 사용하여 표현하되, 숫자에 소숫점 이하는 표기하지 않는 것이다.
+    - 소수를 버리는 이유는 인터페이스를 단순하게 유지하기 위함이다.
+
+  ```http
+  /v1/dogs
+  ```
+
+  - HTTP header에 버전 정보를 넣는 것이 더 바람직하지 않은가?
+    - 이론적으로는 API의 버전 정보를 header에 넣는 것이 맞다.
+    - 그러나 대부분의 기업들 이러한 방식을 채택하지 않는데, 일반적으로 header에는 한 번 정해지면 잘 변경되지 않는 값들을 넣기 때문이다.
+    - Version과 같이 지속적으로 변경되는 정보를 header에 넣을 경우 URL에 넣는 것에 비해 변경된 정보를 식별하는 것이 쉽지 않다.
+
+
+
+
 
 
 
