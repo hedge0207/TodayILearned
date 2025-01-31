@@ -122,6 +122,8 @@
 
 - 암호화
 
+- Cache Replacement Policies
+
 - Shorts
 
 <br/>
@@ -171,6 +173,14 @@
 - 교착 상태
 
 - 물리 메모리 관리
+
+<br/>
+<br/>
+
+## Operating_System_part4
+- 가상 메모리 기초
+
+- 가상 메모리 관리
 
 <br/>
 <br/>
@@ -662,6 +672,9 @@
 <br/>
 
 # algorithm
+<br/>
+<br/>
+
 ## HNSW
 <br/>
 <br/>
@@ -904,6 +917,16 @@
 
 - Load balancer 사용하기
 
+- StatefulSets
+
+<br/>
+<br/>
+
+## Kubernetes_part3
+- PV 예시 - PV를 사용하여 WordPress와 MySQL 배포하기
+
+- Service를 사용하여 Application들 연결하기
+
 <br/>
 <br/>
 
@@ -971,6 +994,9 @@
 <br/>
 
 # django
+<br/>
+<br/>
+
 ## django_part1
 - Django
 
@@ -1103,6 +1129,9 @@
 <br/>
 
 # elasticsearch
+<br/>
+<br/>
+
 ## Elasticsearch_debugging
 - Debug Elasticsearch
 
@@ -1305,6 +1334,8 @@
 - Docker stack으로 설치하기
 
 - Security 활성화 한 상태로 생성하기
+
+- Kubernetes를 사용하여 Elasticsearch 배포하기
 
 - Error
 
@@ -1551,6 +1582,9 @@
 <br/>
 
 # front
+<br/>
+<br/>
+
 ## React
 ### React_part1
 - React란
@@ -1812,8 +1846,6 @@
 - ECMAScript
 
 - Device Orientation
-
-- REST API
 
 - SPA
 
