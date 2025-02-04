@@ -1228,6 +1228,110 @@ for task, stats in self.env.stats.entries.items():
 
 
 
+# fcntl, filelock
+
+- fcntl
+
+  - File descriptor의 다양한 파일 제어 명령을 다룰 수 있게 해주는 module이다.
+    - 파일의 잠금, non-blocking I/O 설정, terminal 설정 변경 등이 가능하다.
+    - 주의할 점은 file descriptor는 unix 계열 운영체제에만 있는 개념이므로, Windows에서는 사용할 수 없다는 점이다.
+  - `lockf()` method를 사용하여 file에 lock을 걸 수 있으며, 이 때 사용되는 flag는 아래와 같다.
+    - `LOCK_EX`: 배타적 잠금, 한 번에 하나의 process만 접근할 수 있게 한다.
+    - `LOCK_SH`: 공유 잠금, 여러 process가 읽을 수 있게 한다(쓰기는 불가능).
+    - `LOCK_UN`: Lock을 해제한다.
+    - `LOCK_NB`: Lock을 얻지 못하면 즉시 error를 반환한다.
+  - `lockf()` method를 사용하여 file에 lock 걸기
+
+  ```python
+  import fcntl
+  import os
+  import time
+  from multiprocessing import Process
+  
+  FILE_PATH = "shared_file.txt"
+  
+  def lock_and_write():
+      with open(FILE_PATH, "a") as f:
+          try:
+              # 파일 배타적 잠금 (다른 프로세스 접근 차단)
+              fcntl.lockf(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+              print(f"[{os.getpid()}] 파일 잠금 획득")
+  
+              # 파일에 데이터 기록
+              f.write(f"[{os.getpid()}] 파일 접근 및 기록 중...\n")
+              f.flush()
+  
+              # 잠금 유지 시간 (파일이 잠겨 있는 동안 다른 프로세스는 접근 불가)
+              time.sleep(5)
+  
+          except BlockingIOError:
+              print(f"[{os.getpid()}] 파일이 이미 잠겨 있습니다. 다른 프로세스가 사용 중입니다.")
+  
+          finally:
+              # 잠금 해제
+              fcntl.lockf(f, fcntl.LOCK_UN)
+              print(f"[{os.getpid()}] 파일 잠금 해제 완료")
+  
+  if __name__ == "__main__":
+      processes = [Process(target=lock_and_write) for _ in range(10)]
+  
+      # 프로세스 시작
+      for p in processes:
+          p.start()
+  
+      # 모든 프로세스가 종료될 때까지 대기
+      for p in processes:
+          p.join()
+  ```
+
+
+
+- filelock
+
+  - 간단하게 file lock을 실행할 수 있게 해주는 package이다.
+    - 단순히 file lock이 목적일 경우 fcntl보다 filelock을 사용하는 것이 낫다.
+    - 아래와 같이 설치한다.
+
+  ```bash 
+  $ pip install filelock
+  ```
+
+  - 사용
+    - 주의할 점은 lock을 걸려는 file이 아닌, 별도의 lock file을 지정해줘야 한다는 것이다.
+    - 아래와 같이 with 문과 함께 사용 가능하며, decorator로도 사용할 수 있다.
+
+  ```python
+  import os
+  from filelock import Timeout, FileLock
+  
+  file_path = "high_ground.txt"
+  lock_path = "high_ground.txt.lock"
+  
+  lock = FileLock(lock_path, timeout=1)
+  
+  with lock:
+      if not os.path.exists(file_path):
+          with open(file_path, "w") as f:
+              f.write("Hello there!")
+  
+  lock.acquire()
+  try:
+      if not os.path.exists(file_path):
+          with open(file_path, "w") as f:
+              f.write("General Kenobi!")
+  finally:
+      lock.release()
+  
+  @lock
+  def decorated():
+      print("You're a decorated Jedi!")
+  
+  
+  decorated()
+  ```
+
+  
+
 
 
 
