@@ -53,7 +53,7 @@
   - 문제 발생
     - `Duck`을 상속 받는 class 중 고무 오리를 표현한 `RubberDuck` class가 있었다.
     - 고무 오리는 날 수 없을 뿐더러 "quack" 소리를 내지도 않는다.
-    - 이를 해결하기 위해 `RubberDuck` class의 메서드들을 아래와 같이 overide하여 작성한다.
+    - 이를 해결하기 위해 `RubberDuck` class의 메서드들을 아래와 같이 override하여 작성한다.
 
   ```python
   class RubberDuck(Duck):
@@ -74,10 +74,10 @@
   - 새로운 문제 발생
 
     - 날 수 없고, "quack" 소리를 내지도 않는 나무 오리, 구리 오리, 황금 오리 등이 추가되기 시작한다.
-    - 날 수 없고, "quack" 소리를 내지도 않는 무수히 많은 종류의 오리가 추가될 때 마다 메서드를 overide해야한다.
+    - 날 수 없고, "quack" 소리를 내지도 않는 무수히 많은 종류의 오리가 추가될 때 마다 메서드를 override해야한다.
 
-    - 해결 `fly()`와 `quack()` 메서드를 `Duck` super class에서 빼고 이를 interface로 작성한다.
-    - 날 수 있고, "quack" 소리를 낼 수 있는 오리에게만 interface를 구현한다.
+    - 이를 해결하기 위해 `fly()`와 `quack()` 메서드를 `Duck` super class에서 빼고 이 행동들을 interface로 작성한다.
+    - 날 수 있거나 "quack" 소리를 낼 수 있는 오리에게만 interface를 구현한다.
 
   ```python
   from abc import ABC, abstractmethod
@@ -102,8 +102,20 @@
       @abstractmethod
       def fly(self):
           pass
+        
+  
+  # Duck 추상 클래스를 상속 받고, Quacakble, Flyable 인터페이스를 구현하는 클래스를 작성한다.
+  class RedheadDuck(Duck, Quackable, Flyable):
+      def displsy(self):
+          ...
+      
+      def quack(self):
+          ...
+      
+      def fly(self):
+          ...
   ```
-
+  
   - 이어지는 문제
     - Interface는 일반 class의 상속과는 달리, method를 상속받아서 그대로 사용할 수는 없고, 반드시 상속 받은 class에서 메서드를 구현해야 한다.
     - 만일 모든 `fly()`에 공통으로 들어가는 code가 있다면, 중복이 발생하게 된다.
@@ -135,7 +147,7 @@
   - **구현보다는 인터페이스에 맞춰서 프로그래밍한다.**
     - 각 행동은 인터페이스로 표현하고 이들 인터페이스를 사용해서 행동을 구현한다.
     - 나는 행동과 꽥꽥거리는 행동은 이제 Duck 클래스에서 구현하지 않는다.
-    - 대신 특정 행동(삑삑 소래 내기)만을 목적으로 하는 클래스의 집합을 만든다.
+    - 대신 특정 행동(삑삑 소리 내기)만을 목적으로 하는 클래스의 집합을 만든다.
     - 행동 인터페이스는 Duck 클래스가 아니라 행동 클래스에서 구현한다.
     - 예를 들어 `FlyBehavior`라는 interface를 만들고, 해당 interface를 구현하는 `FlyWithWings`, `FlyNoWay`라는 class를 만든 후, 각 class(`FlyWithWings`, `FlyNoWay`)에서 `fly` 메서드를 작성한다.
 
@@ -191,7 +203,7 @@
 - 오리의 행동 통합하기
 
   - 가장 중요한 점은 나는 행동과 꽥꽥거리는 행동을 Duck class(혹은 그 sub class)에서 정의한 메서드를 써서 구현하지 않고 다른 클래스에 위임한다는 것이다.
-  - 우선 Duck class에서 행동과 관련된 두 인터페이스(`FlyBehavior`, `QuackBehavior`)의 인스턴스 변수를 추가한다.
+  - 우선 Duck class에 행동과 관련된 두 인터페이스(`FlyBehavior`, `QuackBehavior`)의 인스턴스 변수를 추가한다.
     - 즉 두 인터페이스의 인스턴스를 할당 받는 변수를 추가한다.
     - 인터페이스의 인스턴스 변수를 설정하는 이유는 동적 타이핑을 지원하지 않는 언어들(대표적으로 Java)의 경우 인터페이스를 구현한 모든 class를 변수에 대입하기 위해서 해당 인터페이스를 type으로 설정해야 하기 때문이다.
     - 각 sub class 객체에서는 실행시에 이 변수에 특정 행동 형식(`FlyWithWings`, `MuteQuack` 등)의 레퍼런스를 다형적으로 설정한다.
@@ -263,9 +275,9 @@
 
 
 
-- 구성
+- 구성(composition)
   - 오리에는 `FlyBehavior`와 `QuackBehavior`가 있으며, 각각 나는 행동과 꽥꽥거리는 행동을 위임 받는다.
-  - 이런 식으로 두 클래스를 합치는 것을 구성(composition)을 이용한다고 부른다.
+  - 이런 식으로 두 클래스를 합치는 것을 구성이라고 부른다.
     - 오리 class들은 행동을 상속받는 대신, 올바른 행동 객체로 구성되어 행동을 부여받는다.
     - 상속이 "A는 B다"로 표현된다면, 구성은 "A에는 B가 있다"로 표현된다.
   - **상속보다는 구성을 활용해야한다.**
@@ -280,7 +292,9 @@
     - 즉, `FlyBehavior`라는 알고리즘군과, `QuackBehavior`라는 알고리즘군이 있다.
   - 즉, "오리들의 다양한 행동을 전략 패턴으로 구현하고 있다"는 말은 아래와 같은 뜻이다.
     - 오리의 행동을 쉽게 확장하거나 변경할 수 있는 클래스들의 집합으로 캡슐화되어 있다.
-    - 또한 필요시 실행중에도 확장과 변경이 가능하다.
+    - 또한 필요 시 실행중에도 확장과 변경이 가능하다.
+
+
 
 
 
@@ -295,10 +309,10 @@
     - WeatherData 객체: 기상 스테이션으로부터 오는 정보를 추적하는 객체
     - 디스플레이: 사용자에게 현재 기상 조건을 보여 주는 디스플레이 장비.
   - WeatherData class는 아래와 같이 구성된다.
-    - `get_temperature()`: 온도를 반환하는 메서드
-    - `get_humidity()`: 습도를 반환하는 메서드
-    - `get_pressure()`: 기압을 반환하는 메서드
-    - `measurements_changed()`: WeatherData에서 갱신된 정보를 가져올 때 마다 호출되는 메서드.
+    - `get_temperature()`: 온도를 반환하는 메서드.
+    - `get_humidity()`: 습도를 반환하는 메서드.
+    - `get_pressure()`: 기압을 반환하는 메서드.
+    - `measurements_changed()`: 갱신된 정보를 가져올 때 마다 호출되는 메서드.
 
   - 우리는 이 중에서 WeatherData 객체에서 data를 가져와 디스플레이에 보여주는 기능을 개발해야한다.
     - 기온, 습도, 기압을 보여줘야한다.
@@ -329,7 +343,7 @@
   ```
 
   - 위 코드에서 잘 구현된 점과 잘 못 구현된 점
-    - 구체적인 구현에 의존해서 짰으므로 프로그램을 수정하지 않고는 다른 디스플레이를 추가하거나 제가할 수 없다.
+    - 구체적인 구현에 의존해서 구현했므로 프로그램을 수정하지 않고는 다른 디스플레이를 추가하거나 제가할 수 없다.
     - 실행 중에 디스플레이를 추가하거나 제거 할 수 없다.
     - 바뀔 수 있는 부분(display 부분)을 캡슐화하지 않았다.
     - display를 보여주는 모든 부분은 `update`라는 공통된 메서드를 가지고 있는 것으로 보아 공통된 인터페이스를 사용하고 있는 점은 잘 구현된 것이다.
@@ -340,43 +354,42 @@
 
   - 옵저버 패턴은 신문사의 구독 서비스와 유사한데, 신문은 아래와 같은 특징이 있다.
 
-    - 신문사가 사업을 시작하고 신문을 발행하기 시작한다.
     - 독자가 특정 신문사에 구독 신청을 하면, 구독을 해지하기 전까지 매번 새로운 신문이 나올 때마다 배달을 받을 수 있다.
-    - 신문을 더 이상 보고 싶지 않으면 구독 해지 신청을 한다.
+    - 신문을 더 이상 보고 싶지 않으면 독자는 신문사에 구독 해지 신청을 한다.
     - 신문사가 망하지 않는 이상 개인, 호텔, 항공사, 회사 등은 꾸준히 신문을 구독하거나 해지한다.
-
+    
   - 옵저버 패턴에서 신문사를 주제(subject), 구독자를 옵저버(observer)라 부른다.
-
+  
     - 주제에서는 중요한 데이터(신문)를 관리한다.
     - 주제가 관리하는 데이터에 변경 사항이 있을 경우 옵저버에게 그 소식이 전해진다.
-    - 옵저버 객체들은 주제 객체에 등록되어 있으며(주제를 구독하고 있으며) 주제 데이터가 바뀌면 갱신 내용을 전달받는다.
-
+    - 옵저버 객체들은 주제 객체에 등록되어 있으며(주제를 구독하고 있으며) 주제 데이터가 바뀌면 갱신된 내용을 전달받는다.
+  
   - 작동 원리
-
-    - 새로운 객체가 등장해 주제에게 자신도 옵저버가 되고 싶다고 이야기한다.
-    - 이제 주제는 이 새로운 객체를 옵저버로 등록하고, 새로 추가된 옵저버는 주제로부터 변경 사항을 받게 된다.
+  
+    - 새로운 객체가 등장해 주제에게 자신도 옵저버가 되고 싶다고 요청한다.
+    - 주제는 이 새로운 객체를 옵저버로 등록하고, 새로 추가된 옵저버는 주제로부터 변경 사항을 받게 된다.
     - 이번에는 현재 옵저버인 객체가 옵저버 목록에서 탈퇴하고 싶다는 요청을 한다.
     - 주제는 옵저버 목록에서 이 객체를 제외시킨다.
     - 이 객체는 이제 주제에서 변경 사항을 받지 않게 된다.
-
+  
   - 정의
-
+  
     - 한 객체의 상태가 변경되면 그 객체에 의존하는 다른 객체들에게 연락이 가고 자동으로 내용이 갱신되는 방식으로 일대다 의존성을 정의하는 방식이다.
-
+  
   - 구현
-
+  
     - 다양한 구현 방식이 있지만 일반적으로 주제 인터페이스와 옵저버 인터페이스가 들어 있는 클래스 디자인으로 구현한다.
-
-    ![image-20230304150742733](design_pattern_part1.assets/image-20230304150742733.png)
-
+  
+    ![observer](design_pattern_part1.assets/observer.png)
+  
     - 옵저버를 등록하거나 옵저버 목록에서 탈퇴하고자 할 때는 `Subject` 인터페이스에 있는 메서드를 사용한다.
     - 각 주제 마다 여러 개의 옵저버가 있을 수 있다.
     - 옵저버가 될 가능성이 있는 객체는 반드시 Observer 인터페이스를 구현해야하며, 이 인터페이스에는 주제의 상태가 바뀌었을 때 호출되는 `update()` 메서드 밖에 없다.
     - 주제 역할을 하는 구상 클래스(`ConcreteSubject`)에는 항상 `Subject` 인터페이스를 구현해야하며, 등록 및 해지용 메서드와 상태가 바뀔 때마다 모든 옵저버에게 연락하는 `notifyObservers()` 메서드도 구현해야한다. 또한 setter, getter도 있을 수 있다.
     - `Observer` 인터페이스를 구현한다면, 무엇이든 옵저버 클래스가 될 수 있다.
-
+  
   - Pub-Sub 패턴과의 관계
-
+  
     - Publish-Subscribe 패턴 역시 publisher가 다양한 subscriber에게 메시지를 전달한다는 점에서는 유사하다.
     - 그러나 완전히 동일한 패턴이라고 볼 수는 없다.
     - 옵저버 패턴과는 달리 pub-sub 패턴의 경우 중간에 broker 혹은 event bus라 불리는 중계층이 있다.
@@ -487,7 +500,7 @@
           self.weather_data = weather_data
           self.weather_data.register_observer(self)
           
-      def update(temperature, humidity, pressure):
+      def update(self, temperature, humidity, pressure):
           self.temperature = temperature
           self.humidity = humidity
           self.pressure = pressure
@@ -506,7 +519,7 @@
   - Push 방식의 문제
     - 만일 온도, 습도, 기압 이외에 풍속이라는 새로운 유형의 data가 추가되었다고 가정하자. 
     - 풍속 디스플레이는 온도, 습도, 기압에는 관심이 없고 오직 풍속만을 보여주면 된다.
-    - 그러나 push 방식은 비효율적이게도 온도, 습도, 기압, 풍속 중 어느 하나에만 변경사항이 있어도 모든 옵저버들에게 모든 기후 정보를 보낸다.
+    - 그러나 push 방식은 비효율적이게도 모든 옵저버들에게 모든 종류의 기후 정보를 보낸다.
   - Pull 방식
     - 주제가 옵저버에게 데이터를 push하는 것이 아니라 옵저버가 주제로부터 데이터를 pull하는 방식.
     - Push와 pull 어느 한 쪽이 맞는 방식이라고 할 수는 없으나 대부분의 경우 pull 방식이 더 적절하다.
@@ -531,7 +544,7 @@
       # 위와 같은 형태로 humidity, pressure 등도 구현한다.
   ```
 
-  - Observer 인터페이스에서 update 메서드의 매개변수를 병경한다.
+  - Observer 인터페이스에서 update 메서드의 매개변수를 변경한다.
 
   ```python
   class Observer(ABC):
@@ -541,17 +554,21 @@
   ```
 
   - Observer 인터페이스의 각 구상 클래스의 `update` 메서드도 변경한다.
-
+    - 아래와 같이 수정하면 각 observer별로 필요한 기후 정보만 subject(WeatherData)로부터 pull해올 수 있다.
+  
+  
   ```python
   class CurrentConditionDisplay(Observer):
       # (...)
           
-      def update(temperature, humidity, pressure):
+      def update(self):
           self.temperature = self.weather_data.get_temperature()
           self.humidity = self.weather_data.get_humidity()
           self.pressure = self.weather_data.get_pressure()
           self.display()
   ```
+
+
 
 
 
@@ -592,7 +609,7 @@
       pass
   ```
 
-  - 문제는 토핑의 조합에 따라 하나의 메뉴의 가격이 달라질 수 있다는 점이다.
+  - 문제는 같은 메뉴라도 토핑의 조합에 따라 가격이 달라질 수 있다는 점이다.
     - 따라서 이 모든 가격을 반영하기 위해 토핑마다 class를 생성한다.
     - 메뉴, 토핑이 증가할수록 무수히 많은 class를 생성해야한다.
 
@@ -677,7 +694,7 @@
 
 - OCP(Open-Closed Principle)
   - Class는 확장에는 열려 있어야 하지만 변경에는 닫혀 있어야 한다는 원칙이다.
-  - 모순처럼 보이지만 이미 이전 장에서 obsever pattern을 공부할 때 경험한 적이 있다
+  - 모순처럼 보이지만 이미 obsever pattern을 공부할 때 경험한 적이 있다
     - Observer를 추가하더라도, subject의 코드는 하나도 변경 할 필요가 없었다.
   - 모든 부분에서 OCP를 준수하는 것은 불가능에 가깝고, 굳이 그렇게 할 필요도 없다.
     - 오히려 코드가 더 지저분해 질 수도 있다.
@@ -708,10 +725,10 @@
   - 데코레이터 객체는 일종의 wrapper 객체라고 생각하면 된다.
 
     - 데코레이터 객체의 형식은 데코레이터 객체가 장식하는 객체를 반영한다.
-    - 반영(mirror)이란 같은 형식을 같는다는 의미이다.
+    - 반영(mirror)이란 같은 형식을 갖는다는 의미이다.
     - 즉, deocator의 슈퍼 클래스는 자신이 장식하고 있는 객체의 슈퍼클래스와 같다.
     - 한 객체를 여러 개의 decorator로 감쌀 수 있다.
-    - 따라서 위 예시와 같이 decorator 객체 `Mocha`는 자신이 장식하는 `Decaf` 객체가 상속 받아 가지고 있는 `cost` 메서드를 가지고 있고, `Whip` 객체 역시 마찬가지로 자신이 장식하는 `Decaf`를 장식하는 `Mocah`가 반영한 `cost` 메서드를 가지고 있다.
+    - 따라서 위 예시와 같이 decorator 객체 `Mocha`는 자신이 장식하는 `Decaf` 객체가 상속 받아 가지고 있는 `cost` 메서드를 가지고 있고, `Whip` 객체 역시 마찬가지로 자신이 장식하는 `Mocah`에서 반영한 `cost` 메서드를 가지고 있다.
   
     ![image-20230319150811088](design_pattern_part1.assets/image-20230319150811088.png)
   
@@ -808,10 +825,13 @@
           return 1.99
   ```
 
-  - 토핑 코드 구현하기
+  - 토핑 코드(decorator) 구현하기
     - 예시로 모카와 두유만 구현한다.
+    - `cost`는 `CondimentDecorator`가 상속 받은 `Beverage`의 행동을 그대로 물려받지 않는다.
+    - 대신 구성을 통해 `beverage`의 인스턴스를 인스턴수 변수로 가지며, `Beverage`의 행동(`cost`)은 해당 인스턴스 변수로 시행한다.
+    - 즉, 각 decorator의 `cost`는 `Beverage`의 `cost`를 그대로 사용하지 않으며, `Beverage`의 `cost`라는 행동에 새로운 행동(토핑 가격을 더하기)한다. 
     - `CondimentDecorator`에서 `get_description`를 추상 메서드로 구현한 이유가 바로 아래와 같이 토핑 정보를 추가하여 반환하기 위함이다.
-
+  
   ```python
   class Mocha(CondimentDecorator):
       def __init__(self, beverage):
@@ -821,6 +841,7 @@
           return self.beverage.get_description() + ", mocha"
       
       def cost(self):
+          # Beverage.cost에 새로운 행동을 추가한다.
           return self.beverage.cost() + 0.20
   
   
@@ -834,9 +855,9 @@
       def cost(self):
           return self.beverage.cost() + 0.10
   ```
-
+  
   - 실행해보기
-
+  
   ```python
   beverage = Expresso()
   print(beverage.cost())					# 1.99
@@ -856,12 +877,27 @@
   
   > https://betterprogramming.pub/the-decorator-pattern-why-i-stopped-using-it-and-the-alternative-2ae447f9de08 참고
   
-  - 구상 구성 요소로 어떤 작업을 처리하는 코드에 데코레이터 패턴을 적용하면 코드가 제대로 동작하지 않는다.
-    - 예를 들어 위 코드는 `Beverage`라는 추상 구성 요소 어떤 작업을 처리하는 코드이지, `Expressso`, `Decaf` 등의 특정한 구상 구성 요소별로 특별한 작업을 처리하는 코드가 아니다.
-    - 원래 decorator pattern 자체가  추상 구성 요소에 새로운 행동을 추가하기 위한 pattern이므로, 특정 구상 구성 요소별로 고유한 작업을 decorator를 사용하여 추가하는 것은 적절하지 않다.
+  - 데코레이터로 구상 구성 요소를 감싸고 나면 구체적으로 어떤 구상 구성 요소인지를 알 수 없게 된다.
+    - 이에 따라 구상 구성 요소로 어떤 작업을 처리하는 코드에 데코레이터 패턴을 적용하면 코드가 제대로 동작하지 않는다.
+    - 예를 들어 위 코드는 `Beverage`라는 추상 구성 요소로 어떤 작업을 처리하는 코드이지, `Expressso`, `Decaf` 등의 특정한 구상 구성 요소별로 특별한 작업을 처리하는 코드가 아니다.
     - 예를 들어 에스프레소 할인 행사를 진행해야해서 `Expresso` 에만 특별한 처리가 필요하다.
     - 그러나, 일단 데코레이터로 구상 구성 요소를 감싸고 나면, 해당 메뉴가 `Beverage`의 구상 구성 요소라는 것 만 알 수 있을 뿐, 구체적으로 어떤 구상 구성 요소인지는 알 수 없게 된다.
     - 즉 데코레이터가 장식하는 대상이 `Beverage`의 서브 클래스라는 것만 알고 있을 뿐 구체적으로 어떤 class인지는 모르므로, `Expresso`일 경우에만 할인을 적용할 수는 없다(물론 `Express` class를 변경하면 되지만, 이는 원하는 해결 방식이 아니다).
+    - 원래 decorator pattern 자체가  추상 구성 요소에 새로운 행동을 추가하기 위한 pattern이므로, 특정 구상 구성 요소별로 고유한 작업을 decorator를 사용하여 추가하는 것은 적절하지 않다.
+  
+  ```python
+  beverage = Expresso()
+  beverage = Mocha(beverage)
+  beverage = Soy(beverage)
+  cost = beverage.cost()
+  
+  # 아래와 같이 beverage가 Expresso라는 구상 구성 요소일 경우 할인을 하려고 해도,
+  # beverage는 데코레이터로 감싸진 순간 원래 구상 구성 요소인지를 알 수 없어진다.
+  if isinstance(beverage, Expresso):
+      cost *= 0.8
+      print(cost)
+  ```
+  
   - 데코레이터는 같은 객체를 감싸고 있는 다른 데코레이터를 알 수 없다.
     - 그러므로 특정 decorator stack에서 특정 decorator만 제거할 수 없다.
     - 또한 decorator의 순서에 의존적인 구현을 하는 것도 어렵다.
