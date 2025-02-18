@@ -188,4 +188,290 @@
     - 많은 언어에서 비동기 처리가 표준이 되었다.
     - 그럼에도 테스트에서는 비동기 코드를 동기적인 방식으로 검증할 수 있다.
     - 비동기 코드를 동기적인 방식으로 검증한다는 것은 테스트에서 직접 콜백 함수를 호출하거나 비동기 작업이 완료될 때까지 기다린다는 의미다.
-  - 단위 테스트 체크리스트
+
+
+
+- 단위 테스트 체크리스트
+  - 오래 전에 작성한 테스트가 여전히 잘 돌아가는가?
+    - 코드를 변경한 후 이전에 잘 돌아가던 테스트를 실행할 수 없게 되면 코드에 버그가 생겨도 알아차리지 못할 수 잇다.
+    - 이를 회귀(regression)라고 한다.
+    - 회귀는 한때 작동하던 하나 이상의 작업 단위가 이제는 작동하지 않는 것이다.
+  - 내가 작성한 테스트를 다른 팀원이 실행했을 때 문제 없이 결과를 받을 수 있는가?
+    - 오래된 레거시 코드를 수정하는 것에 부담을 느끼는 이유는 코드를 바꾸면 다른 코드에 어떤 형태로 영향을 주는지 분명히 알 수 없기 때문이다.
+    - 단위 테스트는 낯선 코드와 마주칠 때 두려움을 덜어준다.
+  - 테스트가 수분 내로 전부 실행되는가?
+    - 단 몇 초 빨라진다고 해도 테스트는 빨라져야한다.
+    - 테스트를 빠르게 실행할 수 없다면 결국 자주 돌려 보지 않게 된다.
+  - 간단하게 모든 테스트를 실행할 수 있는가?
+    - 테스트가 완전 자동화되지 않으면 테스트를 실행하는 것이 점점 귀찮아지게 된다.
+    - 좋은 테스트는 수작업으로 설정할 필요 없이 바로 실행할 수 있어야 한다.
+  - 테스트 코드가 외부 의존성에서 독립적인가?
+    - 아래와 같은 질문을 통해 외부 의존성에 독립적인지를 판단할 수 있다.
+    - 다른 팀 코드에 버그가 있어도 내 테스트는 통과하는가?
+    - 내 테스트는 다른 실행환경에서 실행해도 동일한 결과를 보장하는가?
+    - DB나 network, 배포 없이도 테스트가 동작하는가?
+    - 테스트 결과가 항상 동일한 이유는 시스템에 대한 간접 입력을 우리가 제어할 수 있기 때문이다.
+    - 간접 입력이란 외부 의존성을 의미한다.
+    - 우리는 실제가 아닌 테스트의 목적에 부합하는 가짜 의존성을 조작해서 사용할 수 있다.
+  - 하나의 테스트에 변경 사항이 생겨도 다른 테스트는 영향을 받지 않는가?
+    - 테스트 사이에 의존성이 있어선 안 된다.
+
+
+
+- 통합 테스트
+  - 위에서 살펴본 좋은 단위 테스트의 조건 중 하나라도 충족하지 못하는 모든 테스트를 의미한다.
+    - 예를 들어 테스트가 실제 network, 실제 REST API, 실제 시스템 시간, 실제 파일 시스템 또는 실제 DB를 사용한다면 이는 통합 테스트에 해당한다.
+    - 예를 들어 테스트 코드에서 현재 시간을 가져오는 `newDate()`를 사용하면 매번 테스트를 실행할 때 마다 다른 시간이 적용되므로 본질적으로는 다른 테스트가 된다.
+  - 통합 테스트가 나쁘다는 것은 아니다.
+    - 통합 테스트는 단위 테스트에서 검증하지 못하는 시스템 전체의 상호 작용을 확인할 수 있는 중요한 역할을 한다.
+    - 하지만 단위 테스트와 분리는 되어야한다.
+  - 통합 테스트의 문제는 한 번에 너무 많이 테스트한다는 것이다.
+    - 개발자 대부분은 앱의 전체 기능, REST API의 응답 결과, UI의 동작을 통해 기능을 테스트한다.
+    - 이는 단일 기능이나 모듈이 아니라 여러 구성 요소가 함께 작동하여 최종 결과를 만들어 내는 방식을 테스트하는 것이다.
+    - 테스트가 실패하면 이 소프트웨어 구성 요소 중 어느 부분이 잘못되어 실패한 것인지 파악하기 어려울 수 있다.
+    - 결국 통합 테스트는 다른 팀이 만든 모듈, 외부 API나 서비스, 네트워크, DB, 스레드 등 실제 의존성을 완전히 제어할 수 없는 상태에서 작업 단위를 테스트하는 것이다.
+  - 요약하자면 통합 테스트와 단위 테스트의 차이는 아래와 같다.
+    - 통합 테스트는 실제 의존성을 사용한다. 
+    - 단위 테스트는 작업 단위를 의존성에서 격리시켜 항상 일관된 결과를 받을 수 있도록 하여 작업 단위의 모든 측면을 쉽게 조작할 수 있게 한다.
+
+
+
+- 단위 테스트의 정의
+  - 위에서 살펴본 내용들을 토대로 내린 단위 테스트의 정의는 아래와 같다.
+    - 진입점을 통해 작업 단위를 호출한 후 그 종료점을 확인하는 자동화된 코드다.
+    - 잘 작성된 단위 테스트는 신뢰성이 높고 가독성이 좋아 유지보수하기에 용이하다.
+    - 운영하는 코드가 변경되지 않는 한 동일한 결과를 보장한다.
+  - 단위 테스트의 대상은 제어 흐름이 포한된 코드이다.
+    - 예를 들어 게터와 세터는 보통 조건문이나 계산 같은 논리는 포함하지 않기 때문에 테스트할 필요가 없다.
+    - 이러한 코드는 테스트하고자 하는 작업 단위에서 사용될 수는 있지만 직접 테스트할 필요는 없다.
+    - 하지만 게터나 세터에 조건문, 반복문, 계산, 데이터 변환 같은 논리를 추가하면 그 논리가 제대로 동작하는지 확인해야 한다는 점에 주의해야한다.
+
+
+
+- 테스트 주도 개발(TDD)
+  - 기능을 개발하기 전에 단위 테스트를 먼저 작성하는 개발 방식이다.
+    - 먼저 실패하는 테스트 케이스를 작성하고, 해당 테스트를 통과할 수 있는 코드를 작성한다.
+    - 테스트가 통과되는 것을 확인한 후 필요에 따라 리팩터링을 진행하고, 다음 테스트를 작성한다.
+  - TDD는 단위 테스트의 대체재가 아니다.
+    - 코드 작성 후 단위 테스트를 작성하면 보통은 코드가 잘 돌아가고 있을 때만 테스트가 통과하는지 확인한다.
+    - 반면 TDD를 하면 테스트가 실패할 때와 통과하는 과정 모두를 겪는다.
+    - 이 과정에서 개발자는 테스트가 정확히 작동하는지 확인할 수 있어 디버깅을 덜 하게 된다.
+  - TDD를 잘 하는 세 가지 핵심 기법
+    - 좋은 테스트를 작성하는 방법을 안다.
+    - 코드보다 테스트를 먼저 작성한다.
+    - 테스트와 프로덕션 코드를 자 설계한다.
+
+
+
+- 단위 테스트 프레임워크
+  - 일반적으로 단위 테스트 프레임워크는 아래와 같은 역할을 한다.
+    - 테스트를 작성할 때 사용하는 테스트 라이브러리 역할.
+    - 테스트 내에서 테스트 결과를 검증(assertion)하는 라이브러리 역할.
+    - 테스트를 실행하는 테스트 러너 역할.
+    - 테스트 실행 결과를 보여주는 테스트 리포터 역할.
+  - 테스트 코드를 직접 작성하지 않고, 단위 테스트 프레임워크를 사용하는 것은 아래와 같은 이점을 제공한다.
+    - 테스트 코드를 일관된 형식으로 작성할 수 있다.
+    - 새로운 테스트를 작성하는 작업을 쉽게 반복할 수 있다.
+    - 보다 신뢰할 수 있는 테스트를 작성할 수 있다.
+    - 테스트 코드를 작성하는 시간을 절약할 수 있다.
+    - 팀 간 소통이 더욱 원활해질 수 있다.
+  - xUnit
+    - 과거에는 대부분의 단위 테스트 프레임워크 프레임워크가 xUnit이라 불렸다.
+    - xUnit의 시초는 Smalltalk의 단위 테스트 프레임워크인 SUnit이다.
+    - xUnit 프레임워크의 이름은 C++은 CppUnit, Java는 JUnit Haskell은 HUnit과 같이 보통 해당 언어의 첫 글짜를 따서 지었다.
+    - 이름뿐 아니라 xUnit을 기반으로 한 단위 테스트 프레임워크들은 대부분 동일한 구조를 가지고 있어 한 언어의 xUnit 프레임워크를 배우면 다른 xUnit 프레임워크도 쉽게 사용할 수 있다.
+
+
+
+
+
+# 테스트 코드 작성하기
+
+> 아래 예시에서는 pytest를 사용하여 테스트한다.
+
+- 함수 하나 테스트하기
+
+  - 아래와 같이 비밀번호를 검증하는 함수를 작성한다.
+    - 해당 함수는 `rules`를 매개변수로 받으며, 이는 또 다른 함수다.
+    - 매개변수로 전달된 규칙 함수 배열을 반복하면서 각 함수를 입력값(`password`)에 적용한다.
+
+  ```python
+  # password_verifier.py
+  def verify_password(password, rules):
+      errors = []
+      for rule in rules:
+          result = rule(password)
+          if not result["passed"]:
+              errors.append(f"error {result["reason"]}")
+      return errors
+  ```
+
+  - 매개변수 `rules`로 전달되는 함수는 아래 데이터 형태를 반환값으로 보내야한다.
+
+  ```json
+  {
+      "passed": {boolean},
+      "reason": "{string}"
+  }
+  ```
+
+  - 테스트 코드 작성하기
+
+  ```python
+  # test_password_verifier.py
+  from password_verifier import verify_password
+  
+  
+  def test_verify_password():
+      # 준비
+      fake_rule = lambda password : {"passed":False, "reason": "fake reason"}
+      # 실행
+      errors = verify_password("any value", [fake_rule])
+      # 검증
+      assert errors[0] == "error fake reason"
+  ```
+
+  - 테스트 실행하기
+
+  ```bash
+  $ pytest test_password_verifier.py 
+  ```
+
+  - 준비 - 실행 - 검증 패턴(Arrange - Act - Assert, AAA)
+    - 위 테스트 코드는 AAA패턴으로 작성되었다.
+    - AAA 패턴은 테스트의 가독성을 높여 테스트를 쉽게 이해할 수 있게 해준다.
+  - 함수에 버그 심기
+    - `verify_password()` 함수에 일부러 버그를 심어 테스트 결과가 어떻게 변하는지 살펴본다. 
+    - `errors`에 error 메시지가 추가되지 않게 변경한다.
+
+  ```python
+  def verify_password(password, rules):
+      errors = []
+      for rule in rules:
+          result = rule(password)
+          if not result["passed"]:
+              pass
+              # errors.append(f"error {result["reason"]}")
+      return errors
+  ```
+
+  - 다시 테스트를 수행하면 테스트는 실패하게 된다.
+    - 이후에 다시 원래대로 코드를 수정하면 테스트에 성공한다.
+    - TDD를 하지 않았을 때는 이처럼 코드의 특정 부분을 수정하면서 테스트가 성공하는지 보는 것도 신뢰성을 얻기에 좋은 방법이다.
+
+  ```bash
+  $ pytest test_password_verifier.py 
+  ```
+
+  - USE 전략
+    - 테스트 코드에서 이름을 잘 짓는 것은 무엇보다 중요한데, 테스트 이름만 읽고도 무엇을 테스트 하는지 바로 알 수 있어야한다.
+    - 테스트 코드의 이름을 지을 때 고려해야 할 세 가지 요소는 아래와 같다.
+    - 테스트하려는 대상(Unit): 예시의 경우 `verify_password()`함수
+    - 입력 값이나 상황에 대한 설명(Senario): 결과로 False를 반화하는 상황
+    - 기댓 값이나 결과에 대한 설명(Expectation): 에러 메시지를 반환
+    - 아래는 USE 전략에 따라 수정한 버전이다.
+
+  ```python
+  # test_password_verifier.py
+  from password_verifier import verify_password
+  
+  
+  def test_verify_password_given_a_failing_rule_return_error():
+      fake_rule = lambda password : {"passed":False, "reason": "fake reason"}
+      errors = verify_password("any value", [fake_rule])
+      assert errors[0] == "error fake reason"
+  ```
+
+
+
+- 함수 리팩터링 후 테스트하기
+
+  - `verify_password()` 함수를 아래와 같이 리팩터링한다.
+    - 함수에서 메서드를 가진 클래스로 변경했다.
+    - 기존 함수는 상태를 유지하지 않았지만, 이제는 `_rules`를 상태로 유지하고 있는다.
+
+  ```python
+  class PasswordVerifier:
+      def __init__(self):
+          self._rules = []
+      
+      def add_rule(self, rule):
+          self._rules.append(rule)
+      
+      def verify(self, password):
+          errors = []
+          for rule in self._rules:
+              result = rule(password)
+              if not result["passed"]:
+                  errors.append(f"error {result["reason"]}")
+          return errors
+  ```
+
+  - 테스트 코드 작성하기
+    - 위 코드에 대한 테스트를 작성할 때 고려해야 할 점은 작업 단위의 범위가 넓어졌다는 것이다.
+    - 이제는 `fake_rule`를 사용하여 실패하도록 만든 시나리오를 테스트하려면 `add_rule`과 `verify`라는 두 개의 함수를 호출해야한다.
+    - 상태 값(`_rules`)을 다루는 코드 특성상 두 함수가 반드시 결합(`coupling`)되어야한다.
+    - 내부 상태를 노출하지 않고도 효과적으로 테스트하려면 두 함수를 사용해야 한다.
+
+  ```python
+  from password_verifier import PasswordVerifier
+  
+  
+  def test_verify_password_given_a_failing_rule_return_error():
+      verifier = PasswordVerifier()
+      fake_rule = lambda input : {"passed":False, "reason": "fake reason"}
+      verifier.add_rule(fake_rule)
+      errors = verifier.verify("any value")
+      assert errors[0] == "error fake reason"
+  ```
+
+  - 검증 추가하기
+    - 오류가 하나만 있는지 확인하고 싶어 아래와 같이 새로운 검증을 추가했다.
+    - 아래와 같은 테스트는 문제가 발생할 확률을 높인다.
+
+  ```python
+  from password_verifier import PasswordVerifier
+  
+  
+  def test_verify_password_given_a_failing_rule_return_error():
+      verifier = PasswordVerifier()
+      fake_rule = lambda input : {"passed":False, "reason": "fake reason"}
+      verifier.add_rule(fake_rule)
+      errors = verifier.verify("any value")
+      assert len(errors) == 1		# 추가된 검증 코드
+      assert errors[0] == "error fake reason"
+  ```
+
+  - 검증 룰렛
+    - 위처럼 종료점이 여러 개이거나 동일한 종료점에서 여러 값을 테스트하고자 할 때 문제가 생길 수 있다.
+    - 위 예시에서 만약 새롭게 추가한 검증 코드가 실패한다면, 테스트 러너는 오류를 받고 다음 테스트로 이동하므로 두 번째 검증 코드(error reason을 확인하는 코드)는 실행되지 않는다.
+    - 그럼에도 두 번째 검증 코드가 통과했는지 확인해보기 위해 첫 번째 검증 코드를 주석처리 하는 것은 좋은 테스트 방식이 아니다.
+    - 제라드 메스자로스의 <xUnit 테스트 패턴>에서는 이를 검증 룰렛이라고 한다.
+    - 이는 테스트를 실행할 때 많은 혼란과 잘못된 false positive를 초래할 수 있다.
+  - 검증 룰렛을 피하기 위해서는 추가 검증 코드를 별도의 테스트 케이스로 분리해야한다.
+    - 추가 검증 코드를 별도의 테스트 케이스로 분리했다.
+    - 이제는 두 테스트 사이에 중복 코드가 너무 많다는 새로운 문제가 발생한다.
+
+  ```python
+  from password_verifier import PasswordVerifier
+  
+  
+  def test_verify_password_given_a_failing_rule_return_error():
+      verifier = PasswordVerifier()
+      fake_rule = lambda input : {"passed":False, "reason": "fake reason"}
+      verifier.add_rule(fake_rule)
+      errors = verifier.verify("any value")
+      assert errors[0] == "error fake reason"
+  
+  def test_verify_password_has_exactly_one_error():
+      verifier = PasswordVerifier()
+      fake_rule = lambda input : {"passed":False, "reason": "fake reason"}
+      verifier.add_rule(fake_rule)
+      errors = verifier.verify("any value")
+      assert len(errors) == 1
+  ```
+
+  
+
+  
+
