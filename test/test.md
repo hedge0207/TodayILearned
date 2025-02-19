@@ -471,7 +471,150 @@
       assert len(errors) == 1
   ```
 
+  - 중복 코드 제거하기
+    - 유닛 테스트 프레임워크 중에는 각 테스트에 필요한 특정 상태를 설정하거나 해제하는 기능을 제공하는 것들이 있다.
+    - Jest는 `beforeEach()`, `afterEach()`함수를 제공하며, pytest도 `fixture`를 제공한다.
+    - 아래 코드는 `pytest.fixture`를 사용하여 중복 코드를 제거한 것이다.
   
-
+  ```python
+  import pytest
   
+  from password_verifier import PasswordVerifier
+  
+  
+  @pytest.fixture(autouse=True)
+  def errors():
+      verifier = PasswordVerifier()
+      fake_rule = lambda input : {"passed":False, "reason": "fake reason"}
+      verifier.add_rule(fake_rule)
+      errs = verifier.verify("any value") 
+      return errs
+  
+  def has_a_error_message_based_on_reason(errors): 
+      assert errors[0] == "error fake reason"
+  
+  def has_exactly_one_error(errors):
+      assert len(errors) == 1
+  ```
+  
+  - 주의 사항
+    - 아래와 같이 몇 개의 테스트가 추가되었다고 가정해보자.
+    - 중복 코드 제거를 위해 fixture를 사용했지만, 여러 fixture들 사이에도 중복 코드가 발생하게 되었다.
+    - 또 어떤 테스트가 어떤 fixture를 사용하는지 확인하는 것도 불편해졌다.
+    - 실제 프로젝트를 진행함에 따라 fixture와 같은 setup 함수는 일종의 쓰레기통으로 전락할 위험이 있다.
+    - 초기화 코드부터 특정 테스트에만 필요한 코드나 모든 테스트에 영향을 미치는 코드 등 온갖 것을 다 집어넣기 때문이다.
+  
+  ```python
+  import pytest
+  
+  from password_verifier import PasswordVerifier
+  
+  
+  @pytest.fixture(autouse=True)
+  def single_error():
+      verifier = PasswordVerifier()
+      fake_rule = lambda input : {"passed":False, "reason": "fake reason"}
+      verifier.add_rule(fake_rule)
+      errs = verifier.verify("any value") 
+      return errs
+  
+  def test_has_a_error_message_based_on_reason(single_error): 
+      assert single_error[0] == "error fake reason"
+  
+  def test_has_exactly_one_error(single_error):
+      assert len(single_error) == 1
+  
+  
+  @pytest.fixture(autouse=True)
+  def no_error():
+      verifier = PasswordVerifier()
+      fake_rule = lambda input : {"passed":True, "reason": ""}
+      verifier.add_rule(fake_rule)
+      errs = verifier.verify("any value")
+      return errs
+  
+  def test_has_no_error(no_error):
+      assert len(no_error) == 0
+  
+  
+  @pytest.fixture(autouse=True)
+  def errors():
+      verifier = PasswordVerifier()
+      fake_passing_rule = lambda input : {"passed":True, "reason": ""}
+      verifier.add_rule(fake_passing_rule)
+      fake_failed_rule = lambda input : {"passed":False, "reason": "fake reason"}
+      verifier.add_rule(fake_failed_rule)
+      errs = verifier.verify("any value")
+      return errs
+  
+  
+  def test_has_one_error(errors):
+      assert len(errors) == 1
+  
+  
+  def test_error_text_belongs_to_failed_rule(errors):
+      assert "fake reason" in errors[0]
+  ```
+  
+  - 팩토리 함수
+    - 팩토리 함수는 객체나 특정 상태를 쉽게 생성하고 여러 곳에서 동일한 로직을 재사용할 수 있게 해주는 간단한 헬퍼 함수다.
+    - 팩토리 함수를 사용하면 중복 코드를 줄이고 코드 직관성을 높일 수 있다.
+    - 아래와 같이 팩토리 함수를 사용하도록 변경한다.
+  
+  ```python
+  from password_verifier import PasswordVerifier
+  
+  # 팩토리 함수
+  def make_verifier_with_passing_rule():
+      verifier = PasswordVerifier()
+      fake_rule = lambda input : {"passed":True, "reason": ""}
+      verifier.add_rule(fake_rule)
+      return verifier
+  
+  # 팩토리 함수
+  def make_verifier_with_failed_rule(reason):
+      verifier = PasswordVerifier()
+      fake_rule = lambda input : {"passed":False, "reason": reason}
+      verifier.add_rule(fake_rule)
+      return verifier
+  
+  
+  def test_has_a_error_message_based_on_reason(): 
+      verifier = make_verifier_with_failed_rule("fake reason")
+      errs = verifier.verify("any value") 
+      assert errs[0] == "error fake reason"
+  
+  
+  def test_has_exactly_one_error():
+      verifier = make_verifier_with_failed_rule("fake reason")
+      errs = verifier.verify("any value") 
+      assert len(errs) == 1
+  
+  
+  def test_has_no_error():
+      verifier = make_verifier_with_passing_rule()
+      errs = verifier.verify("any value")
+      assert len(errs) == 0
+  
+  
+  def test_has_one_error():
+      verifier = make_verifier_with_failed_rule("fake reason")
+      verifier.add_rule(lambda input : {"passed":True, "reason": ""})
+      errs = verifier.verify("any value")
+      assert len(errs) == 1
+  
+  
+  def test_error_text_belongs_to_failed_rule():
+      verifier = make_verifier_with_failed_rule("fake reason")
+      verifier.add_rule(lambda input : {"passed":True, "reason": ""})
+      errs = verifier.verify("any value")
+      assert "fake reason" in errs[0]
+  ```
+  
+  - 코드 길이는 변경 이전과 비슷하지만 가독성이 높아졌다.
+    - 더 이상 어느 테스트가 어느 fixture를 사용하는지 일일이 확인하지 않아도 된다.
+    - 또한 각 테스트 함수가 자체 상태를 캡슐화하고 있다.
 
+
+
+- 다양한 입력 값을 받는 테스트

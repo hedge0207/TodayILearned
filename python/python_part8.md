@@ -778,12 +778,16 @@
 
 - fixture
 
-  - 적용된 각 테스트 함수 직전에 실행되는 함수.
-  - DB 연결 등의 외부 의존관계를 테스트 외부에서 설정하기 위해 사용한다.
+  - 테스트를 실행하는 데 필요한 context를 제공해주는 기능이다.
+    - 테스트에 필요한 상태 정보를 설정하거나 DB 연결 등의 외부 의존관계 등을 설정하기 위해 사용한다.
     - 매 테스트마다 의존관계를 일일이 설정해줄 필요 없이 한 번 작성하면 여러 테스트에서 사용 가능하다.
-  - 예시
-    - fixture 이름을 테스트 함수의 인자에 넣어서 사용한다.
-
+    - pytest에서는 `@pytest.fixture` 데코레이터를 붙인 함수 자체를 fixture라 부른다.
+  
+  - fixture의 이름을 테스트 함수의 인자로 설정하여 해당 테스트 함수에서 fixture를 통해 설정한 context를 사용할 수 있다.
+    - 동작 순서는 아래와 같다.
+    - pytest가 test를 실행할 때, test function의 signature에서 parameter들을 확인하고, fixture들 중에 parameter의 이름과 동일한 것이 있는지 찾는다.
+    - 동일한 것이 있으면, fixture를 실행하고, 그 반환값을 테스트 함수의 argument로 전달한다.
+  
   ```python
   import pytest
   from elasticsearch import Elasticsearch
@@ -796,7 +800,7 @@
   def test_ping(es_client):
       assert es_client.ping() == True
   ```
-
+  
   - conftest
     - fixture 함수들을 `conftest.py` 파일에 작성하면 여러 테스트 파일들에서 접근가능하다.
     - 각 테스트는 테스트가 작성된 모듈 내에서 fixture를 먼저 찾고, 없을 경우 conftest.py에서 찾는다. 그래도 없을 경우 pytest가 제공하는 bulit-in fixture에서 찾는다.
@@ -812,7 +816,7 @@
   - built-in fixture
     - pytest는 build-in fixture를 제공한다.
     - `--fixture` 옵션과 `-v` 옵션을 주면 built-in fixture를 확인 가능하다.
-
+  
   ```bash
   # 아래 명령어를 통해 어떤 것들이 있는지 확인 가능하다
   $ pytest --fixtures -v
@@ -1256,6 +1260,58 @@
 - fixture 모듈화하기
 
   > https://docs.pytest.org/en/7.0.x/how-to/fixtures.html#teardown-cleanup-aka-fixture-finalization 참고
+
+
+
+- pytest는 `fixture` 사용을 권장하긴 하지만, 고전적인(XUnit 스타일에 가까운) 방식의 fixture의 구현도 지원한다.
+
+  - Module 수준의 setup/teardown
+
+  ```python
+  def setup_module(module):
+      ...
+  
+  def teardown_module(module):
+      ...
+  ```
+
+  - Class 수준의 setup/teardown
+
+  ```python
+  @classmethod
+  def setup_class(cls):
+      ...
+  
+  @classmethod
+  def teardown_class(cls):
+      ...
+  ```
+
+  - Method 수준의 setup/teardown
+    - pytest 3.0 부터 method parameter는 optional이다.
+
+  ```python
+  def setup_method(self, method):
+      ...
+  
+  def teardown_method(self, method):
+      ...
+  ```
+
+  - Function 수준의 setup/teardown
+    - pytest 3.0 부터 function parameter는 optional이다.
+
+  ```python
+  def setup_function(function):
+      ...
+  
+  def teardown_function(function):
+      ...
+  ```
+
+  
+
+
 
 
 
