@@ -1317,8 +1317,8 @@
 
 #### parameterize
 
-- test 함수에 인자 받기
-  - pytest의 built-in marker인 `parametrize` 마커를 사용한다.
+- 테스트 함수에 인자 받기
+  - pytest의 built-in marker인 `parametrize` 데코레이터를 사용한다.
     - 인자로 넘긴 리스트의 길이만큼 테스트가 수행된다.
   
   ```python
@@ -1330,7 +1330,7 @@
       assert eval(test_input)==expected
   ```
   
-  - 복수의  마커를 추가하는 것도 가능하다.
+  - 복수의  데코레이터를 추가하는 것도 가능하다.
   
   ```python
   import pytest
@@ -1382,3 +1382,104 @@
           assert (n * 1) + 1 == expected
   ```
 
+
+
+
+
+
+
+#### raises()
+
+- pytest는 예상한대로 예외가 발생하는지 보다 간편하게 확인할 수 있게 해주는 `raises()` 메서드를 제공한다.
+
+  - 아래와 같이 context manager로 사용한다.
+
+  ```py
+  import pytest
+  
+  
+  def test_zero_division():
+      with pytest.raises(ZeroDivisionError):
+          1 / 0
+  
+  def test_recursion_depth():
+      with pytest.raises(RuntimeError) as excinfo:
+  
+          def f():
+              f()
+  
+          f()
+      assert "maximum recursion" in str(excinfo.value)
+  ```
+
+  - 위 예시에서 `excinfo`는 `ExceptionInfo`의 instance로, 실제 발생한 exception을 래핑한다.
+    - 주요 attribute로는  `type`, `value`, `traceback`이 있다.
+
+
+
+- Exception의 메시지를 가지고 검증하는 것도 가능하다.
+
+  - 아래와 같이 context manager에 `match` keyword parameter를 주거나
+
+  ```python
+  import pytest
+  
+  
+  def myfunc():
+      raise ValueError("Exception 123 raised")
+  
+  
+  def test_match():
+      with pytest.raises(ValueError, match=r".* 123 .*"):
+          myfunc()
+  ```
+
+  - `ExceptionInfo` instance의 `match` 메서드를 사용하면 된다.
+
+  ```python
+  import pytest
+  
+  
+  def myfunc():
+      raise ValueError("Exception 123 raised")
+  
+  
+  def test_match():
+      with pytest.raises(ValueError) as excinfo:
+          myfunc()
+      assert excinfo.match(r".* 123 .*")
+  ```
+
+  - 두 방식 모두 정규 표현식 기반으로 매칭한다.
+
+
+
+- Context manager를 사용하지 않는 방식으로도 사용이 가능하다.
+
+  - 기존에 사용하던 방식
+    - pytest가 `raises()`를 context manager로 제공하기 전에 사용하던 방식이다.
+
+  ```python
+  def func(x):
+      if x <= 0:
+          raise ValueError("x needs to be larger than zero")
+  
+  
+  pytest.raises(ValueError, func, x=-1)
+  ```
+
+  - `xfail` decorator를 사용하는 방식
+
+  ```python
+  def f():
+      raise IndexError()
+  
+  
+  @pytest.mark.xfail(raises=IndexError)
+  def test_f():
+      f()
+  ```
+
+  - 언제 `pytest.raises`를 사용하고, 언제  `pytest.mark.xfail`를 사용해야 하는가?
+    - `pytest.raises`는 자신이 작성한 코드에서 예외가 의도한대로 발생하는지 테스트하기 위해사용하는 것이 좋다.
+    - `pytest.mark.xfail`은 아직 수정되지 않은 버그를 문서화(테스트가 "어떻게 동작해야 하는지"를 설명하는 경우)하거나 의존성의 버그를 다룰 때 더 적절한 방식이다.

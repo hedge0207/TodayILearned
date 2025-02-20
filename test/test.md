@@ -617,4 +617,143 @@
 
 
 
-- 다양한 입력 값을 받는 테스트
+- 다양한 입력 값으로 테스트하기
+
+  - 아래와 같은 비밀번호 규칙이 있다.
+
+  ```python
+  def one_uppercase_rule(value):
+      return {
+          "passed": value.lower() != value,
+          "reason": "at least one uppercase needed"
+      }
+  ```
+
+  - 위 규칙을 다양한 조건으로 테스트한다.
+    - 아래 테스트를 보면 알 수 있듯, 두 번째와 세 번째 테스트는 입력값만 다를 뿐 근본적으로는 같은 테스트이다.
+    - 아래 테스트를 통해 테스트하고자 하는 것은 대문자가 어디에 위치했는지가 아닌 대문자를 포함하고 있는지 여부다.
+    - 이러한 중복 코드는 나중에 대문자를 검사하는 로직이 변경되거나, `one_upper_case_rule()`함수를 사용하는 코드가 변경될 경우 문제가 될 수 있다.
+
+  ```python
+  def test_given_no_uppercase_it_fails():
+      result = one_uppercase_rule("abc")
+      assert not result["passed"]
+  
+  def test_given_one_uppercase_it_passed():
+      result = one_uppercase_rule("Abc")
+      assert result["passed"]
+  
+  def test_given_a_different_uppercase_it_passed():
+      result = one_uppercase_rule("aBc")
+      assert result["passed"]
+  ```
+
+  - 유닛 테스트 프레임워크들은 다양한 입력 값을 테스트할 수 있는 기능을 제공한다.
+    - Jest의 경우 `test.each()`가 있으며, pytest의 경우 입력값을 parameter화 하는 기능을 제공한다.
+    - 아래와 같이 입력값을 parameter화 하면 하나의 테스트에서 모두 테스트가 가능하다.
+
+  ```python
+  import pytest
+  
+  
+  @pytest.mark.parametrize("value,expected", [("abc", False), ("Abc", True), ("aBc", True)])
+  def test_one_uppercase_rule(value, expected):
+      result = one_uppercase_rule(value)
+      assert result["passed"] == expected
+  ```
+
+  - 실제 테스트에서는 분리하는 것이 나을 수도 있다.
+    - 보통 하나의 테스트에서 동일한 유형의 입력 값에 대해 일관된 시나리오를 유지하는 것이 좋다.
+    - 예를 들어 위에서 통합된 테스트는 대문자가 없는 경우와 대문자가 있는 경우를 모두 테스트한다.
+    - 그러나 대문자가 없는 경우와 있는 경우는 두 가지 서로 다른 시나리오 이므로 서로 다른 테스트 두 개로 분리하는 것이 더 낫다.
+
+  ```python
+  import pytest
+  
+  
+  @pytest.mark.parametrize("value,expected", [("abc", False)])
+  def test_no_uppercase_rule(value, expected):
+      result = one_uppercase_rule(value)
+      assert result["passed"] == expected
+  
+  @pytest.mark.parametrize("value,expected", [("Abc", True), ("aBc", True)])
+  def test_one_uppercase_rule(value, expected):
+      result = one_uppercase_rule(value)
+      assert result["passed"] == expected
+
+
+
+- 예상한 예외가 발생하는지 확인하기
+
+  - 비밀번호를 검증하는  `verify()` 메서드를 아래와 같이 수정한다.
+    - 규칙이 설정되지 않을 경우 예외를 발생시킨다.
+
+  ```python
+  class PasswordVerifier:
+      # ...
+      
+      def verify(self, password):
+          if len(self._rules) == 0:
+              raise Exception("There are no rules configured")
+          
+          errors = []
+          for rule in self._rules:
+              result = rule(password)
+              if not result["passed"]:
+                  errors.append(f"error {result["reason"]}")
+          return errors
+  ```
+
+  - 아래와 같이 try, except 구문을 사용하여 예외가 발생하는지 테스트할 수 있다.
+
+  ```python
+  def make_verifier_with_no_rule():
+      verifier = PasswordVerifier()
+      return verifier
+  
+  def test_with_no_rules_raise_exception():
+      verifier = make_verifier_with_no_rule()
+      try:
+          verifier.verify("value")
+      except Exception as e:
+          assert "no rules configured" in e.__str__()
+  ```
+
+  - 대부분의 유닛 테스트 프레임워크는 try, except 구문 대신 보다 간편하게 발생한 예외를 검증할 수 있는 방법을 제공한다.
+    - `Jest`의 `expect().toThrowError()`나 `pytest`의 `raises()` 등이 이러한 방법을 제공한다.
+
+  ```python
+  def test_with_no_rules_raise_exception():
+      verifier = make_verifier_with_no_rule()
+      with pytest.raises(Exception, match=r"no rules configured"):
+          verifier.verify("value")
+
+
+
+
+
+
+
+# 의존성 분리와 스텁
+
+- 의존성 유형
+  - 외부로 나가는 의존성
+    - 작업 단위의 종료점을 나타내는 의존성이다.
+    - 예를 들어 로거 함수 호출, DB에 저장, 이메일 발송, API나 웹훅에 알림을 보내는 작업 등이 이에 해당한다.
+    - 이러한 작업은 모두 동사("호출", "저장", "전송", "알림")로 표현되며, 작업 단위에서 외부로 흘러가는 일종의 fire-and-forget 시나리오를 의마한다.
+    - 각 작업은 종료점을 나타내거나 작업 단위 내 특정 논리 흐름의 끝을 의미한다.
+  - 내부로 들어오는 의존성
+    - 종료점을 나타내지 않는 의존성이다.
+    - 작업 단위의 최종 동작에 대한 요구 사항을 나타내지 않는다.
+    - 단지 테스트에 필요한 특수한 데이터나 동작을 작업 단위에 제공하는 역할을 한다.
+    - 예를 들어 쿼리 결과, 파일 시스템의 파일 내용, 네트워크 응답 결과 등이 있다.
+    - 이러한 의존성들은 모두 이전 작업의 결과로, 작업 단위로 들어오는 수동적인 데이터 조각이라고 할 수 있다.
+  - 혼합된 의존성
+    - 외부로 나가는 의존성이기도 하면서 동시에 내부로 들어오는 의존성도 있다.
+    - 즉 어떤 테스트에서는 종료점을 나타내고 다른 테스트에서는 애플리케이션으로 들어오는 데이터가 될 수도 있다.
+    - 이러한 의존성은 흔하진 않지만 아예 없는 것도 아니다.
+    - 예를 들어 외부 API가 응답 결과로 성공 및 실패 응답을 받아 서드 파티를 호출하는 경우가 이에 해당한다.
+
+
+
+- 스텁, 목, 페이크
