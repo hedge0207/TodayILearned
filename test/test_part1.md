@@ -869,5 +869,254 @@
 
 
 - 함수를 이용한 주입 방법
-  - 이전 예시에서는 `weekday`
+  - 기존 방식의 사소한 문제점
+    - 이전 예시에서는 `weekday`를 매개변수로 주입하여 외부 의존성을 끊고 함수 레벨에서 의존성 문제를 해결했다.
+    - 이는 `verify_password()`를 호출하는 모든 곳에서 어떤 날짜를 전달해야 하는지 알고 있어야 하기에 번거로울 수 있다.
+  - 함수 주입이 가능하도록 테스트 대상 함수를 변경한다.
+    - 데이터를 의존성으로 받는 대신 데이터를 반환하는 함수를 배개변수로 받는다.
+  
+  ```python
+  def verfiy_password(input, rules, get_weekday_fn):
+      weekday = get_weekday_fn()
+      if weekday in [SUNDAY, SATURDAY]:
+          raise Exception("It's the weekend!")
+      # 다른 코드
+      return []
+  ```
+  
+  - 변경된 함수를 테스트하는 코드를 작성한다.
+  
+  ```python
+  def test_on_weekend_throw_exceptions():
+      with pytest.raises(Exception, match=r"It's the weekend!"):
+          verfiy_password("anything", [], lambda : SUNDAY)
+  ```
+  
+  - 부분 의존성 주입
+    - 팩토리 함수는 미리 정의된 컨텍스트를가진 함수를 반환하는 함수로, 고차 함수의 일종이다.
+    - 고차 함수를 사용하면 문자열 입력만으로 실행할 수 있는 새로운 함수를 반환하는 함수를 만들 수 있다.
+    - 이전 예시에서 `verifyPassword()` 함수에 전달된 `rules`와 날짜를 반환하는 `get_weekday_fn`이 아래 코드에서는 팩토리 함수가 반환하는 새로운 함수의 컨텍스트에 포함된다.
+  
+  ```python
+  # 팩토리 함수
+  def make_verifier(rules, get_weekday_fn):
+      # 미리 정의된 컨텍스트를 가진 함수를 반환한다.
+      def verify(value):
+          if get_weekday_fn() in [SUNDAY, SATURDAY]:
+              raise Exception("It's the weekend!")
+      return verify
+  
+  
+  def test_on_weekend_throw_exceptions():
+      # 테스트 코드에서는 팩토리 함수를 준비 단계에서 호출한다.
+      with pytest.raises(Exception, match=r"It's the weekend!"):
+          # 팩토리 함수가 반환한 함수를 실행 단계에서 호출한다.
+          verifiy_password = make_verifier([], lambda : SUNDAY)
+          verifiy_password("anything")
+  ```
+
+
+
+- 객체 지향적으로 의존성을 주입하는 방법
+
+  - 생성자 주입
+    - 생성자 주입은 클래스의 생성자를 이용하여 의존성을 주입하는 설계를 의미한다.
+    - 생성자는 팩토리 함수와 동일한 결과를 얻을 수 있는 보다 객체 지향적인 방식이다.
+    - 생성자는 호출 가능한 메서드를 가진 객체를 반환한다.
+
+  ```python
+  class Verifier:
+      def __init__(self, rules, get_weekday_fn):
+          self._rules = rules
+          self._get_weekday_fn = get_weekday_fn
+  
+      def verify(self, value):
+          if self._get_weekday_fn() in [SUNDAY, SATURDAY]:
+              raise Exception("It's the weekend!")
+          
+          errors = []
+          # ...
+          return errors
+          
+  
+  def test_on_weekend_throw_exceptions():
+      with pytest.raises(Exception, match=r"It's the weekend!"):
+          verifier = Verifier([], lambda : SUNDAY)
+          verifier.verify("anything")
+  ```
+
+  - 여러 테스트에서 위 클래스를 가지고 의존성을 주입해야 한다면 아래와 같이 클래스의 인스턴스를 만드는 과정을 팩토리 함수로 분리하면 좋다.
+    - 생성자 주입에 사용된 클래스의 로직이 변경되어 다수의 테스트가 한 번에 깨지더라도 팩토리 함수만 수정하면 되기 때문이다.
+
+  ```python
+  class Verifier:
+      def __init__(self, rules, get_weekday_fn):
+          self._rules = rules
+          self._get_weekday_fn = get_weekday_fn
+  
+      def verify(self, value):
+          if self._get_weekday_fn() in [SUNDAY, SATURDAY]:
+              raise Exception("It's the weekend!")
+          errors = []
+          # ...
+          return errors
+  
+  def make_verifier(rules, get_weekday_fn):
+      return Verifier(rules, get_weekday_fn)
+  
+  def test_on_weekend_throw_exceptions():
+      with pytest.raises(Exception, match=r"It's the weekend!"):
+          verifier = make_verifier([], lambda : SUNDAY)
+          verifier.verify("anything")
+  
+  def test_on_weekend_with_no_rules_passes():
+      verifier = make_verifier([], lambda : FRIDAY)
+      result = verifier.verify("anything")
+      assert len(result) == 0
+  ```
+
+
+
+- 함수 대신 객체 주입하기
+
+  - 아래와 같이 요일을 반환하는 메서드를 가진 클래스를 선언한다.
+
+  ```python
+  class RealTimeProvider:
+      def get_weekday(self):
+          return datetime.today().weekday()
+  ```
+
+  - 생성자 주입에 사용하는 클래스도 함수가 아닌 객체를 매개 변수를 받도록 수정한다.
+
+  ```python
+  class Verifier:
+      def __init__(self, rules, time_provier):
+          self._rules = rules
+          self._time_provier = time_provier
+  
+      def verify(self, value):
+          if self._time_provier.get_weekday() in [SUNDAY, SATURDAY]:
+              raise Exception("It's the weekend!")
+          errors = []
+          # ...
+          return errors
+  ```
+
+  - 마지막으로 `RealTimeProvider`를 의존성으로 주입하는 역할을 하는 함수를 만든다.
+
+  ```python
+  def password_verifier_factory(rules):
+      return Verifier(rules, RealTimeProvider())
+  ```
+
+  - 가짜 객체 주입하기
+    - 테스트 내에서 제어할 수 있는 가짜 객체를 만든다.
+    - 가짜 객체는 `RealTimeProvider`와 동일한 메서드를 갖는다.
+    - 테스트 코드에서는 가짜 객체를 생성하고, 이 가짜 객체를 `Verifier` 클래스에 의존성으로 주입한다.
+
+  ```py
+  class FakeTimeProvier:
+      def __init__(self, fake_day):
+          self._fake_day = fake_day
+  
+      def get_weekday(self):
+          return self._fake_day
+      
+      
+  def test_on_weekend_throw_exceptions():
+      with pytest.raises(Exception, match=r"It's the weekend!"):
+          verifier = Verifier([], FakeTimeProvier(SUNDAY))
+          verifier.verify("anything")
+  ```
+
+  - 공통 인터페이스 추출하기
+    - 위 코드는 Python이 덕 타이핑이 가능한 언어이기에 정상 동작한다.
+    - Java 같은 정적 타입 언어에서 사용하기 위해서는 상위 계층을 추가해야한다.
+
+  ```java
+  import java.time.LocalDate;
+  import java.time.DayOfWeek;
+  
+  // 인터페이스 정의
+  interface TimeProvider {
+      int getWeekday();
+  }
+  
+  class RealTimeProvider implements TimeProvider {
+      @Override
+      public int getWeekday() {
+          return LocalDate.now().getDayOfWeek().getValue();
+      }
+  }
+  
+  class FakeTimeProvider implements TimeProvider {
+      private final int fakeDay;
+  
+      public FakeTimeProvider(int fakeDay) {
+          this.fakeDay = fakeDay;
+      }
+  
+      @Override
+      public int getWeekday() {
+          return fakeDay;
+      }
+  }
+  ```
+
+  - `Verifier` 클래스가 매개 변수로 받던 `Provider`의 타입을 `TimeProvider` interface로 지정한다.
+
+  ```java
+  import java.util.ArrayList;
+  import java.util.List;
+  
+  class Verifier {
+      private final List<String> rules;
+      private final TimeProvider timeProvider;
+  
+      private static final int SUNDAY = 0;
+      private static final int SATURDAY = 6;
+  
+      public Verifier(List<String> rules, TimeProvider timeProvider) {
+          this.rules = rules;
+          this.timeProvider = timeProvider;
+      }
+  
+      public List<String> verify(String value) {
+          if (timeProvider.getWeekday() == SUNDAY || timeProvider.getWeekday() == SATURDAY) {
+              throw new RuntimeException("It's the weekend!");
+          }
+  
+          List<String> errors = new ArrayList<>();
+          // ...
+          return errors;
+      }
+  }
+  ```
+
+  - 테스트는 아래와 같이 작성한다.
+
+  ```java
+  import org.junit.jupiter.api.Test;
+  import static org.junit.jupiter.api.Assertions.*;
+  
+  class VerifierTest {
+      private static final int SUNDAY = 0;
+  
+      @Test
+      void testOnWeekendThrowExceptions() {
+          FakeTimeProvider fakeTimeProvider = new FakeTimeProvider(SUNDAY);
+          Verifier verifier = new Verifier(new ArrayList<>(), fakeTimeProvider);
+  
+          Exception exception = assertThrows(
+              Exception.class,
+              () -> verifier.verify("anything")
+          );
+  
+          assertTrue(exception.getMessage().contains("It's the weekend!"));
+      }
+  }
+  ```
+
+  
 
