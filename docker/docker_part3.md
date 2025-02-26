@@ -303,6 +303,43 @@
 
 
 
+- 하나의 서버에서 실행하기
+
+  - 아래와 같이 docker compose로 하나의 서버에서 실행할 수 있다.
+
+  ```yaml
+  services:
+    dind1:
+      image: docker:dind
+      container_name: dind1
+      privileged: true
+      environment:
+        - DOCKER_TLS_CERTDIR=/certs
+      ports:
+        - 2376:2376
+      restart: always
+    
+    dind2:
+      image: docker:dind
+      container_name: dind2
+      privileged: true
+      environment:
+        - DOCKER_TLS_CERTDIR=/certs
+      ports:
+        - 2378:2376
+      restart: always
+  ```
+
+  - Docker compose를 실행한다.
+
+  ```bash
+  $ docker compose up
+  ```
+
+
+
+
+
 
 
 # Docker registry
@@ -887,7 +924,7 @@
     - 단 이는 swarm service에 해당하는 사항으로, service가 아닌 standalone container의 경우 영향을 받지 않는다.
     - 즉, 예를 들어 node가 Drain 상태라고 하더라도 해당 Docker로 띄운 standalone container는 계속 실행된다.
   - MANAGER STATUS
-    - manager node에만 표시된다.
+    - manager node에만 표시된다(즉, 아무 표시가 없으면 manager node가 아니라는 것이다).
     - `Leader`: Swarm 관리와 orchestration을 맡은 노드임을 의미한다. 
     - `Reachable`: 다른 매니저 노드들과 정상적으로 통신 가능한 노드임을 의미하며, 만일 leader node에 장애가 발생할 경우 이 상태값을 가진 node들 중에 새로운 leader를 선출한다.
     - `Unavailable`: Leader를 포함한 다른 매니저 노드들과 통신이 불가능한 상태임을 의미한다.
@@ -919,7 +956,7 @@
     - 복수의 node를 space로 구분하여 한 번에 변경할 수 있다.
 
   ```bash
-  $ docker swarm promote <node 식별자> [node 식별자2]
+  $ docker node promote <node 식별자> [node 식별자2]
   ```
 
   - Manager node를 worker node로 변경하기
@@ -927,7 +964,7 @@
     - 단, manager node가 하나 뿐일 경우 실행할 수 없다.
 
   ```bash
-  $ docker swarm demote <node 식별자> [node 식별자2]
+  $ docker node demote <node 식별자> [node 식별자2]
   ```
 
 
@@ -1028,6 +1065,7 @@
   
   - Service의 task 조회
     - Service에서 실행중인 task들의 목록을 보여준다.
+    - 각 task가 어떤 노드에서 실행중인지도 확인할 수 있다.
     - Swarm manager가 유지해야 할 task의 상태(`DESIRED STATE`)와 현재 상태(`CURRENT STATE`)를 확인할 수 있으며 각 상태는 [Docker 공식 문서](https://docs.docker.com/engine/swarm/how-swarm-mode-works/swarm-task-states/?ref=seongjin.me)에서 확인할 수 있다.
   
   ```bash
@@ -1070,6 +1108,15 @@
   
   ```bash
   $ docker service update [options] <service>
+  ```
+  
+  - Service restart하기
+    - 별도의 restart 명령어를 제공하지는 않는데, 이는 Swarm이 service를 자동으로 orchestration하기 때문인 것으로 보인다.
+    - 즉, 재실행이 필요한 상황이면 자동으로 재실행이 되므로 별도로 restart 명령어를 제공하지 않는 것으로 보인다.
+    - 재실행이 필요한 경우라면 `docker service update` 명령어에 `--force` 옵션을 줘서 강제로 update하면 된다.
+  
+  ```bash
+  $ docker service update --force <service>
   ```
   
   - Service rollback하기

@@ -82,44 +82,46 @@
 
 - Stack 관련 명령어
 
+  > stack 명령어는 manager노드에서만 실행이 가능하다.
+  
   - `config`
     - 최종 config file 확인하기 위해 사용한다.
     - `--compose-file` 옵션 뒤에 yaml file을 입력하면 된다.
-
+  
   ```bash
   $ docker stack config --compose-file docker-compose.yml
   ```
-
+  
   - `deploy`
     - 새로운 stack을 배포하거나, 기존 stack을 update하기 위해 사용한다.
-
+  
   ```bash
   $ docker stack deploy --compose-file docker-compose.yml <stack_name>
   ```
-
+  
   - `ls`
     - Stack 들의 목록을 확인하기 위해 사용한다.
-
+  
   ```bash
   $ docker stack ls
   ```
-
+  
   - `ps`
     - Stack 내의 task들의 목록을 확인하기 위해 사용한다.
     - `--filter` 혹은 `-f` 옵션을 사용하여 filtering이 가능하다.
-
+  
   ```bash
   $ docker stack ps <stack_name>
   ```
-
+  
   - `services`
     - Stack에 속한 service들의 목록을 확인하기 위해 사용한다.
     - `--filter` 혹은 `-f` 옵션을 사용하여 filtering이 가능하다.
-
+  
   ```bash
   $ docker stack services <stack_name>
   ```
-
+  
   - `rm`
     - Stack을 삭제하기 위해 사용한다.
     - Stack을 삭제하면 해당 stack은 물론이고 stack이 생성한 service, container가 모두 삭제된다.
@@ -227,39 +229,39 @@
 
   - Dockerfile을 아래와 같이 설정한다.
     - `.bashrc`은 user의 home directory에 생성되므로, user 추가시 `-m` option을 줘야한다.
-
-
+  
   ```dockerfile
-FROM python:3.8.0
-
-RUN useradd -m -u 1005 foo
-
-USER foo
-
-# .bashrc에 umask 0002 명령어를 추가한다.
-RUN echo "umask 0002" >> ~/.bashrc
-
-COPY ./main.py /main.py
-
-ENTRYPOINT ["python", "main.py"]
+  FROM python:3.8.0
+  
+  RUN useradd -m -u 1005 foo
+  
+  USER foo
+  
+  # .bashrc에 umask 0002 명령어를 추가한다.
+  RUN echo "umask 0002" >> ~/.bashrc
+  
+  COPY ./main.py /main.py
+  
+  ENTRYPOINT ["python", "main.py"]
   ```
-
-  - 위 예시의 경우 0002를 출격할 것 같지만, 0002를 출력한다. 즉, 의도한 대로 동작하지 않는다.
-    - 반면에 `docker exec -it <container> /bin/bash`와 같이 입력하여 직접 `python main.py`를 실행시키면 0002가 제대로 출력된다.
-
-  - 아래와 같이 dockefile을 작성한다.
-    - `umask 0002`와 python script 실행이 한 세션에서 실행될 수 있도록 한다.
-
+  
+    - 위 예시의 경우 0002를 출격할 것 같지만, 0002를 출력한다. 즉, 의도한 대로 동작하지 않는다.
+      - 반면에 `docker exec -it <container> /bin/bash`와 같이 입력하여 직접 `python main.py`를 실행시키면 0002가 제대로 출력된다.
+  
+  
+    - 아래와 같이 dockefile을 작성한다.
+      - `umask 0002`와 python script 실행이 한 세션에서 실행될 수 있도록 한다.
+  
   ```dockerfile
-FROM python:3.8.0
-
-RUN useradd -m -u 1005 foo
-
-USER foo
-
-COPY ./main.py /main.py
-
-ENTRYPOINT ["/bin/bash", "-c", "umask 0002 && python main.py"]
+  FROM python:3.8.0
+  
+  RUN useradd -m -u 1005 foo
+  
+  USER foo
+  
+  COPY ./main.py /main.py
+  
+  ENTRYPOINT ["/bin/bash", "-c", "umask 0002 && python main.py"]
   ```
 
 
@@ -279,6 +281,10 @@ ENTRYPOINT ["/bin/bash", "-c", "umask 0002 && python main.py"]
 - Docker compose options
   - tty:true로 주면 docker run 실행시에 -t option을 준 것과 동일하다.
   - stdin_open:true로 주면 docker run 실행시에 -i option을 준 것과 동일하다.
+
+
+
+
 
 
 
@@ -657,6 +663,69 @@ ENTRYPOINT ["/bin/bash", "-c", "umask 0002 && python main.py"]
 
 
 
+## Error
+
+- `network sandbox join failed: ... error creating vxlan interface: file exists`
+
+  - 문제 상황
+    - 세 대의 서버를 swarm으로 묶은 후 서비스하던 중, Docker daemon을 재시작할 일이 생겨, 세 서버의 Docker daemon을 재시작했다.
+    - 그 직후, Docker stack config file에 변경 사항이 있어, Docker stack deploy를 통해 이미 존재하는 stack을 재배포 하는 중에 일부 service에서 위와 같은 error가 발생하며 실행되지 않았다.
+    - 해당 error는 swarm으로 묶인 세 개의 노드 중 한 노드에서만 발생했다.
+    - 에러가 발생한 service들은 같은 overlay network를 사용한다는 공통점이 있었으며, 해당 overlay network를 확인한 결과, 어떤 container도 network에 추가되지 않았다.
+  - 원인
+    - 새로운 docker 컨테이너가 overlay network에 참여하기 위해 필요한 VXLAN interface가 이미 존재함에도, Docker daemon이 이를 생성하려 해서 발생하는 문제다.
+  - 상세
+    - 새로운 컨테이너가 overlay network에 참여해야 할 경우, Docker daemond은 컨테이너가 overlay network에 참여하기 위한 VXLAN interface를 생성한다.
+    - 이 시점 까지는 `ip -d link show` 명령어를 통해 호스트 머신에서 VXLAN interface를 확인이 가능하다.
+    - 이후 생성한 VXLAN를 container namespace로 이동시킨다.
+    - 이동이 완료된 VXLAN interface는 호스트 머신에서 보이지 않게된다.
+    - 만약 컨테이너가 정지될 경우 Docker daemon은 VXLAN을 다시 호스트 머신으로 반환한다.
+    - 반환이 완료되면 Docker daemon은 VXLAN을 삭제한다.
+    - 문제는 컨테이너가 정지되고 VXLAN을 호스트 머신에 반환까지는 했으나, VXLAN을 삭제하지 못하는 경우가 있을 수 있다.
+    - 이 경우 VXLAN은 그대로 호스트 머신에 남아있게 되며, 이후 다시 컨테이너가 실행되어 overlay network에 참여하기 위해 Docker Deamon이 VXLAN interface를 생성하려 할 때, 이미 VXLAN이 존재한다는 error가 발생하게 된다.
+  - 해결
+    - Docker daemon이 삭제하지 않은 VXLAN interface를 찾아서 삭제한다.
+
+  ```bash
+  # Docker daemon이 삭제하지 않은 VXLAN을 찾는다(호스트 머신에 반환은 됐으므로, 아래 명령어로 확인은 가능하다.
+  # Docker가 생성한 VXLAN은 vx prefix가 붙는다.
+  $ ip -d link show | grep vx
+  
+  # output
+  # 맨 뒤의 다섯 글자(o0la3)는 해당 VXLAN interface를 통해 접근하고자 하는 Docker overlay netowrk ID의 첫 다섯 글자이다.
+  5010: vx-00100c-o0la3: <BROADCAST,MULTICAST> mtu 1450 qdisc noop state DOWN mode DEFAULT group default
+  
+  
+  # 맨 뒤의 다섯 글자와 일치하는 Docker overlay netowrk ID가 있는지 확인
+  $ docker network ls | grep o0la3
+  
+  # output
+  o0la3crbs51r   banana_default            overlay   swarm
+  
+  
+  
+  # 일치하는 Docker overlay netowrk ID가 있을 경우, 아래 명령어를 통해 삭제되지 못 한 VXLAN interface를 삭제한다.
+  $ ip link delete vx-00100c-o0la3
+  ```
+
+  - 확인
+
+  ```bash
+  $ docker service ps <service_name>
+  ```
+
+  - 여담
+    - 문제가 발생한 서버를 재시작하거나, Docker daemon을 재시작했더니 해결 됐다는 글이 꽤 있었다.
+    - 아마 Docker daemon이 종료되면서 VXLAN을 삭제했기 때문으로 보이는데, 이 방법을 시도해보지는 않았다.
+
+  - 참조
+    - https://www.n0r1sk.com/post/docker-swarm-network-down-the-rabbit-hole/
+    - https://github.com/moby/libnetwork/issues/562#issuecomment-1155015141
+
+
+
+
+
 # alpine image
 
 - alpine image의 경우 일반 image에 비해 size가 작긴 하지만, 경우에 따라 성능에 상당한 차이가 있을 수 있다.
@@ -665,4 +734,3 @@ ENTRYPOINT ["/bin/bash", "-c", "umask 0002 && python main.py"]
 
   - 예를 들어 `python:3.8.0` image와 `python:3.8.0-alpine` image의 경우 size는 `python:3.8.0-alpine`이 훨씬 작지만, 성능은 `python:3.8.0`이 보다 뛰어나다.
   - 이러한 차이가 나는 이유는 두 image가 서로 다른 방식으로 구현되었기 때문이다.
-
