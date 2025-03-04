@@ -766,3 +766,326 @@
     - `StopFilter.accept()`가 false를 반환하더라도 `FilterTokenFilter.incrementToken()`가 false를 반환하지는 않으며, 그냥 다음 회기로 넘어간다.
     - 위 모든 과정은 `StandardTokenizer.incrementToken()`이 false를 반환할때 까지 반복된다.
 
+
+
+- Attribute
+
+  - 모든 attribute class(`CharTermAttribute`, `OffsetAttribute` 등)는 `Attribute` interface를 구현한다.
+    - Attribute class는 token과 관련된 정보를 저장하고 관리하기 위해 사용한다.
+    - 예를 들어 `CharTermAttribute`는 token의 실제 text data를 저장하기 위해 사용하고, `OffsetAttribute`는 text 내에서 token의 시작 위치와 끝 위치를 저장하기 위해 사용한다.
+  - `AttributeSource`
+    - 모든 tokenizer의 조상 class인 `Tokenizer`와 모든 token filter의 조상 class인 `TokenFilter`는 모두 `TokenStream`을 상속받는다.
+    - 그리고 `TokenStream`은 `AttributeSource` class를 상속 받는다.
+    - `AttributeSource` class는 `addAttribute()`라는 method를 가지고 있으며, tokenizer class들과 token filter class들은 이 method를 사용해 아래 예시와 같이 자신에게 필요한 attribute class의 instance를 생성한다.
+
+  ```java
+  // LowerCaseFilter
+  public class LowerCaseFilter extends TokenFilter {
+    private final CharTermAttribute termAtt = addAttribute(CharTermAttribute.class);
+  }
+  
+  // StandardTokenizer
+  public final class StandardTokenizer extends Tokenizer {
+    private final CharTermAttribute termAtt = addAttribute(CharTermAttribute.class);
+    private final OffsetAttribute offsetAtt = addAttribute(OffsetAttribute.class);
+    private final PositionIncrementAttribute posIncrAtt =
+        addAttribute(PositionIncrementAttribute.class);
+    private final TypeAttribute typeAtt = addAttribute(TypeAttribute.class);
+  ```
+
+  - `Attribute`는 모든 filter chain이 공유한다.
+    - 즉, 하나의 tokenizer와 복수의 token filter가 동일한 `Attribute` instance를 사용한다.
+    - 아래와 같이 이미 생성된 attribute가 있을 경우, 새로 생성하지 않고 이미 생성된 attribute를 반환한다.
+    - 즉 `StandardTokenizer`가 `addAttribute()` method를 통해 `CharTermAttribute`의 instance를 생성했으면, 이후에 `LowerCaseFilter`가 `addAttribute()` method를 통해 `CharTermAttribute`의 instance를 생성하려 할 때, 새로 생성되지 않고, 기존에 생성된 `CharTermAttribute`의 instance가 반환된다.
+
+  ```java
+  public class AttributeSource {
+      public final <T extends Attribute> T addAttribute(Class<T> attClass) {
+          AttributeImpl attImpl = attributes.get(attClass);
+          if (attImpl == null) {
+            if (!(attClass.isInterface() && Attribute.class.isAssignableFrom(attClass))) {
+              throw new IllegalArgumentException(
+                  "addAttribute() only accepts an interface that extends Attribute, but "
+                      + attClass.getName()
+                      + " does not fulfil this contract.");
+            }
+            addAttributeImpl(attImpl = this.factory.createAttributeInstance(attClass));
+          }
+          return attClass.cast(attImpl);
+        }
+  }
+  ```
+
+  - `Attribute`를 모든 filter chain이 공유할 수 있는 이유
+    - 아래 코드는 `AttributeSource`의 생성자이다.
+    - `TokenFilter`를 상속 받는 모든 token filter class들은 생성자가 호출 될 때, `super()`를 통해 부모 class의 생성자를 호출한다.
+    - 따라서 `TokenFilter`의 생성자가 호출되고, `TokenFilter`의 생성자 역시 부모 class의 생성자를 호출한다.
+    - `TokenFilter`의 부모 class인 `TokenStream`의 생성자도 부모 class의 생성자를 호출한다.
+    - `TokenStream`의 부모 class인 `AttributeSource`가 호출되면, 아래와 같이 `input.attributes`를 `attributes`에 할당한다.
+    - 이를 통해 filter chain에 속한 모든 tokenizer class 혹은 token filter class들이 attribute를 공유할 수 있게 된다.
+
+  ```java
+  // LowerCaseFilter 생성자
+  public LowerCaseFilter(TokenStream in) {
+      super(in);
+  }
+  
+  // TokenFilter 생성자
+  protected TokenFilter(TokenStream input) {
+      super(input);
+      this.input = input;
+  }
+  
+  // TokenStream 생성자
+  protected TokenStream(AttributeSource input) {
+      super(input);
+      assert assertFinal();
+  }
+  
+  // AttributeSource 생성자
+  public AttributeSource(AttributeSource input) {
+      Objects.requireNonNull(input, "input AttributeSource must not be null");
+      this.attributes = input.attributes;
+      this.attributeImpls = input.attributeImpls;
+      this.currentState = input.currentState;
+      this.factory = input.factory;
+  }
+  ```
+
+  - Python 코드로 단순하게 나타내면 아래와 같다.
+
+  ```python
+  from __future__ import annotations
+  from typing import Type, TypeVar
+  
+  
+  class Attribute:
+      ...
+  
+  
+  class AttributeImpl(Attribute):
+      ...
+  
+  T = TypeVar("T", bound=Attribute)
+  
+  
+  class CharTermAttribute(Attribute):
+      ...
+  
+  
+  class CharTermAttributeImple(AttributeImpl):
+      def __init__(self):
+          self._term_buffer = ['']*20
+          self._length = 0
+      
+      @property
+      def buffer(self):
+          return self._term_buffer[:self._length]
+  
+      def add(self, offset: int, char: str):
+          self._term_buffer[offset] = char
+      
+      def set_length(self, length: int):
+          self._length = length
+  
+  
+  class AttributeSource:
+  
+      def __init__(self, input_source: AttributeSource=None):
+          if input_source:
+              self.attributes: dict[Type[Attribute], AttributeImpl] = input_source.attributes
+          else:
+              self.attributes: dict[Type[Attribute], AttributeImpl] = {}
+  
+      def add_attribute(self, att_class: Type[T]) -> T:
+          att_impl = self.attributes.get(att_class)
+          if att_impl is None:
+              if att_class == CharTermAttribute:
+                  att_impl = CharTermAttributeImple()
+              self.attributes[att_class] = att_impl
+          return att_impl
+  
+  
+  class TokenStream(AttributeSource):
+      def __init__(self, input: AttributeSource=None):
+          super().__init__(input)
+  
+  
+  class TokenFilter(TokenStream):
+      def __init__(self, input: TokenStream=None):
+          super().__init__(input)
+  
+  
+  class LowercaseFilter(TokenFilter):
+      def __init__(self, input: TokenStream=None):
+          super().__init__(input)
+          self._term_attr: CharTermAttributeImple = self.add_attribute(CharTermAttribute)
+      
+      @property
+      def term_attr(self):
+          return self._term_attr
+  
+  
+  class CustomTokenizer(TokenStream):
+      def __init__(self):
+          super().__init__()
+          self._term_attr: CharTermAttributeImple = self.add_attribute(CharTermAttribute)
+      
+      @property
+      def term_attr(self):
+          return self._term_attr
+      
+      def print_token(self, string: str):
+          offset = 0
+          length = 0
+          for char in string:
+              if char == " ":
+                  self._term_attr.set_length(length)
+                  length = 0
+                  offset = 0
+                  print("".join(self._term_attr.buffer))
+              else:
+                  self._term_attr.add(offset, char)
+                  offset += 1
+                  length += 1
+          if length > 0:
+              self._term_attr.set_length(length)
+              print("".join(self._term_attr.buffer))
+  
+  
+  if __name__ == "__main__":
+      stanadard_tokenizer = CustomTokenizer()
+      lower_case_filter = LowercaseFilter(stanadard_tokenizer)
+      stanadard_tokenizer.print_token("Hello World")
+      assert stanadard_tokenizer.term_attr is lower_case_filter.term_attr
+  ```
+
+
+
+- KoreanAnalyzer(Nori Analyzer)
+
+  - KoreanAnalyzer는 아래 4가지로 구성된다.
+    - KoreanTokenizer(Nori tokenizer)
+    - KoreanPartOfSpeechStopFilter
+    - KoreanReadingFormFilter
+    - LowerCaseFilter
+  - 실행 코드
+
+  ```java
+  import org.apache.lucene.analysis.Analyzer;
+  import org.apache.lucene.analysis.TokenStream;
+  import org.apache.lucene.analysis.ko.KoreanAnalyzer;
+  import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
+  
+  import java.io.IOException;
+  
+  public class Main {
+      public static void main(String[] args) {
+          Analyzer analyzer = new KoreanAnalyzer();
+          try (TokenStream tokenStream = analyzer.tokenStream("field", "나라의 말이 中國과 달라")) {
+              tokenStream.reset();
+              while (tokenStream.incrementToken()) {
+                  CharTermAttribute termAttr = tokenStream.getAttribute(CharTermAttribute.class);
+                  System.out.println(termAttr.toString());
+              }
+              tokenStream.end();
+          } catch (IOException e) {
+              throw new RuntimeException(e);
+          }
+          analyzer.close();
+      }
+  }
+  ```
+
+  - `TokenStream` 생성
+    - `analyzer.tokenStream`이 실행되면, `KoreanAnalyzer.createComponents()` method가 실행되어 `TokenStream` instance가 생성된다.
+    - 생성 방식은 `StandardAnalyzer`에서 생성하던 방식과 크게 다르지 않다.
+
+  ```java
+  public class KoreanAnalyzer extends Analyzer {
+  
+    @Override
+    protected TokenStreamComponents createComponents(String fieldName) {
+      Tokenizer tokenizer =
+          new KoreanTokenizer(DEFAULT_TOKEN_ATTRIBUTE_FACTORY, userDict, mode, outputUnknownUnigrams);
+      TokenStream stream = new KoreanPartOfSpeechStopFilter(tokenizer, stopTags);
+      stream = new KoreanReadingFormFilter(stream);
+      stream = new LowerCaseFilter(stream);
+      return new TokenStreamComponents(tokenizer, stream);
+    }
+  }
+  ```
+
+  - `KoreanReadingFormFilter.incrementToken()`
+    - 한자로 이루어진 token을 한글로 변환한다.
+
+  ```java
+  public final class KoreanReadingFormFilter extends TokenFilter {
+    @Override
+    public boolean incrementToken() throws IOException {
+      if (input.incrementToken()) {
+        String reading = readingAtt.getReading();
+        if (reading != null) {
+          termAtt.setEmpty().append(reading);
+        }
+        return true;
+      } else {
+        return false;
+      }
+    }
+  }
+  ```
+
+  - `KoreanPartOfSpeechStopFilter.incrementToken()`
+    - `KoreanPartOfSpeechStopFilter`는 `StopFilter`와 마찬가지로 `incrementToken()` method를 override하지 않고, 부모 클래스인 `FilteringTokenFilter.incrementToken()`을 상속 받아 사용한다.
+    - 위에서 살펴봤던대로 `FilteringTokenFilter.incrementToken()` method는 `accept()`가 true를 반환할 때만 true를 반환하고, 그렇지 않으면 다음 반복으로 넘어간다.
+    - 아래 코드는 `KoreanPartOfSpeechStopFilter.accept()` method로,` leftPOS`가 null이거나 `stopTags`에 속해있지 않으면 true를 반환한다.
+    - `KoreanAnalyzer` 생성시에 별도의 `stopTags`를 넘기지 않으면 기본 `stopTags`가 적용되며, 여기에는 조사(`JKG`, `JKS`, `JKB` 등)가 포함되어 테스트 문장으로 생성된 token 중 "의", "이", "과"는 빠지게 된다.
+
+  ```java
+  public final class KoreanPartOfSpeechStopFilter extends FilteringTokenFilter {
+    @Override
+    protected boolean accept() {
+      final POS.Tag leftPOS = posAtt.getLeftPOS();
+      return leftPOS == null || !stopTags.contains(leftPOS);
+    }
+  }
+  ```
+
+  - `KoreanTokenizer.incrementToken()`
+    - Viterbi algorithm을 사용한다.
+
+  ```java
+  @IgnoreRandomChains(reason = "LUCENE-10359: fails with incorrect offsets")
+  public final class KoreanTokenizer extends Tokenizer {
+  
+    @Override
+    public boolean incrementToken() throws IOException {
+  
+      while (viterbi.getPending().size() == 0) {
+        if (viterbi.isEnd()) {
+          return false;
+        }
+  
+        viterbi.forward();
+      }
+  
+      final Token token = viterbi.getPending().remove(viterbi.getPending().size() - 1);
+  
+      int length = token.getLength();
+      clearAttributes();
+      assert length > 0;
+      termAtt.copyBuffer(token.getSurfaceForm(), token.getOffset(), length);
+      offsetAtt.setOffset(correctOffset(token.getStartOffset()), correctOffset(token.getEndOffset()));
+      posAtt.setToken(token);
+      readingAtt.setToken(token);
+      posIncAtt.setPositionIncrement(token.getPositionIncrement());
+      posLengthAtt.setPositionLength(token.getPositionLength());
+      if (VERBOSE) {
+        System.out.println(Thread.currentThread().getName() + ":    incToken: return token=" + token);
+      }
+      return true;
+    }
+  }
+  ```
+
