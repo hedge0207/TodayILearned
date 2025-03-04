@@ -402,3 +402,367 @@
     - 아직 token이 남아있다는 의미로 true가 반환된다.
     - 다시 `incrementToken()` method가 호출되고, 더 이상 읽어올 character가 없고, `length`가 0이므로 false가 반환된다.
 
+
+
+- `StandardAnalyzer` 동작 과정
+
+  - `StandardAnalyzer`는 tokenizer만 적용되는 `WhitespaceAnalyzer`와 달리, 아래 두 개의 token filter가 적용된다.
+    - Lower case
+    - Stop token(기본값은 비활성화)
+  - 실행 코드
+    - 기존 코드에서 analyzer를 `StandardAnalyzer`로 변경한다.
+    - `CharArraySet`으로 stop word를 생성한다.
+    - `CharArraySet`의 두 번째 인자는 대소문자를 무시할 것인지 설정하는 것이다.
+
+  ```java
+  import org.apache.lucene.analysis.Analyzer;
+  import org.apache.lucene.analysis.CharArraySet;
+  import org.apache.lucene.analysis.TokenStream;
+  import org.apache.lucene.analysis.standard.StandardAnalyzer;
+  import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
+  
+  import java.io.IOException;
+  import java.util.Arrays;
+  
+  
+  public class Main {
+      public static void main(String[] args) {
+          CharArraySet stopWords = new CharArraySet(Arrays.asList("is", "a"), true);
+          Analyzer analyzer = new StandardAnalyzer(stopWords);
+          try (TokenStream tokenStream = analyzer.tokenStream("field", "This is a 짧은 테스트! 123")) {
+              tokenStream.reset();
+              while (tokenStream.incrementToken()) {
+                  CharTermAttribute termAttr = tokenStream.getAttribute(CharTermAttribute.class);
+                  System.out.println(termAttr.toString());
+              }
+              tokenStream.end();
+          } catch (IOException e) {
+              throw new RuntimeException(e);
+          }
+          analyzer.close();
+      }
+  }
+  
+  /* 실행 결과
+  this
+  짧은
+  테스트
+  123
+  */
+  ```
+
+  - `StandardAnalyzer`
+
+  ```java
+  public final class StandardAnalyzer extends StopwordAnalyzerBase {
+  
+    public static final int DEFAULT_MAX_TOKEN_LENGTH = 255;
+  
+    private int maxTokenLength = DEFAULT_MAX_TOKEN_LENGTH;
+  
+    public StandardAnalyzer(CharArraySet stopWords) {
+      super(stopWords);
+    }
+  
+    public StandardAnalyzer() {
+      this(CharArraySet.EMPTY_SET);
+    }
+  
+    public StandardAnalyzer(Reader stopwords) throws IOException {
+      this(loadStopwordSet(stopwords));
+    }
+  
+    public void setMaxTokenLength(int length) {
+      maxTokenLength = length;
+    }
+  
+    public int getMaxTokenLength() {
+      return maxTokenLength;
+    }
+  
+    @Override
+    protected TokenStreamComponents createComponents(final String fieldName) {
+      final StandardTokenizer src = new StandardTokenizer();
+      src.setMaxTokenLength(maxTokenLength);
+      TokenStream tok = new LowerCaseFilter(src);
+      tok = new StopFilter(tok, stopwords);
+      return new TokenStreamComponents(
+          r -> {
+            src.setMaxTokenLength(StandardAnalyzer.this.maxTokenLength);
+            src.setReader(r);
+          },
+          tok);
+    }
+  
+    @Override
+    protected TokenStream normalize(String fieldName, TokenStream in) {
+      return new LowerCaseFilter(in);
+    }
+  }
+  ```
+
+  - `TokenStream` 생성
+    - `Analyzer.tokenStream()` method가 실행되면, `StandardAnalyzer.createComponents()` method가 실행된다.
+    - `StandardAnalyzer.createComponents()`는 `TokenStreamComponents`과 `TokenStreamComponents`의 `TokenStream`을 생성한다.
+    - `TokenStream.source`에는 `StandardTokenizer`의 instance가, `TokenStream.sink`에는 `StopFilter`의 instance가 저장된다.
+    - `Analyzer.tokenStream()` method는 `TokensStream.sink`를 반환하므로, 이 경우 `StopFilter`의 instance가 반환된다.
+
+  ```java
+  public final class StandardAnalyzer extends StopwordAnalyzerBase {
+  
+    @Override
+    protected TokenStreamComponents createComponents(final String fieldName) {
+      // tokenizer 생성
+      final StandardTokenizer src = new StandardTokenizer();
+      src.setMaxTokenLength(maxTokenLength);
+      // tokenizer를 인자로 lowercase filter(TokenStream)를 생성
+      TokenStream tok = new LowerCaseFilter(src);
+      // 위에서 생성한 lowercase filter와 stopwords를 인자로 stop filter(TokenStream)를 생성
+      tok = new StopFilter(tok, stopwords);
+      
+      // 위에서 생성한 TokenStream으로 TokenStreamComponents 생성
+      return new TokenStreamComponents(
+          r -> {
+            src.setMaxTokenLength(StandardAnalyzer.this.maxTokenLength);
+            src.setReader(r);
+          },
+          tok);
+    }
+  }
+  ```
+
+  - `TokenStream.incrementToken()`(`StopFilter.incrementToken()`)
+    - `tokenStream.incrementToken()`이 실행되면, `StopFilter.incrementToken()`이 실행된다.
+    - `Stopfilter`는 `incrementToken()` method를 override하지 않으므로, `StopFilter`가 상속 받는 `FilteringTokenFilter`의 `incrementToken()` method가 실행된다.
+    - `input`에는 자신이 생성될 때 인자로 받은 `TokenStream`(예시의 경우 `LowerCaseFilter`)이 저장된다.
+    - 아래 코드를 보면 알 수 있듯이, 자신이 생성될 때 인자로 받은 `TokenStream`을 먼저 실행시킨다.
+    - 자신이 인자로 받은 `TokenStream`이 `false`를 반환하기 전까지 계속 실행된다.
+
+  ```java
+  public abstract class FilteringTokenFilter extends TokenFilter {
+    @Override
+    public final boolean incrementToken() throws IOException {
+      skippedPositions = 0;
+      while (input.incrementToken()) {	// 인자로 받은 TokenStream을 먼저 실행한다.
+        if (accept()) {	// accept는 StopFilter에 구현되어 있으며, token이 stopWord에 속하는지 여부를 반환한다.
+          if (skippedPositions != 0) {
+            posIncrAtt.setPositionIncrement(posIncrAtt.getPositionIncrement() + skippedPositions);
+          }
+          return true;
+        }
+        skippedPositions += posIncrAtt.getPositionIncrement();
+      }
+        
+      return false;
+    }
+  ```
+
+  - `LowerCaseFilter.incrementToken()`
+    - `input`에는 자신이 생성될 때 인자로 받은 `TokenStream`(예시의 경우 `StandardTokenizer`)이 저장된다.
+    - 자신이 생성될 때 인자로 받은 `TokenStream`을 먼저 실행시킨다.
+    - `termAtt.termBuffer`의 element들 중 설정된 구간에 속하는 element들을 전부 소문자로 변환한다.
+
+  ```java
+  public class LowerCaseFilter extends TokenFilter {
+  
+    @Override
+    public final boolean incrementToken() throws IOException {
+      if (input.incrementToken()) {	// // 인자로 받은 TokenStream을 먼저 실행한다.
+        CharacterUtils.toLowerCase(termAtt.buffer(), 0, termAtt.length());
+        return true;
+      } else {
+        return false;
+      }
+    }
+  }
+  
+  ```
+
+  - `StandardTokenizer.incrementToken()`
+    - `incrementToken()` method를 상속 받아 사용하던 `WhitespaceAnalyzer`와 달리 override해서 사용한다.
+    - `scanner`는 실제 tokenizing logic이 구현되어 있는 `StandardTokenizerImpl` class의 instance이다.
+
+  ```java
+  public final class StandardTokenizer extends Tokenizer {
+    // ...
+  
+    @Override
+    public final boolean incrementToken() throws IOException {
+      clearAttributes();
+      skippedPositions = 0;
+  
+      while (true) {
+        int tokenType = scanner.getNextToken();
+  
+        if (tokenType == StandardTokenizerImpl.YYEOF) {
+          return false;
+        }
+  
+        if (scanner.yylength() <= maxTokenLength) {
+          posIncrAtt.setPositionIncrement(skippedPositions + 1);
+          // scanner.zzBuffer에 저장된 char 배열을 termAttr.termBuffer에 복사
+          scanner.getText(termAtt);
+          final int start = scanner.yychar();
+          offsetAtt.setOffset(correctOffset(start), correctOffset(start + termAtt.length()));
+          typeAtt.setType(StandardTokenizer.TOKEN_TYPES[tokenType]);
+          return true;
+        } else
+          skippedPositions++;
+      }
+    }
+  ```
+
+  - `StandardTokenizerImple.getNextoken`
+    - `StandardTokenizerImpl`은 JFlex라는 Lexical Analyzer Generator를 기반으로 개발되었으며, 코드에서 자주 보이는 `zz` 접두사는 JFlex가 자동으로 생성한 코드에서 나오는 표준 접두사이다.
+
+  ```java
+  public int getNextToken() throws java.io.IOException {
+      int zzInput;
+      int zzAction;
+  
+      int zzCurrentPosL;
+      int zzMarkedPosL;
+      int zzEndReadL = zzEndRead;			// 입력 buffer의 마지막 위치
+      char[] zzBufferL = zzBuffer;		// 입력 text가 저장된 buffer
+  
+      int [] zzTransL = ZZ_TRANS;			// 상태 전환 테이블
+      int [] zzRowMapL = ZZ_ROWMAP;		// 상태 전환 테이블에서 행의 index
+      int [] zzAttrL = ZZ_ATTRIBUTE;
+  
+      while (true) {
+          zzMarkedPosL = zzMarkedPos;		// 현재까지 가장 마지막 token의 끝이라고 간주된 위치
+  
+          yychar+= zzMarkedPosL-zzStartRead;
+  
+          zzAction = -1;
+  		
+          // 현재 읽고 있는 문자 위치
+          zzCurrentPosL = zzCurrentPos = zzStartRead = zzMarkedPosL;
+  		
+          // 현재 상태 초기화
+          zzState = ZZ_LEXSTATE[zzLexicalState];
+  
+          int zzAttributes = zzAttrL[zzState];
+          if ( (zzAttributes & 1) == 1 ) {
+              zzAction = zzState;
+          }
+  
+  
+          zzForAction: {
+              while (true) {
+  				// 현재 읽고 있는 문자의 위치가 입력 buffer의 마지막 위치보다 작으면(아직 읽을 게 남아 있으면)
+                  if (zzCurrentPosL < zzEndReadL) {
+                      // buffer(zzBufferL)에서 현재 읽고 있는 문자 위치(zzCurrentPosL)에 해당하는 유니코드 코드 포인트를 읽는다.
+                      zzInput = Character.codePointAt(zzBufferL, zzCurrentPosL, zzEndReadL);
+                      // 현재 읽고 있는 문자 위치를 증가시킨다.
+                      zzCurrentPosL += Character.charCount(zzInput);
+                  }
+                  else if (zzAtEOF) {
+                      zzInput = YYEOF;
+                      break zzForAction;
+                  }
+                  else {
+                      zzCurrentPos  = zzCurrentPosL;
+                      zzMarkedPos   = zzMarkedPosL;
+                      boolean eof = zzRefill();
+                      zzCurrentPosL  = zzCurrentPos;
+                      zzMarkedPosL   = zzMarkedPos;
+                      zzBufferL      = zzBuffer;
+                      zzEndReadL     = zzEndRead;
+                      if (eof) {
+                          zzInput = YYEOF;
+                          break zzForAction;
+                      }
+                      else {
+                          zzInput = Character.codePointAt(zzBufferL, zzCurrentPosL, zzEndReadL);
+                          zzCurrentPosL += Character.charCount(zzInput);
+                      }
+                  }
+                  // 현재 상태(zzState)와 입력문자(zzInput)를 사용하여 상태 전환 테이블(zzTransL)에서 다음 상태(zzNext)를 가져온다.
+                  int zzNext = zzTransL[ zzRowMapL[zzState] + zzCMap(zzInput) ];
+                  // 만약 다음 상태가 유효하지 않으면, 현재 token 처리를 중단하고 다음 단계로 이동한다.
+                  if (zzNext == -1) break zzForAction;
+                  // 다음 상태가 유효하면, zzState를 update하여 상태를 전환한다.
+                  zzState = zzNext;
+  
+                  zzAttributes = zzAttrL[zzState];
+                  // 상태 속성이 참이면, token이 완료된 것으로 본다.
+                  if ( (zzAttributes & 1) == 1 ) {
+                      // zzAction에 현재 상태를 저장하고
+                      zzAction = zzState;
+                      // 현재 위치를 업데이트한다.
+                      zzMarkedPosL = zzCurrentPosL;
+                      if ( (zzAttributes & 8) == 8 ) break zzForAction;
+                  }
+  
+              }
+          }
+  
+          zzMarkedPos = zzMarkedPosL;
+  		// 입력이 종료되면, 종료를 나타내는 YYEOF를 반환하며 종료한다.
+          if (zzInput == YYEOF && zzStartRead == zzCurrentPos) {
+              zzAtEOF = true;
+              {
+                  return YYEOF;
+              }
+          }
+          else {
+              // zzAction 값에 따라 적절한 token type을 반환한다.
+              switch (zzAction < 0 ? zzAction : ZZ_ACTION[zzAction]) {
+                  case 1: break; 
+                  case 10: break;
+                  case 2:
+                      { return NUMERIC_TYPE;
+                      }
+                  case 11: break;
+                  case 3:
+                      { return WORD_TYPE;
+                      }
+                  case 12: break;
+                  case 4:
+                      { return EMOJI_TYPE;
+                      }
+                  case 13: break;
+                  case 5:
+                      { return SOUTH_EAST_ASIAN_TYPE;
+                      }
+                  case 14: break;
+                  case 6:
+                      { return HANGUL_TYPE;
+                      }
+                  case 15: break;
+                  case 7:
+                      { return IDEOGRAPHIC_TYPE;
+                      }
+                  case 16: break;
+                  case 8:
+                      { return KATAKANA_TYPE;
+                      }
+                  case 17: break;
+                  case 9:
+                      { return HIRAGANA_TYPE;
+                      }
+                  case 18: break;
+                  default:
+                      zzScanError(ZZ_NO_MATCH);
+              }
+          }
+      }
+  }
+  ```
+
+  - 동작 과정
+    - `StopFilter.incrementToken()` method가 실행되는데, `StopFilter`에는 `incrementToken()` method가 없으므로 부모 class인 `FilteringTokenFilter.incrementToken()` method가 실행된다.
+    - `FilteringTokenFilter.incrementToken()`는 자신의 logic을 실행하기 전에 자신이 생성될 때 인자로 받은 `TokenStream`의 `incrementToken()` method를 먼저 실행시킨다.
+    - `StopFilter`가 생성될 때 인자로 받은 `LowerCaseFilter`의 `incrementToken()` method가 실행된다.
+    - `LowerCaseFilter.incrementToken()` 역시 자신의 logic을 실행하기 전에 자신이 생성될 때 인자로 받은 `TokenStream`의 `incrementToken()` method를 먼저 실행시킨다.
+    - `LowerCaseFilter`가 생성될 때 인자로 받은 `StandardTokenizer`의 `incrementToken()` method가 실행된다.
+    - `StandardTokenizer`는 `scanner`라는 변수에 저장된 `StandardTokenizerImple`의 instance를 통해 character들을 분석한다.
+    - `StandardTokenizer`는 분석된 character들을 `termAtt.termBuffer`에 저장하고, true를 반환한다.
+    - `LowerCaseFilter.incrementToken()`는 `termAtt.termBuffer`에서 `termAtt.length()`의 길이만큼의 element를 소문자로 변환한 뒤 true를 반환한다.
+    - `FilteringTokenFilter.incrementToken()`는 `StopFilter.accept()` method를 실행하여 stopword 여부를 판단한다.
+    - `StopFilter.accept()` method는 `termAtt.termBuffer`를 읽어 stopword에 해당하는지 여부를 판단하여 반환한다.
+    - `FilteringTokenFilter.incrementToken()`는 `StopFilter.accept()`의 반환 값에 따라 true를 반환할지, 아무 것도 반환하지 않고 다음 회기로 넘어갈지를 결정한다.
+    - `StopFilter.accept()`가 false를 반환하더라도 `FilterTokenFilter.incrementToken()`가 false를 반환하지는 않으며, 그냥 다음 회기로 넘어간다.
+    - 위 모든 과정은 `StandardTokenizer.incrementToken()`이 false를 반환할때 까지 반복된다.
+
