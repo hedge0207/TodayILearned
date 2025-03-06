@@ -1089,3 +1089,258 @@
   }
   ```
 
+
+
+
+
+
+
+## Nori Analyzer 동작 과정
+
+- 사전 크기 줄이기
+
+  - Nori는 [mecab-ko-dic](https://bitbucket.org/eunjeon/mecab-ko-dic/downloads/)이라는 한국어 형태소 사전을 사용한다.
+    - [21세기 세종 계획]의 말뭉치를 기반으로 만들어졌다.
+    - mecab-ko-dic은 아래와 같은 형태로 구성된다.
+    - 좌우 문맥 ID를 사용해서 한 상태에서 다른 상태로 전이(transition)하는 비용을 계산한다.
+    - 각 전이 비용은 `matrix.def` 파일에 저장되어 있다.
+    - Mecab은 CRF(Conditional Random Field)를 사용하여 좌우 문맥 ID와 비용을 계산한다.
+
+  | 표층형 | 좌문맥 ID | 우문맥 ID | 비용 | 품사 | 의미부류 | 받침유무 | 발음   | 타입     | 첫품사 | 끝품사 | 원형                  |
+  | ------ | --------- | --------- | ---- | ---- | -------- | -------- | ------ | -------- | ------ | ------ | --------------------- |
+  | 도서관 | 1780      | 3534      | 1932 | NNG  | *        | T        | 도서관 | Compound | *      | *      | 도서/NNG/\*+관/NNG/\* |
+
+  - Nori Analyzer는 mecab-ko-dic의 크기를 줄여서 사용한다.
+    - mecab-ko-dic의 크기는 200MB가 넘으므로 이를 Nori에 담아서 배포하기에는 무리가 있다.
+    - 따라서 Nori는 다양한 방법으로 mecab-ko-dic의 크기를 줄여서 배포한다.
+  - Nori가 mecab-ko-dic의 크기를 줄이는 데 사용하는 `DictionaryBuilder`
+    - `*Builder.build()`를 통해 크기가 줄어든 사전을 생성하고, `*DictionaryWriter.write()`을 통해 `.dat` file을 작성한다.
+
+  ```java
+  public class DictionaryBuilder {
+  
+    private DictionaryBuilder() {}
+  
+    public static void build(Path inputDir, Path outputDir, String encoding, boolean normalizeEntry)
+        throws IOException {
+      // Build TokenInfo Dictionary
+      new TokenInfoDictionaryBuilder(encoding, normalizeEntry).build(inputDir).write(outputDir);
+  
+      // Build Unknown Word Dictionary
+      new UnknownDictionaryBuilder(encoding).build(inputDir).write(outputDir);
+  
+      // Build Connection Cost
+      ConnectionCostsBuilder.build(inputDir.resolve("matrix.def"))
+          .write(outputDir, DictionaryConstants.CONN_COSTS_HEADER, DictionaryConstants.VERSION);
+    }
+  
+    public static void main(String[] args) throws IOException {
+      String inputDirname = args[0];
+      String outputDirname = args[1];
+      String inputEncoding = args[2];
+      boolean normalizeEntries = Boolean.parseBoolean(args[3]);
+      DictionaryBuilder.build(
+          Paths.get(inputDirname), Paths.get(outputDirname), inputEncoding, normalizeEntries);
+    }
+  }
+  ```
+
+  -  `.csv`로 이루어진 파일을 `.dat` 형식의 바이너리로 변환하여 크기를 줄인다.
+     - `TokenInfoDictionaryBuilder.build()`가 호출되면 경로에 있는 CSV파일을 인자로 `TokenInfoDictionaryBuilder.buildDictionary()`를 호출한다.
+     - `dictionary.put(entry)`가 호출되면 최종적으로 `TokenInfoDictionaryEntryWriter.putEntry()` method가 실행되어 `ByteBuffer`의 instance에 형태소와 관련된 정보들(좌우 문맥 ID, 타입, 비용, 품사, 발음, 복합어의 경우 각 형태소의 품사와 표층형 등)을 직렬화하여 저장하고, buffer에서 현재 data를 저장한 위치를 반환한다.
+     - `ByteBuffer`에 형태소와 관련된 정보들을 저장할 때, 하나의 short 값에 여러 정보들을 함께 저장하여 용량을 절약한다(e.g. 좌문맥ID와 타입은 하나의 short에 함께 저장된다).
+     - `IntsRef`는 정수형 배열로, FST에 저장하기 위한 class로, FST는 효율적인 상태 전이를 위해 문자 대신 정수 값을 사용한다.
+     - 문자열을 UTF-16 코드 포인트 배열로 변환하여 FST에 적합한 형식으로 만든다.
+     - 예를 들어 "학교"는 UTF-16 코드로 `[54616, 44368]`로 변환되며, 이를 FST에 저장한다.
+
+  ```java
+  class TokenInfoDictionaryBuilder {
+  
+      public TokenInfoDictionaryWriter build(Path dir) throws IOException {
+          try (Stream<Path> files = Files.list(dir)) {
+              List<Path> csvFiles =
+                  files.filter(path -> path.getFileName().toString().endsWith(".csv")).sorted().toList();
+              return buildDictionary(csvFiles);
+          }
+      }
+  
+      private TokenInfoDictionaryWriter buildDictionary(List<Path> csvFiles) throws IOException {
+          TokenInfoDictionaryWriter dictionary = new TokenInfoDictionaryWriter(10 * 1024 * 1024);
+          // CSV파일의 모든 행을 읽어서 lines에 저장한다.
+          List<String[]> lines = new ArrayList<>(400000);
+          for (Path path : csvFiles) {
+              try (BufferedReader reader = Files.newBufferedReader(path, Charset.forName(encoding))) {
+                  String line;
+                  while ((line = reader.readLine()) != null) {
+                      String[] entry = CSVUtil.parse(line);
+  
+                      if (entry.length < 12) {
+                          throw new IllegalArgumentException(
+                              "Entry in CSV is not valid (12 field values expected): " + line);
+                      }
+  
+                      if (normalForm != null) {
+                          String[] normalizedEntry = new String[entry.length];
+                          for (int i = 0; i < entry.length; i++) {
+                              normalizedEntry[i] = Normalizer.normalize(entry[i], normalForm);
+                          }
+                          lines.add(normalizedEntry);
+                      } else {
+                          lines.add(entry);
+                      }
+                  }
+              }
+          }
+  
+          // lines에 저장된 모든 행을 첫 번째 열의 값인 표층형을 기반으로 정렬한다.
+          lines.sort(Comparator.comparing(left -> left[0]));
+  
+          PositiveIntOutputs fstOutput = PositiveIntOutputs.getSingleton();
+  
+          // FST 생성을 위한 FSTCompiler instance를 생성한다.
+          FSTCompiler<Long> fstCompiler =
+              new FSTCompiler.Builder<>(FST.INPUT_TYPE.BYTE2, fstOutput).build();
+          // IntsRefBuilder는 문자열 데이터를 FST 입력 형식(IntsRef 객체)으로 변환하는 역할을 한다.
+          IntsRefBuilder scratch = new IntsRefBuilder();
+          long ord = -1; // first ord will be 0
+  
+          // 공통되는 접두어를 확인하기 위해 이전 단어를 저장한다.
+          String lastValue = null;
+  
+          // 행을 하나씩 읽으면서
+          for (String[] entry : lines) {
+              // 표층형을 할당한다.
+              String surfaceForm = entry[0].trim();
+              if (surfaceForm.isEmpty()) {
+                  continue;
+              }
+              // next는 buffer에서 현재 data를 저장한 위치를 반환한다.
+              int next = dictionary.put(entry);
+  
+              if (next == offset) {
+                  throw new IllegalStateException("Failed to process line: " + Arrays.toString(entry));
+              }
+  
+              // 중복 방지를 위해 이전 단어와 현재 단어가 다를 때만 FST에 추가한다.
+              if (!surfaceForm.equals(lastValue)) {
+                  ord++;
+                  lastValue = surfaceForm;
+  
+                  // FST에 저장하기 위해 표층형을 IntsRef 형식으로 변환한다.
+                  // 표층형의 길이에 따라 scratch가 내부에서 사용하는 배열의 크기를 확장한다.
+                  scratch.growNoCopy(surfaceForm.length());
+                  // scratch 내부에서 배열의 길이를 저장하는 변수의 값을 표층형의 길이로 설정한다.
+                  scratch.setLength(surfaceForm.length());
+                  // 표층형의 각 char를 순회하면서 각 char를 UTF-16 코드 값으로 변환하여 저장한다.
+                  for (int i = 0; i < surfaceForm.length(); i++) {
+                      scratch.setIntAt(i, surfaceForm.charAt(i));
+                  }
+                  // FST에 IntsRef 형식으로 변환된 표층형과 식별자(ord)를 추가한다.
+                  fstCompiler.add(scratch.get(), ord);
+              }
+              // ord와 offset을 mapping하여 사전에 저장한다.
+              dictionary.addMapping((int) ord, offset);
+              offset = next;
+          }
+          // dictionary에 FST를 저장한다.
+          dictionary.setFST(FST.fromFSTReader(fstCompiler.compile(), fstCompiler.getFSTReader()));
+          return dictionary;
+      }
+  }
+  ```
+
+  - `ord`와 `offset`을 mapping하여 사전에 저장하는 이유
+    - 위 코드를 보면  `dictionary.addMapping((int) ord, offset)`와 같이 식별자(`ord`)와 `offset`을 mapping하는 과정이 있다.
+    - `ord`는 `InfRef` 형식으로 변환된 표층형을 고유하게 식별하기 위한 식별자이고, `offset`은 그 외 부가적인 정보(문맥ID, 타입, 품사 등)이 사전의 어느 위치에 저장되어 있는지 식별하기 위한 식별자이다.
+    - FST는 표층어만을 저장하기에 FST를 통해 표층어를 찾는다고 해도, 표층어에 대한 정보만 알 수 있을 뿐, 표층어에 대한 부가적인 정보를 알 수는 없다.
+    - 따라서 FST는 표층어를 찾은 뒤 표층어에 해당하는 식별자(`ord`)를 반환하고, 사전에서 해당 `ord`와 mapping된 `offset`을 통해 사전에 저장된 부가 정보를 찾아낸다.
+    - 즉, FST가에 저장된 표층어를 고유하게 나타내주는 식별자로, 사전에 저장된 부가 정보를 찾아내기 위해 `ord`와 `offset`을 mapping하는 것이다.
+
+  ```java
+  // 표층어에 해당하는 식별자를 찾고
+  int ord = fst.lookup("학교");
+  
+  // 사전에서 식별자에 해당하는 offset을 찾은 뒤
+  int offset = dictionary.getOffset(ord);
+  // 사전에서 offset에 해당하는 부가 정보를 찾는다.
+  TokenInfo data = dictionary.readEntry(offset);
+  ```
+
+  - 위 과정을 거치면 200MB가 넘던 크기가 10MB까지 줄어들게 된다.
+
+
+
+- Nori가 사전을 FST에 저장하는 이유
+  - FST는 공통 접두사를 공유하는 단어들을 효율적으로 압축한다.
+    - 예를 들어 한글, 한국어, 한자 등은 모두 "한"이라는 접두사를 공유하는데, 이들을 하나의 경로로 표현하여 "한"을 한 번만 저장할 수 있게 된다.
+  - 빠른 검색이 가능하다.
+    - FST는 상태 전이를 기반으로 동작하므로 단어 검색이 선형 시간 복잡도로 가능하다.
+    - 문자열의 각 문자를 상태에 따라 전이하며 단어를 확인하므로 속도가 빠르다.
+  - 입출력 매핑을 지원한다.
+    - 단어를 저장하는 것 뿐만 아니라, 단어에 대응하는 값을 저장하는데도 유용하다.
+    - 실제로 위에서 살펴본 것과 같이 표층어와 그에 해당하는 식별자를 저장하여, 표층어를 찾은 뒤 그 식별자를 반환할 수 있게 했다.
+
+
+
+- matrix.def
+  - 좌문맥 ID와 우문맥 ID 사이의 연결 비용을 저장하는 테이블을 저장한 파일이다.
+    - `우문맥ID, 좌문맥ID, 연결비용`과 같은 형태로 저장되어 있다.
+    - 가장 최근 사전(mecab-ko-dic-2.1.0-20180720) 기준으로 우문맥 ID가 3,822개, 좌문맥 ID가 2,693개로 전체 행렬에는 10,292,646개의 셀이 있다.
+    - 파일의 크기는 139MB이므로 사전과 마찬가지로 크기를 줄일 필요가 있다.
+  - 연접 비용
+    - 연접 비용이란 우문맥 ID와 좌문맥ID를 연결하는데 드는 비용(즉, 한 단어의 끝과 다음 단어의 시작이 연결되는 비용을 의미한다).
+    - Vitrebi 알고리즘을 사용하여 형태소 경로를 선택할 때, 연접 비용이 가장 적게 드는 경로를 최종 결과로 사용한다.
+    - 예를 들어 "귀여운"이라는 형용사 뒤에는 "아름다운"이라는 또 다른 형용사가 오는 것 보다 "강아지"와 같은 명사가 오는 것이 자연스럽다.
+    - 이 경우 더 자연스러운 쪽이 연접 비용이 더 낮으며, 형태소 분석시에 연접 비용이 더 낮은 쪽(더 자연스러운 쪽)을 선택하게 된다.
+  - 좌우 문맥 ID의 개수가 많은 이유
+    - 좌우 문맥ID가 품사로만 결정되는 것이 아니기 때문이다.
+    - 문맥 ID는 품사, 품사의 세부 속성, 형태소의 활용 형태를 조합하여 만들어진다.
+    - 이는 한국어의 문법적 다양성 때문이다.
+  - mecab-ko-dic의 낱말 비용과 matrix.def에서 연접 비용의 차이가 발생하는 이유.
+    - 예를 들어, mecab-ko-dic에서 "가공업"이라는 단어의 좌문맥 ID는 1780, 우문맥ID는 3534, 연결비용은 2704이다.
+    - 그러나 matrix에서 우문맥 ID 3534, 좌문맥ID 1780에 해당하는 비용은 269이다.
+    - 이러한 차이가 발생하는 이유는 matrix.def에 정의된 연결 비용은 좌우 문맥 ID간의 연결 비용을 정의한 것이기 때문이다.
+    - 반면에 mecab-ko-dic에 정의된 낱말 비용은 특정 낱말 또는 형태소에 대해 더 세밀하게 조정된 비용이다.
+    - 즉, matrix.def은 명사 뒤에 조사가 오는 것이 자연스럽다는 품사 기반의 기본적인 연결 비용을 정의한 것이고, mecab-ko-dic은 명사 뒤에는 특정 조사가 오는 것이 더 자연스럽다는, 단어의 세부적인 속성을 반영하여 비용을 정의한 것이다.
+    - e.g. "나"라는 명사 뒤에는 "는"이라는 조사가 오는 것이 "이"라는 조사가 오는 것 보다 자연스럽다.
+  - 여러 사전에 같은 단어가 등장하는 경우
+    - 예를 들어 "동작"이라는 단어는 움직임을 의미하는 명사가 있고, 지명인 동작구 할 때의 동작도 있다.
+    - 이 경우, 낱말 비용과 연접 비용을 계산하여 최소가 되는 단어가 선택된다.
+
+
+
+- 비용 계산 방식
+
+  - 예를 들어 "남서울 터미널"이라는 문장을 분석해야 한다고 가정해보자.
+    - "남서울"은 ["남", "서울"]과 같이 분석 될 수도 있고, ["남서", "울"]과 같이 분석될 수도 있다.
+  - mecab-ko-dic에 정의된 각 형태소들의 좌우 문맥 ID와 단어 비용은 아래와 같다.
+
+  | 단어   | 좌문맥ID | 우문맥ID | 단어 비용 |
+  | ------ | -------- | -------- | --------- |
+  | 남     | 1780     | 3534     | 3353      |
+  | 서울   | 1789     | 3553     | 2327      |
+  | 남서   | 1780     | 3533     | 1956      |
+  | 울     | 1780     | 3534     | 5416      |
+  | 터미널 | 1782     | 3534     | 2637      |
+
+  - 연결 비용
+    - 문장 시작의 우문맥 ID는 0으로 본다.
+
+  | 연결 단어        | 앞 단어 우문맥ID | 뒷 단어 좌문맥ID | 연결 비용 |
+  | ---------------- | ---------------- | ---------------- | --------- |
+  | 문장 시작 + 남   | 0                | 1780             | -1133     |
+  | 남 + 서울        | 4                | 1789             | 1056      |
+  | 서울 + 터미널    | 3553             | 1782             | -552      |
+  | 문장 시작 + 남서 | 0                | 1780             | -1133     |
+  | 남서 + 울        | 3533             | 1780             | 269       |
+  | 울 + 터미널      | 3534             | 1782             | 620       |
+
+  - 최종 비용 계산
+    - ["남", "서울"]로 분석했을 때의 최종 비용은 `[문장 시작 + 남]의 연결 비용 + [남]의 단어 비용 + [남 + 서울]의 연결 비용 + [서울]의 단어 비용 + [서울 + 터미널]의 연결 비용 + [터미널]의 단어 비용`와 같이 계산한다.
+    - 결국 2662 + (-1133) + 1056 + 2327 + (-552) + 2637 = 6997
+    - ["남서", "울"]로 분석했을 때이 최종 비용은`[문장 시작 + 남서]의 연결 비용 + [남서]의 단어 비용 + [남서 + 울]의 연결 비용 + [울]의 단어 비용 + [울 + 터미널]의 연결 비용 + [터미널]의 단어 비용`와 같이 계산한다.
+    - -1133 + 1956 + 269 + 5416 + 620 + 2637 = 9765
+    - ["남", "서울", "터미널"]의 비용이 더 적으므로, "남서울 터미널"은 ["남", "서울", "터미널"]로 분해된다.
+
+
+
