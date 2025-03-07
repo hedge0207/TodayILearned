@@ -772,11 +772,281 @@
 
 
 
+# 오류 처리
+
+- 오류 처리는 깨끗한 코드를 작성하는 데 중요하다.
+  - 상당수 코드 기반은 전적으로 오류 처리 코드에 좌우된다.
+    - 여기서 좌우된다는 것은 코드 기반이 오류만 처리한다는 의미가 아니다.
+    - 여기저기 흩어진 오류 처리 코드 때문에 실제 코드가 하는 일을 파악하기가 거의 불가능하다는 의미다.
+  - 오류 처리는 중요하지만 오류 처리 코드로 인해 프로그램 논리를 이해하기 어려워진다면 깨끗한 코드라 부르기 어렵다.
+
+
+
+- 오류 코드보다 예외를 사용하라
+
+  - 아래는 호출자에게 오류 코드를 반환하는 방식으로 오류를 처리하는 코드이다.
+    - 아래와 같은 방식은 함수를 호출한 즉시 오류를 확인해야 하기 때문에 호출자 코드가 복잡해진다.
+
+  ```java
+  public class DeviceController {
+    // ...
+    public void sendShutDown() {
+      DeviceHandle handle = getHandle(DEV1);
+      if (handle != DeviceHandle.SUSPENDED) {
+        retrieveDeviceRecord(handle);
+        if (record.getStatus() != DEVICE_SUSPENDED) {
+          pauseDevice(handle);
+          clearDeviceWorkQueue(handle);
+          consoleDevice(handle);
+        } else {
+          logger.log("Device suspended. Unable to shut down");
+        }
+      } else {
+        logger.log("Invalid handle for: " + DEV1.toString());
+      }
+    }
+  }
+  ```
+
+  - 오류가 발생하면 아래와 같이 예외를 던지는 편이 낫다.
+    - 호출자 코드가 더 깔끔해진다.
+  - 메인 로직을 처리하는 부분과 오류를 처리하는 부분이 분리되어 각 부분을 독립적으로 살펴보고 이해할 수 있다.
+
+  ```java
+  public class DeviceController {
+    public void sendShutDown() {
+      try {
+        tryToShutDonw();
+      } catch (DeviceShutDownError e) {
+        logger.log(e);
+      }
+    }
+  
+    private void tryToShutDonw() throws DeviceShutDownError {
+      DeviceHandle handle = getHandle(DEV1);
+      DeviceRecord record = retrieveDeviceRecord(handle);
+      pauseDevice(handle);
+      clearDeviceWorkQueue(handle);
+      consoleDevice(handle);
+    }
+  
+    private DeviceHandle getHandle(DeviceID id) {
+      // ...
+      throw new DeviceShutDownError("Invalid handle for: " + id.toString());
+      // ...
+    }
+  }
+  ```
 
 
 
 
+- Try-Catch-Finally 부터 작성해라
 
+  - 어떤 면에서 try 블록은 트랜잭션과 유사하다.
+    - try 블록에서 무슨 일이 생기든지 catch 블록은 프로그램 상태를 일관성 있게 유지해야 한다.
+    - 따라서 예외가 발생할 코드를 짤 때는 try-catch-finally문으로 시작하는 것이 좋다.
+    - 그러면 try 문에서 무슨 일이 생기든지 호출자가 기대하는 상태를 정의하기 쉬워진다.
+  - 아래는 파일이 없으면 예외를 던지는지 알아보는 단위 테스트다.
+
+  ```java
+  @Test(expected = StorageException.class)
+  public void retrieveSectionShouldThrowOnInvalidFileName() {
+    sectionStore.retrieveSection("invalid-file");
+  }
+  ```
+
+  - 단위 테스트에 맞춰 아래와 같은 코드를 구현했다.
+    - try-catch-finally를 작성하지 않았다.
+    - 아래 코드는 예외를 던지지 않으므로 단위 테스트는 실패한다.
+
+  ```java
+  public List<RecordedGrip> retrieveSection(String sectionName) {
+    return new ArrayList<RecordedGrip>();
+  }
+  ```
+
+  - 아래와 같이 예외를 던지도록 코드를 수정한다.
+    - 이제 테스트는 성공하게 된다.
+
+  ```java
+  public List<RecordedGrip> retrieveSection(String sectionName) {
+  try {
+    FileInputStream stream = FileInputStream(sectionName);
+    stream.close();
+  } catch (FileNotFoundException e) {
+    throw new StorageException("retrieval error", e);
+  } 
+  return new ArrayList<RecordedGrip>();
+  }
+  ```
+
+
+
+- 미확인 예외를 사용하라.
+
+  > 이 부분의 서문이 "논쟁은 끝났다"인데, [엘레강트 오브젝트]의 자자가 이에 반박하듯 자신의 블로그에 [The Debate Is Not Over](https://www.yegor256.com/2015/07/28/checked-vs-unchecked-exceptions.html)라는 제목으로 확인 예외의 필요성을 주장하는 글을 올렸다.
+
+  - 확인된(checked) 예외와 미확인(unchecked) 예외
+    - 확인된 예외는 다른 언어에는 없는 Java만의 예외로, 컴파일러가 예외 처리를 강제하는 예외이다.
+    - 확인된 예외를 처리하는 코드를 작성하지 않을 경우 컴파일 타임에 컴파일 에러가 발생하게 된다.
+    - `Exception` class의 자손들 중 `RuntimeException`의 자손이 아닌 class들이 확인 예외에 해당하며 `FileNotFoundException`가 대표적인 확인된 예외다.
+    - 반면에 미확인 예외는 다른 언어들에도 존재하는 예외로, 처리하지 않아도 컴파일 에러가 발생하지 않는다.
+  - 확인된 예외와 비확인 예외 중 무엇을 사용해야 하는지에 관해 Java 개발자들 사이에서 오랫동안 논쟁이 있었다.
+    - 확인된 예외가 견고한 애플리케이션을 만드는 데 도움을 준다는 주장과 생산성을 떨어뜨린다는 주장이 대립했다.
+    - 그러나 애플리케이션의 규모가 점차 거대해지면서 모든 예외를 예측해서 처리하는 것이 불가능에 가까워졌고, 오히려 예외 처리에 더 많은 시간을 할애하게 된다는 단점으로 인해 확인된 예외는 요즘에는 거의 사용되지 않는다.
+    - Java와 완전히 호환되도록 제작된 Kotlin은 확인된 예외를 강제하지 않으며, Spring 역시 확인된 예외를 처리하지 않는다.
+  - 확인된 예외는 OCP를 위반한다.
+    - 메서드에서 확인된 예외를 던졌는데 catch 블록이 세 단계 위에 있다면 그 사이 메서드 모두가 선언부에 해당 예외를 정의해야한다.
+    - 즉, 하위 단계에서 코드를 변경하면 상위 단계 메서드 선언부를 전부 고쳐야 한다는 말이다.
+    - 모듈과 관련된 코드가 전혀 바뀌지 않았더라도 모듈을 다시 빌드한 다음 배포해야 한다는 말이다.
+  - 확인된 예외는 대규모 시스템에도 부적절하다.
+    - 대규모 시스템에서 호출이 일어나는 방식을 생각해보면, 최상위 함수가 아래 함수를 호출하고, 아래 함수는 그 아래 함수를 호출한며, 단계를 내려갈수록 호출하는 함수 수는 늘어난다.
+    - 이제 최하위 함수를 변경해 새로운 오류를 던진다고 가정하자
+    - 확인된 오류를 던진다면 함수는 선언부어 throws 절을 추가해야한다.
+    - 그러면 변경한 함수를 호출하는 모두가 catch 블록에서 새로운 예외를 처리하거나, 선언부에 throw절을 추가해야한다.
+    - 결과적으로 최하위 단계에서 최상위 단계까지 연쇄적인 수정이 일어난다.
+    - throws 경로에 위치하는 모든 함수가 최하위 함수에서 던지는 예외를 알아야 하므로 캡슐화가 깨진다.
+    - 오류를 원거리에서 처리하기 위해 예외를 사용한다는 사실을 감안하면 이처럼 확인된 예외가 캡슐화를 깨버리는 현상은 부적절하다.
+  - 때로는 확인된 예외가 유용할 수도 있다.
+    - 예를 들어 아주 중요한 라이브러리를 작성한다면 모든 예외를 잡아야 할 수 있다.
+    - 그러나 일반적인 애플리케이션은 의존성이라는 비용이 이익보다 크다.
+
+
+
+- 예외에 의미를 제공해야한다.
+  - 예외를 던질 때는 전후 상황을 충분히 덧붙여야한다.
+    - 이를 통해 오류가 발생한 원인과 위치를 찾기 쉬워진다.
+    - Java는 모든 예외에 호출 스택을 제공한다.
+    - 하지만 실패한 코드의 의도를 파악하려면 호출 스택만으로는 부족한다.
+  - 오류 메시지에 정보를 담아 예외에 함께 던져야한다.
+    - 실패한 연산 이름과 실패 유형도 언급해야한다.
+    - 애플리케이션이 로그를 남긴다면 catch 블록에서 오류를 기록하도록 충분한 정보를 넘겨줘야 한다.
+
+
+
+- 호출자를 고려해 예외 클래스를 정의하라.
+
+  - 아래 코드는 오류를 형편없이 분류한 예시이다.
+    - 외부 라이브러리를 호출하는 try-catch-finally 문을 포함한 코드로, 외부 라이브러리가 던질 예외를 모두 잡아낸다.
+    - 아래 코드는 중복이 심하지만, 오류를 처리하는 방식 자체는 우리가 오류를 처리하는 일반적인 방식이다.
+    - 대다수 상황에서 우리가 오류를 처리하는 방식은 오류를 일으킨 원인과 무관하게 비교적 일정하다.
+    - 먼저 오류를 기록하고, 오류에도 불구하고 프로그램을 계속 수행할 수 있는지 확인한다.
+
+  ```java
+  ACMEPort port = new ACMEPort(12);
+  
+  try {
+      port.open();
+  } catch (DeviceResponseException e) {
+      reportPortError(e);
+      logger.log("Device response exception", e);
+  } catch (ATM1212UnlockedException e) {
+      reportPortError(e);
+      logger.log("Unlock exception", e);
+  } catch (GMXError e) {
+      reportPortError(e);
+      logger.log("Device response exception");
+  } finally {
+      // ...
+  }
+  ```
+
+  - 위 코드의 문제점
+    - 호출자 입장에서 각기 다른 예외를 모두 개별적으로 처리해 줘야한다.
+    - 만약 예외를 개별적으로 처리하지 않고, 단일한 방식으로 처리할 수 있다면 호출자 입장에서는 예외를 처리하기가 훨씬 간단해진다.
+
+  - 위 코드를 아래와 같이 수정한다.
+    - 위 코드는 예외에 대응하는 방식이 예외 유형과 무관하게 거의 동일하다.
+    - 그래서 코드를 간결하게 고치기 아주 쉽다.
+    - 호출하는 라이브러리 API를 감써면서 예외 유형 하나를 반환한다.
+
+  ```java
+  LocalPort port = new LocalPort(12);
+  
+  try {
+      port.open();
+  } catch (PortDeviceFailure e) {
+      reportPortError(e);
+      logger.log(e.getMessage(), e);
+  } finally {
+      // ...
+  }
+  ```
+
+  - 위에서 `LocalPort` 클래스는 단순히 `ACMEPort` 클래스가 던지는 예외를 잡아 변환하는 wrapper 클래스일 뿐이다.
+    - `LocalPort` 클래스처럼 `ACMEPort`를 감싸는 클래스는 매우 유용하다. 
+    - 실제로 외부 API를 사용할 때는 감싸기 기법이 최선이다.
+    - 외부 API를 감싸면 외부 라이브러리와 프로그램 사이에서 의존성이 크게 줄어든다.
+    - 나중에 다른 라이브러리로 갈아타도 비용이 적다.
+    - 또한 감싸기 클래스에서 외부 API를 호출하는 대신 테스트 코드를 넣어주는 방법으로 프로그램을 테스트하기도 쉬워진다.
+
+  ```java
+  public class LocalPort {
+      private ACMEPort innterPort;
+      
+      public LocalPort(int portNumber) {
+          innerPort = new ACMEPort(portNumber);
+      }
+      
+      public void open() {
+          try {
+              innerPort.open();
+          } catch (DeviceResponseException e) {
+              throw new PortDeviceFailure(e);
+          } catch (ATM1212UnlockedException e) {
+              throw new PortDeviceFailure(e);
+          } catch (GMXError e) {
+              throw new PortDeviceFailure(e);
+          } finally {
+              // ...
+          }
+      }
+  }
+  ```
+
+
+
+- 정상 흐름을 정의하라
+
+  - 아래 예시는 비용 청구 애플리케이션에서 총계를 계산하는 코드다.
+    - 식비를 비용으로 청구했다면 직원이 청구한 식비를 총계에 더한다.
+    - 식비를 비용으로 청구하지 않았다면(`expenseReportDAO.getMeals()` 메서드가 `MealExepnsesNotFound`를 발생시킨다면) 일일 기본 식비를 총계에 더한다.
+    - 그런데 예외가 논리를 따라가기 어렵게 만든다.
+
+  ```java
+  try {
+      MealExpenses expense = expenseReportDAO.getMeals(employee.getID());
+      m_total += expenses.getTotal();
+  } catch(MealExepnsesNotFound e) {
+      m_total += getMealPerDiem;
+  }
+  ```
+
+  - 특수 상황을 처리할 필요가 없다면 코드는 아래와 같이 훨씬 더 간결해진다.
+
+  ```java
+  MealExpenses expenses = expenseReportDAO.getMeals(employee.getID());
+  m_total += expenses.getTotal();
+  ```
+
+  - 위와 같이 특수 상황을 처리할 필요가 없게 만들려면, `expenseReportDAO.getMeals()` 메서드가 항상 `MealExpenses` 객체를 반환하게 만들면 된다.
+    - 예를 들어 청구한 식비가 없다면 아래와 같이 `MealExpenses` 구현하는 클래스를 만들고, 일일 기본 식비를 반환하는 메서드를 구현하면 된다.
+    - 이제 `expenseReportDAO.getMeals()`가 호출될 때 청구한 식비가 없다면, 아래에서 정의한 `PerDiemMEalExpenses`의 인스턴스를 반환하게 한다.
+    - 그럼 `MealExepnsesNotFound`가 던져지지 않으므로 예외 처리를 할 필요가 없어진다.
+
+  ```java
+  public class PerDiemMEalExpenses implements MealExpenses {
+      public int getTotal() {
+          // 기본값으로 기본 식비를 반환한다.
+      }
+  }
+  ```
+
+  - 위와 같은 방식을 특수 사례 패턴(special case pattern)이라 부른다.
+    - 클래스를 만들거나 객체를 조작해 특수 사례를 처리하는 방식이다.
+    - 예를 들어 위 예시에서는 식비를 비용으로 청구하지 않은 특수 사례를 기존에는 예외를 던져 처리했으나, 특수 사례 패턴을 적용하여`PerDiemMEalExpenses` 클래스를 만들어, 해당 클래스에서 식비를 비용으로 청구하지 않은 경우 기본 식비를 반환하게 만들었다.
+    - 특수 사례 패턴을 사용하면 클래스나 객체가 예외적인 상황을 캡슐화해서 처리하므로 클라이언트 코드가 예외적인 상황을 처리할 필요가 없어진다.
 
 
 
