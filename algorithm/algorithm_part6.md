@@ -514,3 +514,388 @@
 - 구현
   - [simpleRaft](https://github.com/streed/simpleRaft) github repository에서 Python으로 raft algorithm을 구현한 코드를 볼 수 있다.
   - 다른 언어로 구현한 ratf alogrithm은 [링크](https://raft.github.io/?ref=seongjin.me)에서 볼 수 있다.
+
+
+
+
+
+# Markov Model
+
+- 마르코프 모형(Markov Model)
+
+  - Markov Property
+    - 미래의 상태는 오직 현재의 상태에만 영향을 받는 것을 의미한다.
+    - 즉 미래의 상태는 과거의 상태에는 영향을 받지 않으며, 오직 현재의 상태에만 영향을 받는다.
+    - 러시아 수학자 Andrey Markov가 러시아어 문헌에 나오는 글자들의 순서에 관한 모델을 구축하기 위해 제안된 개념으로, Markov의 이름을 따서 명명됐다.
+    - 아래 수식은 Markov Property를 표현한 것이다.
+    - 현재 상태 $q_i$가 일어날 확률을 $P[q_i|q_1,...,q_{i-1}]$와 같이 이전 모든 상태 $q_1,...,q_{i-1}$를 조건으로 계산하나 $P(q_i|q_{i-1})$와 같이 직전의 상태 만을 조건으로 계산하나 결과는 같다는 의미이다.
+    - 즉 현재 상태($q_i$)가 나타날 확률은 오직 이전 상태($q_{i-1}$)에만 의존한다.
+
+  $$
+  P[q_i|q_1,...,q_{i-1}] = P(q_i|q_{i-1})
+  $$
+
+  
+
+  - Markov model이란 여러 개의 상태가 존재할 때 상태간의 전의 확률을 Markov property로 정의한 것을 말한다.
+    - 어떤 상태로 들어갈 확률이 들어가기 직전 상태에만 의존하는 확률 과정, 즉 다음에 나올 상태에 대한 확률값이 직전 과거에만 종속된 모델이다.
+    - Pseudo-randomly(완전히 무선적이지는 않지만 무선적인 것 처럼) 변화하는 system을 modeling하기 위한 확률적 모델이다.
+  - 각기 다른 상황에 쓰이는 4가지 Markov model이 있다.
+    - 순차적인 상태가 모두 관측 가능한지 여부와 관찰 결과를 토대로 system을 조정하는지 여부에 따라 구분된다.
+
+  |                                         | 모든 상태가 관측 가능   | 일부 상태만 관측 가능                        |
+  | --------------------------------------- | ----------------------- | -------------------------------------------- |
+  | 관측 결과를 토대로 system 조정          | Markov chain            | Hidden Markov Model                          |
+  | 관측 결과를 토대로 system 조정하지 않음 | Markov decision process | Partially observable Markov decision process |
+
+  - Markov chain(Markov process)
+    - 가장 단순한 Markov model이다.
+    - 시간에 따라 변화하는 random variable로 system의 state를 modeling한다.
+  - Hidden Markov Model(HMM)
+    - 상태가 부분적으로만 관측 가능하거나, 노이즈가 있는 상태로 관측 가능한 Markov Chain이다.
+    - 관찰 결과가 system의 state와 관련되어 있기는 하지만, state를 정확히 결정하기에는 불충분한 경우이다.
+    - Viterbi나 forward 같이 HMM을 위한 잘 알려진 algorithm들이 있다.
+    - Viterbi algorithm은 가장 일치할 확률이 높은 state들의 sequence를 계산하는 algorithm이다.
+    - Forward algorithm은 관찰 결과들의 sequence의 확률을 계산하는 algorithm이다.
+  - Markov decision process
+    - 상태의 전이가 현재 상태와 system에 적용되는 action vector에 영향을 받는 Markov chain이다.
+  - Partially observable Markov decision process(POMDP)
+    - System의 state가 부분적으로만 관찰 가능한 Markov decision process이다.
+
+
+
+- 마르코프 연쇄(Markov Chain)
+
+  - State라 불리는 ramdom variable들의 sequence의 확률을 계산하는 model이다.
+    - State의 값은 특정 집합으로부터 설정된다.
+    - 예를 들어 단어나 tag, 혹은 날씨와 같이 무엇이든 대표할 수 있는 상징이기만 하면 된다.
+  - Markov chain은 sequence 내에서 미래를 예측할 때, 오직 현재 상태만을 고려해도 된다고 추정한다.
+    - 현재 상태 이전의 상태는 현재 상태를 통하지 않고는 미래에 영향을 주지 않는다.
+    - 예를 들어 내일 날씨를 추정할 때 오늘의 날씨만 토대로 하고 어제의 날씨는 고려하지 않는 것과 같다.
+  - Markov Assumtion
+    - Markov property를 포함하고 있는 model을 표현하기 위해 사용되는 용어이다.
+
+  $$
+  P(q_i=a|q_1,...,q{i-1}) = P(q_i=a|q_{qi-1})
+  $$
+
+  - 아래 그림은 weather event들의 sequence의 확률을 할당하기 위한 Markov chain을 보여준다.
+    - 그래프상에서 state는 node로 표현되고, 전이는 전이의 확률과 함께 간선으로 표시된다.
+    - 전이는 확률이기 때문에 하나의 state에서 출발한 arc들의 값의 합은 1이 되어야 한다.
+    - 예를 들어 WARM에서 출발한 arc는 COLD로 전이되거나(확률 0.1), HOT으로 전이되거나(확률 0.3), 다시 WARM으로 전이된다(확률 0.6).
+    - 이 때 각 확률을 모두 합한 확률은 1일 수 밖에 없다.
+
+  ![image-20241216143732434](algorithm_part6.assets/image-20241216143732434.png)
+
+  - Markov chain은 아래 세 가지 요소로 구성된다.
+
+    - $Q=q_1q_2...q_N$: $N$개의 state 집합
+    - $A=a_{11}a_{12}...a_{N1}...a_{NN}$: 전이 확률 행렬 A, 각 원소 $a_{ij}$는 상태 i에서 상태 j로 이동할 확률을 나타낸다.
+    - 아래 수식은 모든 $i$에 대하여($\forall i$) $i$에서 모든 가능한 상태 $j$로 전이될 확률의 합은 1이라는 의미이다.
+
+    $$
+    \sum_{j=1}^{n}a_{ij} =1\ \ \  \forall i
+    $$
+
+    - $\pi=\pi_1,\pi_2,...,\pi_N$: 초기 확률 분포로, 체인이 시작할 때 각 상태에서 시작할 확률을 나타낸다.
+    - $\pi_i$는 Markov chain이 상태 $i$에서 시작할 확률을 나타내며, 어떤 state $j$는 $\pi_j=0$일 수 있다(즉, 해당 state에서 시작할 수 없을 수 있다).
+    - 아래 수식은 초기 확률의 합은 1이라는 의미로, 체인은 반드시 하나의 상태에서 시작한다.
+
+    $$
+    \sum_{j=1}^{N}\pi_{i} = 1
+    $$
+
+  - 예시
+
+    - State의 집합은 {HOT, COLD, WARM}이라는 세 개의 state로 구성된다.
+    - 위 그림에서 HOT에서 HOT, COLD, WARM으로 전이될 확률은 각각 0.6, 0.1, 0.3이다.
+    - HOT에서 시작할 확률은 0.6, COLD에서 시작할 확률은 0.3, WARM에서 시작할 확률은 0.1이라 할 때 $\pi_1$의 값은 0.6이다.
+
+    $$
+    Q=\{HOT, COLD, WARM\} \\
+    \\
+    A=\begin{bmatrix}
+    .6 & .1 & .3 \\
+    .1 & .8 & .1 \\
+    .3 & .1 & .6
+    \end{bmatrix} \\
+    \\
+    \pi_1 = 0.6
+    $$
+
+    - 이 때, state sequence [HOT, COLD ,WARM]의 확률은 아래와 같이 계산한다.
+    - 초기 상태가 HOT으로 시작할 확률, 상태 HOT에서 COLD로 전이할 확률, 그리고 상태 COLD에서 WARM으로 전이할 확률을 곱하면 된다.
+
+    $$
+    P(Q)=P(HOT)⋅P(COLD∣HOT)⋅P(WARM∣COLD)\\
+    P(HOT)=π_1=0.6\\
+    P(COLD∣HOT)=A_{12}=0.1\\
+    P(WARM∣COLD)=A_{23}=0.1 \\
+    $$
+
+    - 결국 0.6\*0.6\*0.1이 되어 확률은 0.006(0.6%)이 된다.
+
+
+
+- Hidden Markov Model(HMM)
+
+  - 실제 세계에서 우리가 관심있는 event들은 은닉되어(hidden)있다.
+
+    - Markov chain은 관찰 가능한 event들의 sequence의 확률을 계산할 때는 유용하지만, 모든 event가 관찰가능하지 않을 경우에는 사용할 수 없다.
+    - 예를 들어 일반적으로 text 그 자체에서 품사를 관찰할 수는 없으며, word sequence를 통해 품사를 추론해야한다.
+    - 즉, "먹다"라는 word에는 품사에 대한 정보가 포함되어 있지 않으며(먹다(동사)와 같이 쓰지 않는다), 따라서 "다"로 끝나는 것을 토대로 동사라는 것을 추론해야한다.
+    - 품사를 관찰할 수 없으므로 은닉되어(hidden)있다고 표현한다.
+
+  - HMM은 관찰 가능한 event들과 은닉된 event들을 모두 고려한다.
+
+    - 위에서 살펴본 세 개의 요소 외에 몇 가지를 추가적으로 고려한다.
+    - $O=o_1o_2...o_T$: T개의 관측치들의 sequence.
+    - $B=b_i(o_t)$: 관측치 확률의 sequence를 의미하며 emission probability(발산 확률)라고도 부른다.
+    - 상태 $q_i$에서 관측치 $o_t$가 생성될 확률을 나타낸다(은닉된 상태로부터 관측치가 발산될 확률).
+
+  - 1차 HMM은 두 가지 단순화된 가정을 설정한다.
+
+    - Markov Assumtion: Markov chain에서 살펴봤던 것과 동일하다.
+    - Output Independence: 출력 관측치 $o_i$의 확률은 오직 관측치를 생성한 상태인 $q_i$에만 의존하며, 다른 상태나 관측치에는 영향을 받지 않는다(그러므로 각 hidden state가 오직 하나의 관측치만을 생성한다).
+
+    $$
+    P(o_i|q_1...q_i,...,q_T,o_1,...,o_i,...o_T) = P(o_i|q_i)
+    $$
+
+  - 예시
+
+    - 예를 들어 2799년에 이상 기후의 역사에 대해 연구하는 기상학자가 있다고 가정해보자.
+    - 2020년에 Baltimore와 MaryLand의 날씨에 대한 기록이 남아있지 않은 상태이다.
+    - 그러나 당시에 Jason Eisner라는 사람이 2020년 여름에 자신이 얼마나 많은 ice cream을 먹었는지 매일 기록한 일기는 가지고 있다.
+    - 기상학자는 이 일기를 가지고 매일의 기온을 추정하려한다.
+    - 단순화하기 위해 오직 cold와 hot이라는 두 가지 종류의 날씨만 있었다고 가정한다.
+    - 결국 이 과제는 아래와 같이 요약할 수 있다.
+    - Observation의 sequence O(sequence의 각각은 주어진 날짜에 먹은 ice cream의 개수이다)가 주어졌을 때, 이를 토대로 은닉된 기후 상태(hot, cold) sequence Q를 찾아야한다.
+
+  - 아래 그림은 위 예시 task에 대한 HMM 예시를 보여준다.
+
+    > [그림 출처](https://web.stanford.edu/~jurafsky/slp3/A.pdf)
+
+    - 은닉된 상태: COLD, HOT.
+    - 관측치: Jason이 주어진 날에 먹은 ice cream의 개수({1, 2, 3}).
+    - $B$는 발산 확률을 나타내며, $B_1$은 COLD 상태에서 각 ice cream 개수가 관찰될 확률, $B_2$는 HOT 상태에서 각 ice cream 개수가 관찰될 확률이다.
+    - 즉 $P(1|COLD)=0.5$는 숨겨진 상태가 COLD일 때, 관측치인 ice cream의 개수가 1일 확률이 0.5라는 의미이다.
+
+  ![image-20241216153945687](algorithm_part6.assets/image-20241216153945687.png)
+
+  - HMM은 아래와 같은 세 가지가 핵심이다.
+    - $A$는 전이 확률, $B$는 발산 확률을 의미한다.
+    - Likelihood(우도) 계산: 주어진 $HMM λ=(A,B)$와 관측치 시퀀스 $O$에 대해 관측치 시퀀스 $O$가 HMM λ에 의해 생성될 확률$P(O|\lambda)=P(O|A,B)$을 계산하는 것.
+    - Decoding: 주어진 $HMM λ=(A,B)$와 관측치 sequence $O$에 대해 가장 가능성이 높은 hidden state sequence $Q$를 찾는 것.
+    - Learning: 주어진 관측치 시퀀스 $O$와 state들의 집합에 대해 HMM parameter인 A(전이 확률)와 B(발산 확률)를 학습하는 것.
+
+
+
+- Likieihood(우도) 계산
+
+  - Likelihood(모델 λ가 주어졌을 때 특정 관측치 sequence가 나타날 확률) 계산
+
+    - 모델 λ를 통해 관찰값을 생성했을 때 실제 관측치 sequence와 동일하게 나타날수록, 모델 λ의 정확성이 높은 것으로 볼 수 있다.
+
+  - Markov chain에서는 간단하게 구할 수 있다.
+
+    - Markov chain에서는 관측치가 곧 state이므로, 관측치 sequence가 {3, 1, 3}일 확률을 구하려면 단순히 각 state를 따라 가면서 arc의 확률을 곱하기만 하면 된다.
+    - 예를 들어 상태 전이 확률 행렬이 아래와 같을 때, 관측치 sequence가 {3, 1, 3}일 확률은 $P(3,1,3)=P(시작\ 상태가\ 3) \times P(1|3)\times P(3|1)$과 같이 계산하면 바로 구할 수 있다.
+
+    $$
+    A=\begin{bmatrix}
+    P(3 \to 3) & P(3 \to 1) \\
+    P(1 \to 3) & P(1 \to 1) \\
+    \end{bmatrix} \\
+    $$
+
+  - 그러나 HMM에서는 위와 같이 단순하게 구할 수 없다.
+
+    - Markov chain과 달리 HMM에서는 관측치(ice cream의 개수)와 state(날씨)가 다르기 때문이다.
+
+  - Hidden state sequence를 알고 있다고 가정할 경우의 계산
+
+    - 보다 단순한 상황를 가정해서, 우리가 이미 날씨 정보를 알고 있는 상태에서 Jason이 몇 개의 ice cream을 먹었는지 예측하기를 원한다고 가정해보자.
+    - 주어진 hidden state sequence에 대해(e.g. {hot, hot, cold}) 관측치 sequence의 likelihood를 아래와 같이 단순하게 계산할 수 있다.
+    - 먼저, HMM에서는 각 hidden state가 오직 하나의 관측치만을 생성한다는 것을 기억해야한다.
+    - 그러므로, hidden state의 sequence와 관측치 sequence는 같은 길이를 갖는다.
+    - 이 일대일 대응 관계와 Markov assumtion으로부터 아래와 같은 식을 도출할 수 있다.
+    - 특정 hidden state의 sequence $Q=\{q_1,q_2,...,q_T\}$와 관측치 sequence $O=\{o_1,o_2,...,o_T\}$가 주어졌을 때, 관측치 sequence의 likelihood는 아래 식과 같다.
+
+    $$
+    P(O|Q) = \prod_{i=1}^TP(o_i|q_i)
+    $$
+
+    - 예를 들어 hidden state의 sequence {hot, hot, cold}와 ice cream 관측치 {3, 1, 3}가 주어졌을 때, forward probability의 계산은 아래와 같다.
+
+    $$
+    P(3\ 1\ 3 | hot\ hot\ cold) = P(3|hot) \times P(1|hot) \times P(3|cold)
+    $$
+
+    - 그림으로 나타내면 아래와 같다.
+
+    ![image-20241216174844206](algorithm_part6.assets/image-20241216174844206.png)
+
+  - 그러나, 실제로는 hidden state sequence를 알 수 없다.
+
+    - 따라서 모든 가능한 weather sequence를 고려하여 확률을 합산하여  ice cream event [3, 1, 3]의 확률을 계산해야한다.
+    - 먼저, 특정 weather sequence Q와 관측치 sequence O가 동시에 발생할 확률(joint probability)을 계산한다.
+    - $P(O,Q)$는 관측치 sequence O와 hidden state sequence Q가 동시에 발생할 확률이다.
+    - $P(O|Q)$는 hidden state sequence Q에서 관측치 sequence O가 발생할 확률이며, 각 관측치는 hidden state로부터 발산하기 때문에 각 상태에서의 발산 확률인 $P(o_i|q_i)$의 곱으로 계산한다.
+    - $P(Q)$는 특정 hidden state sequence Q 자체가 발생할 확률로, 상태 전이는 Markov property를 따르므로 현재 상태 $q_i$는 이전 상태 $q_{i-1}$에만 의존한다.
+
+    $$
+    P(O,Q)=P(O|Q) \times P(Q) = \prod_{i=1}^TP(o_i|q_i) \times \prod_{i=1}^TP(q_i|q_{i-1})
+    $$
+
+    - 예를 들어 hidden state sequence가 [hot, hot, cold]이고, ice cream 관측치 sequence가 [3, 1, 3]이면, 아래와 같이 계산한다.
+
+    $$
+    P(3\ 1\ 3,hot\ hot\ cold) = P(hot|start) \times P(hot|hot) \times P(cold|hot)\\
+    \qquad \qquad \qquad \qquad \times P(3|hot) \times P(1|hot) \times P(3|cold)
+    $$
+
+    - 그림으로 나타내면 아래와 같다.
+
+    ![image-20241216174823606](algorithm_part6.assets/image-20241216174823606.png)
+
+    - 특정 hidden state sequence와 관측치 sequence의 joint probability를 계산하는 식이 위와 같으므로, 관측치에 대한 총 확률을 구하는 식은 아래와 같이, 모든 가능한 hidden state sequence에 대한  joint probability를 합하면 된다.
+
+    $$
+    P(O)=\sum_QP(O,Q) = \sum_QP(O|Q)P(Q)
+    $$
+
+  - N개의 hiddne state와 T개의 관측치가 있을때, 가능한 hidden sequence의 개수는 $N^T$개 이다.
+
+    - 예를 들어 위 예시에서 hidden state는 cold와 hot으로 2개가 있고, 관측치는 [3, 1, 3]으로 3개가 있으므로, 가능한 hidden sequence의 개수는 $2^3=8$개이다.
+    - 실제 세계에서는 N과 T 모두 큰 값일 것이므로 $N^T$는 매우 큰 값이 될 것이다.
+    - 따라서 각각의 모든 hidden state sequence에 대해서 우도를 계산한뒤 그 결과를 합하는 것은 현실적으로 불가능하다.
+    - 그러므로 보다 효율적인 algorithm을 사용해야한다.
+
+
+
+- Forward Algorithm
+
+  - Likelihood를 $O(N^2T)$에 계산할 수 있게 해주는 algorithm이다.
+
+    - DP를 사용하여 시간 복잡도를 줄인다.
+    - 관찰 시퀀스의 확률을 계산하는 과정에서 중간 값을 저장하기 위해 테이블을 사용한다.
+    - 관찰 시퀀스를 생성할 수 있는 모든 가능한 숨겨진 상태 경로의 확률을 합산하여 관찰 시퀀스의 확률을 계산한다. 
+    - 이 과정에서 single forward trellis에 각 경로를 명시적으로 나열하는 방식으로 계산을 수행한다.
+
+  - Forward trellis 예시
+
+    - 아래 그림은 관측치 sequence [3, 1, 3]의 우도를 계산하는 forward trellis를 묘사한 것이다.
+    - Hidden state는 원으로 표현되어 있고, 관측치는 정사각형으로 표현되어 있다.
+    - 점선으로 그려진 원은 불가능한 전이를 나타낸다.
+
+    ![image-20241217152141385](algorithm_part6.assets/image-20241217152141385.png)
+
+  - Forward algorithm의 각 cell에 해당하는 $\alpha_t(j)$는 주어진 automaton $λ$에 대해 시간 $t$에 상태 $j$일 확률을 나타내며, forward 확률이라 부른다.
+
+    - 예를 들어 아이스크림 예시에서 $\alpha_2(1)$은 아이스크램 3개($o_1$)과 1개($o_2$)가 연속으로 관측됐고, 두 번째 시점(t=2)의 날씨가 cold($q_1$)일 확률이다.
+    - $\alpha_t(j)$는 아래와 같이 표현할 수 있다.
+    - $q_t=j$의 의미는 state sequence의 t번째 state가 $j$라는 의미이다.
+
+  $$
+  \alpha_t(j)=P(o_1,o_2...o_t,\ q_t=j|\lambda)\\
+  $$
+
+  - $\alpha_t(j)$의 값은 해당 cell에 도달할 수 있는 모든 경로의 확률의 합으로 계산한다.
+
+    - 시간 $t$에 주어진 상태 $q_j$에 대하여 $\alpha_t(j)$는 아래와 같이 계산하며, 크게 세 부분으로 나뉜다.
+    - $\alpha_{t-1}(i)$:  이전 시간 단계인 t−1에서 상태 i에 도달할 확률(이전의 Forward 경로 확률).
+    - $a_{ij}$: 이전 상태 $q_i$에서 $q_j$로 전이될 확률(전이 확률).
+    - $b_j(o_t)$: 상태 $j$에서 관찰값 $o_t$가 발산할 확률(발산 확률).
+
+    $$
+    a_t(j)=\sum_{i=1}^N\alpha_{t-1}(i) \times a_{ij} \times b_{j}(o_t)
+    $$
+
+  - 그림으로는 아래와 같이 표현할 수 있다.
+
+  ![image-20241217163614148](algorithm_part6.assets/image-20241217163614148.png)
+
+  - $\alpha_2(2)$ 계산 예시
+    - $\alpha_2(2)$은 time step 2일 때 state 2($q_2$, hot)일 forward 확률이다.
+    - Time step 1에서 time step2의 state 2로 가는 두 개의 경로의 확률을 더하여 구할 수 있다.
+    - 첫 번째 경로: $\alpha_1(1)\times P(H|C) \times P(1|H)$
+    - 두 번째 경로: $\alpha_1(2) \times P(H|H) \times P(1|H)$
+    - 각기 $\alpha_{t-1}(i)a_{ij}b_{j}(o_t)$의 형태로, 첫 번째 경로를 예로 들면 $a_1(1)$이 $\alpha_{t-1}$에 해당하고, $P(H|C)$가 $a_{ij}$에 해당하며, P(1|H)가 $b_j(o_t)$에 해당한다.
+    - $\alpha_2(2)=\alpha_1(1)\times P(H|C) \times P(1|H)\ \ +\ \  \alpha_1(2) \times P(H|H) \times P(1|H)$
+    - 이 예시에서 알 수 있는 것 처럼, forward algorithm은 특정 단계의 값을 구할 때, 직전 단계의 계산 결과를 활용한다.
+    - $\alpha_2(2)$의 계산에 $\alpha_1(1)$, $\alpha_1(2)$의 결과가 활용된다.
+  - Python으로 구현
+    - `alpha[t-1, i] * trans_prob[states[i]][curr_state] * emission_prob[curr_state][observations[t]]`부분이 $\alpha_{t-1}(i)a_{ij}b_{j}(o_t)$에 해당한다.
+
+  ```python
+  import numpy as np
+  
+  def forward_algorithm(observations, states, start_prob, trans_prob, emission_prob):
+      """
+      Forward Algorithm 구현
+      관찰값 시퀀스의 확률을 계산합니다: P(O | λ)
+  
+      Parameters:
+          observations (list): 관찰값 시퀀스 (ex: [3, 1, 3])
+          states (list): 상태 목록 (ex: ["COLD", "HOT"])
+          start_prob (dict): 초기 상태 확률 π
+          trans_prob (dict): 상태 전이 확률 A
+          emission_prob (dict): 발산 확률 B
+  
+      Returns:
+          float: 관찰값 시퀀스 O의 확률 P(O | λ)
+      """
+      # Step 1: 테이블 초기화
+      T = len(observations)  # 관찰값 시퀀스 길이
+      N = len(states)        # 상태의 수
+      alpha = np.zeros((T, N))  # Forward 확률 테이블 초기화
+  
+      # Step 2: 초기화 (t = 0)
+      for j, state in enumerate(states):
+          alpha[0, j] = start_prob[state] * emission_prob[state][observations[0]]
+  
+      # Step 3: 재귀 단계 (t > 0)
+      for t in range(1, T):
+          for j, curr_state in enumerate(states):
+              # 모든 경로 합산
+              sum_ = 0
+              for i in range(N):
+                  sum_ += alpha[t-1, i] * trans_prob[states[i]][curr_state] * emission_prob[curr_state][observations[t]]
+              alpha[t, j] = sum_
+  
+      # Step 4: 종료 단계 (모든 상태에서 확률 합산)
+      total_prob = sum(alpha[T-1, j] for j in range(N))
+  
+      return total_prob, alpha
+  
+  # HMM의 파라미터 설정
+  states = ["COLD", "HOT"]  # 숨겨진 상태 목록
+  observations = [3, 1, 3]  # 관찰값 시퀀스
+  start_prob = {"COLD": 0.2, "HOT": 0.8}  # 초기 상태 확률 π
+  
+  # 상태 전이 확률 A
+  trans_prob = {
+      "COLD": {"COLD": 0.5, "HOT": 0.5},
+      "HOT": {"COLD": 0.4, "HOT": 0.6}
+  }
+  
+  # 발산 확률 B
+  emission_prob = {
+      "COLD": {3: 0.1, 1: 0.5},  # COLD 상태에서 관찰값 3 또는 1이 나올 확률
+      "HOT": {3: 0.4, 1: 0.2}    # HOT 상태에서 관찰값 3 또는 1이 나올 확률
+  }
+  
+  # Forward Algorithm 실행
+  total_probability, alpha_table = forward_algorithm(observations, states, start_prob, trans_prob, emission_prob)
+  
+  
+  print("Forward 확률 테이블 (Alpha):\n")
+  print(f"{'Time':<8} {' | '.join([f'{state:>}' for state in states])}")
+  print("-" * (12 * (len(states) + 1)))
+  for t, row in enumerate(alpha_table):
+      formatted_row = " | ".join([f"{prob:.5f}" for prob in row])
+      print(f"{t:<6} {formatted_row}")
+  print("\n관찰값 시퀀스의 총 확률 P(O | λ): {:.6f}".format(total_probability))
+  ```
+
