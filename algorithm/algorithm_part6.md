@@ -899,3 +899,134 @@
   print("\n관찰값 시퀀스의 총 확률 P(O | λ): {:.6f}".format(total_probability))
   ```
 
+
+
+- Decoding
+  - Hiddne variable을 가진 HMM 같은 모델에서 어떤 variable들의 sequence가 관측치 sequence를 나오게 하였는지를 결정하는 작업을 decoding이라 부른다.
+    - Ice cream 예시에서 [3, 1, 3]이라는 관측치와 HMM이 주어졌을 때, 최적의 hidden weather sequence를 찾는 작업이 decoding이라 할 수 있다.
+    - 결국 관측치 집합 $O=o_1,o_2,...,o_t$와 HMM λ = (A, B)가 주어졌을 때, 가장 가능성이 높은 state의 집합 $Q=q_1q_2q_3q...q_T$를 찾아내는 과정이라 할 수 있다.
+  - Forward algorithm을 사용하는 방식으로도 구할 수 있다.
+    - 가능한 state sequence 각각에 대해서 forward algorithm을 실행하여 주어진 observation sequence에 대한 우도를 계산하는 방법도 있을 수 있다.
+    - 그러나 이는 매우 많은 연산 횟수를 필요로 하기에 현실적으로 불가능하다.
+
+
+
+- Viterbi algorithm
+
+  - 최소 편집 거리와 DP를 사용하여 효율적으로 decoding을 수행하는 algorithm이다.
+    - 아래 그림은 관측치 sequence [3, 1, 3]에 대해 viterbi trellis를 사용하여 가장 가능성이 높은 hidden state sequence를 찾는 방법을 묘사한 것이다.
+    - 아래 그림에서 hidden state는 원으로 표현되어 있고, 관측치는 정사각형으로 표현되어 있으며, 불가능한 전이는 점선으로 표현되어 있다.
+    - 두 개의 time step($t_1$, $t_2$)에서 두 개의 상태(cold, hot)에 대한 $v_t(j)$를 구하는 식이 나와있다.
+
+  ![image-20241217174126152](algorithm_part6.assets/image-20241217174126152.png)
+
+  - Trellis의 각 cell에 해당하는 $v_t(j)$는 HMM이 주어진 atomaton에서 시간 단계 t까지의 관측치를 본 후 가장 가능성 있는 상태 시퀀스 $q_1,...q_{t-1}$을 거쳐 상태 j에 있을 확률을 나타낸다.
+    - 수식으로는 아래와 같이 나타낸다.
+
+  $$
+  v_t(j)=\max_{q_1,...,q_{t-1}}P(q_1...q_{t-q},o_1,o_2,...o_t,q_t=j|\lambda)
+  $$
+
+  -  $v_t(j)$의 값은  $v_t(j)$에 도달하기 위한 가장 가능성 높은 경로를 재귀적으로 취하는 방식으로 계산된다.
+     - 다른 DP algorithm과 마찬가지로, Viterbi 역시 각 cell을 재귀적으로 채워나간다.
+     - 이미 계산이 완료된 $t-1$ time step에서 모든 상태의 확률을 계산하고, 해당 상태에서 현재 상태로 도달할 수 있는 경로들 중 가장 가능성이 높은 경로를 계산한다.
+     - 시간 $t$에 상태 $q_j$에 있을 확률은 아래와 같이 계산한다.
+     - $v_{t-1}(i)$: 이전 Viterbi 경로의 확률이다.
+     - $a_{ij}$: 이전 상태 $i$에서 현재 상태 $j$로 전이할 확률(전이 확률)이다.
+     - $b_j(o_t)$: 관측치 $o_t$가 현재 상태 $j$에서 나타날 확률(발산 확률)이다.
+
+  $$
+  v_t(j)=\max_{i=1}^N v_{t-1}(i) \times a_{ij} \times b_j(o_t)
+  $$
+
+  - Viterbi와 forward algorithm
+    - 위 계산식을 보면 알 수 있듯이, 두 algorithm은 계산식은 거의 동일하다.
+    - 다만 Viterbi algorithm은 이전 경로 확률들에 대해 최댓값을 취하지만, forward algorithm은 합산을 취한다.
+    - 또한 Viterbi algorithm에는 forward algorithm에는 없는 backpointer라는 요소가 등장한다.
+  - Backpointer가 필요한 이유
+    - Forward algorithm은 우도만 계산하면 되는 반면에, Viterbi algorithm은 확률과 가장 확률이 높은 state sequence를 계산해야하기 때문이다.
+    - 가장 확률이 높은 state sequence를 계산하기 위해서, 각 state에 이르기 위한 hidden state들의 경로를 추적한다.
+    - 마지막에 도달했을 때, 최적 경로의 시작점까지 backtracing한다.
+    - 이를 Viterbi backtrace라 부르며, 아래 그림에 묘사되어 있다.
+
+  ![image-20241218160824046](algorithm_part6.assets/image-20241218160824046.png)
+
+  - Python으로 구현
+
+  ```python
+  import numpy as np
+  
+  def viterbi(observations, states, start_prob, trans_prob, emission_prob):
+      """
+      Parameters:
+          observations (list): 관찰 시퀀스 (예: [3, 1, 3])
+          states (list): 상태 목록 (예: ["COLD", "HOT"])
+          start_prob (dict): 초기 상태 확률 π
+          trans_prob (dict): 상태 전이 확률 A
+          emission_prob (dict): 발산 확률 B
+  
+      Returns:
+          tuple: (최적의 상태 경로, 그 확률)
+      """
+      T = len(observations)  # 관찰 시퀀스 길이
+      N = len(states)        # 상태의 수
+      
+      # Viterbi 확률 테이블과 백포인터 초기화
+      viterbi_prob = np.zeros((N, T))
+      backpointer = np.zeros((N, T), dtype=int)
+      
+      # 1. 초기화 단계 (t = 0)
+      for s, state in enumerate(states):
+          viterbi_prob[s, 0] = start_prob[state] * emission_prob[state][observations[0]]
+          backpointer[s, 0] = 0  # 시작 상태는 백포인터 없음
+      
+      # 2. 재귀 단계 (t > 0)
+      for t in range(1, T):
+          for s, curr_state in enumerate(states):
+              max_prob, max_state = max(
+                  (viterbi_prob[prev_s, t-1] * trans_prob[states[prev_s]][curr_state] * emission_prob[curr_state][observations[t]], prev_s)
+                  for prev_s in range(N)
+              )
+              viterbi_prob[s, t] = max_prob
+              backpointer[s, t] = max_state
+      
+      # 3. 종료 단계
+      best_path_prob = max(viterbi_prob[:, T-1])
+      best_path_pointer = np.argmax(viterbi_prob[:, T-1])
+      
+      # 4. 최적의 경로 추적
+      best_path = [best_path_pointer]
+      for t in range(T-1, 0, -1):
+          best_path_pointer = backpointer[best_path_pointer, t]
+          best_path.insert(0, best_path_pointer)
+      
+      # 상태 인덱스를 상태 이름으로 변환
+      best_path_states = [states[i] for i in best_path]
+      
+      return best_path_states, best_path_prob
+  
+  # HMM의 파라미터 설정
+  states = ["COLD", "HOT"]  # 숨겨진 상태 목록
+  observations = [3, 1, 3]  # 관찰값 시퀀스
+  start_prob = {"COLD": 0.2, "HOT": 0.8}  # 초기 상태 확률 π
+  
+  # 상태 전이 확률 A
+  trans_prob = {
+      "COLD": {"COLD": 0.5, "HOT": 0.5},
+      "HOT": {"COLD": 0.4, "HOT": 0.6}
+  }
+  
+  # 발산 확률 B
+  emission_prob = {
+      "COLD": {3: 0.1, 1: 0.5},  # COLD 상태에서 관찰값 3 또는 1이 나올 확률
+      "HOT": {3: 0.4, 1: 0.2}    # HOT 상태에서 관찰값 3 또는 1이 나올 확률
+  }
+  
+  # Viterbi 알고리즘 실행
+  best_path, best_path_prob = viterbi(observations, states, start_prob, trans_prob, emission_prob)
+  
+  # 결과 출력
+  print("최적의 상태 경로:", best_path)
+  print("최적의 경로 확률:", best_path_prob)
+  ```
+
