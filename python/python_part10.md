@@ -991,9 +991,305 @@
 
 
 
+# Metaprogramming
+
+- Metaprogramming
+  - Program을 data처럼 다루는 programming 기법이다.
+    - Runtime에 program을 읽고, 생성하고, 분석하고 변형하는 programming 기법이다.
+    - 단순하게 말해서, runtime에 program을 수정할 수 있는 programming 기법이다.
+    - 전통적인 programming에서는 class, function, variable 등을 생성하고, 이들을 실행시켰으나, metaprogramming에서는 이들을 data처럼 다루어 조작한다.
+  - Reflection
+    - Metaprogramming에서 reflection이란 program이 스스로의 structure, property, behavior를 runtime에 접근하고, 수정하는 것을 의미한다.
+  - Metaprogramming은 다형성을 보조하는 기능으로만 사용해야한다.
+    - Metaprogramming code는 일반적으로 더 복잡할 뿐 아니라 compile time에 추가적인 비용이 발생한다.
+    - 그러므로 metaprogramming은 비용보다 이점이 더 클 때만 사용해야한다.
 
 
 
+- Python에서의 reflection
+
+  - Python에는 reflection을 위한 다양한 기능이 내장되어 있다.
+    - Metaprogramming에서 reflection이란 program이 스스로의 structure, property, behavior를 runtime에 접근하고, 수정하는 것을 의미한다.
+    - `dir()`, `getattr()`,  `setattr()`, `hasattr()` 등 reflection에 사용할 수 있는 다양한 built-in function들을 제공한다.
+    - `inspect` standard library를 통해 object에 접근할 수 있는 다양한 method들을 제공한다.
+
+  - `dir()`
+    - `dir()`은 object의 attribute들과 method들을 list 형태로 반환하는 method로, runtime에 Python object의 정보를 파악할 수 있게 해준다.
+
+  ```python
+  class Person:
+      def __init__(self, name, age):
+          self.name = name
+          self.age = age
+  
+      def greet(self):
+          return f"Hello, my name is {self.name} and I am {self.age} years old."
+  
+  person = Person("John", 30)
+  print(dir(person))
+  """
+  ['__class__', '__delattr__', '__dict__', '__dir__', '__doc__', '__eq__', '__format__', '__ge__', '__getattribute__', '__gt__', '__hash__', '__init__', '__init_subclass__', '__le__', '__lt__', '__module__', '__ne__', '__new__', '__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__sizeof__', '__str__', '__subclasshook__', '__weakref__', 'age', 'greet', 'name']
+  """
+  ```
+
+  - `getattr()`,  `setattr()`, `hasattr()`
+    - `getattr()` method는 object의 attribute(혹은 method)를 가져오는 method로, runtime에 Python object의 attribute에 접근할 수 있게 해준다.
+    - `setattr()` method는 object의 attribute(혹은 method)를 설정하는 method로, runtime에 Python object의 attribute를 수정할 수 있게 해준다.
+    - `hasattr()` method는 object의 attribute(혹은 method)의 유무를 확인하는 method로,  runtime에 Python object에 특정 attribute가 있는지를 확인할 수 있게 해준다.
+
+  ```python
+  class Person:
+      def __init__(self, name, age):
+          self.name = name
+          self.age = age
+  
+      def greet(self):
+          return f"Hello, my name is {self.name} and I am {self.age} years old."
+  
+  
+  person = Person("John", 30)
+  greet_method = getattr(person, "greet")
+  print(greet_method())					# Hello, my name is John and I am 30 years old.
+  setattr(person, "name", "Tom")
+  print(person.name)						# Tom
+  print(hasattr(person, "name"))			# True
+  print(hasattr(person, "height"))		# False
+  ```
+
+  - `inspect ` module
+    - `inspect` module은 runtime에 object에 대한 상세 정보에 접근할 수 있게 해주는 다양한 method를 제공한다.
+
+  ```python
+  import inspect
+  
+  def greet(name: str):
+      return f"Hello, {name}!"
+  
+  print(inspect.isfunction(greet))        # True
+  print(inspect.ismethod(greet))          # False
+  print(inspect.getfullargspec(greet))    
+  # FullArgSpec(args=['name'], varargs=None, varkw=None, defaults=None, kwonlyargs=[], kwonlydefaults=None, annotations={})
+  ```
+
+  - Runtime에 custom attribute 생성하기
+    - Reflection 개념을 적용하여 runtime에 attribute와 method를 만들어 볼 것이다.
+    - `types.MethodType`은 method를 생성할 수 있게 해준다.
+
+  ```python
+  from types import MethodType
+  
+  
+  class Dog:
+      pass
+  
+  def bark(self):
+      return "Woof!"
+  
+  dog = Dog()
+  
+  # custom attribute 생성
+  dog.breed = "Labrador"
+  print(dog.breed)        # Labrador
+  
+  # custom method 설정
+  dog.bark = MethodType(bark, dog)
+  print(dog.bark())       # Woof!
+  ```
+
+
+
+- Metaprogramming 기법들
+
+  - Decorator
+    - Decorator는 가장 널리 사용되는 metaprogramming 기법 중 하나다.
+    - Method의 code를 수정하지 않고도 method의 동작 방식을 runtime에 변경할 수 있게 해준다.
+
+  ```python
+  def uppercase_decorator(func):
+      def wrapper(*args, **kwargs):
+          result = func(*args, **kwargs)
+          return result.upper()
+      return wrapper
+  
+  @uppercase_decorator
+  def greet(name):
+      return f"Hello, {name}!"
+  
+  print(greet("John"))
+  ```
+
+  - Class 역시 decorator로 사용이 가능하다.
+
+  ```python
+  class Caclculator:
+      def __init__(self, function):
+          self._function = function
+      
+      def __call__(self, *args, **kwargs):
+          print("Arguments: ", *args)
+          result = self._function(*args, **kwargs)
+          print("Result: ", result)
+          return result
+  
+  @Caclculator
+  def add(a, b):
+      return a + b
+  
+  add(1, 2)
+  ```
+
+  - Metaclass
+    - Class 생성을 위한 청사진으로 사용하는 class이다.
+    - Class가 생성될 때의 동작을 runtime에 동적으로 변경할 수 있게 해준다.
+
+  ```python
+  class MetaClass(type):
+      def __new__(cls, name, bases, attrs):
+          uppercase_attrs = {key.upper(): value for key, value in attrs.items() if not key.startswith('__')}
+          return super().__new__(cls, name, bases, uppercase_attrs)
+  
+  class MyClass(metaclass=MetaClass):
+      message = "Hello, World!"
+  
+  print(MyClass.MESSAGE)	# Hello, World!
+  ```
+
+  - Dynamic Code Generation
+    - Code를 runtime에 동적으로 생성하는 기법이다.
+    - Code를 명시적으로 작성하지 않고, code를 생성하는 code를 작성한다.
+
+  ```python
+  name = "Burt Baskin"
+  age = 31
+  
+  code = f'def greet():\n    print("Name: {name}")\n    print("Age: {age}")'
+  
+  exec(code)
+  greet()
+  """
+  Name: Burt Baskin
+  Age: 31
+  """
+  ```
+
+
+
+- Factory Pattern에서의 활용
+
+  > [Writing Maintainable Pythonic Code: Metaprogramming with Decorators](https://medium.com/@angusyuen/writing-maintainable-pythonic-code-metaprogramming-with-decorators-2fc2f1d358db)
+
+  - 아래와 같이 Interface와 두 개의 concrete class가 있다고 가정해보자.
+
+  ```python
+  from abc import ABC, abstractmethod
+  
+  
+  class FileHandler(ABC):
+    @abstractmethod
+    def write(self, path):
+      raise NotImplementedError
+      
+  class CSVHandler(FileHandler):
+    def write(self, data):
+      print("Successfully wrote to CSV!")
+      
+  class JSONHandler(FileHandler):
+    def write(self, data):
+      print("Successfully wrote to JSON!")
+  ```
+
+  - 이제 file type에 따라 각기 다른 concrete class를 생성하는 factory class를 작성한다.
+
+  ```python
+  class HandlerFactory:
+    def get_handler(self, output_type):
+      if output_type == "csv":
+        return CSVHandler()
+      elif output_type == "json":
+        return JSONHandler()
+  
+  handler = HandlerFactory().get_handler(output_type)
+  handler.write("dummy-data")
+  ```
+
+  - 위 코드의 문제점
+    - 새로운 file type이 추가될 때 마다 조건 분기가 계속 추가되어야 한다.
+    - 이는 OCP를 위반하는 것이다.
+
+  ```python
+  class HandlerFactory:
+    def get_handler(self, output_type):
+      if output_type == "csv":
+        return CSVHandler()
+      elif output_type == "json":
+        return JSONHandler()
+      elif output_type == "xml":
+        return XMLHandler()
+      elif output_type == "txt":
+        return TXTHandler()
+      
+  handler = HandlerFactory().get_handler("csv")
+  handler.write("dummy-data")
+  ```
+
+  - Python dictionary 사용하여 해결하기
+    - 나쁜 방법은 아니지만, 개발자는 여전히 `HandlerFactory`의 내부 구현에 대해 알고 있어야하며, 새로운 type이 추가될 때 마다 `HandlerFactory.file_handlers`를 수정해야한다는 문제가 있다.
+
+  ```python
+  class HandlerFactory:
+    file_handlers = {
+      "csv": CSVHandler,
+      "json": JSONHandler
+    }
+    
+    def get_handler(self, output_type):
+      return self.file_handlers(output_type)()
+  
+  handler = HandlerFactory().get_handler("csv")
+  handler.write("dummy-data")
+  ```
+
+  - Metaprogramming을 사용하면 보다 유연하게 생성이 가능하다.
+    - Compile time에 `@HandlerFactory.register_handler()` decorator가 붙은 모든 method들이 평가되면서, `HandlerFactory.file_handlers`에 concrete class들이 추가된다.
+    - 이제 새로운 file type이 추가되더라도 `HandlerFactory.file_handlers`에 새로운 concrete class를 추가할 필요도 없으며, 개발자가 `HandlerFactory`의 내부 구현에 대해 몰라도 된다.
+
+  ```python
+  from abc import ABC, abstractmethod
+  
+  class HandlerFactory:
+    
+    file_handlers = {}
+  
+    @classmethod
+    def register_handler(cls, output_type):
+      def wrapper(handler_cls):
+        cls.file_handlers[output_type] = handler_cls
+        return handler_cls
+      return wrapper
+  
+    @classmethod
+    def get_handler(cls, output_type):
+      return cls.file_handlers[output_type]()
+  
+  class FileHandler(ABC):
+    @abstractmethod
+    def write(self, path):
+      raise NotImplementedError
+  
+  
+  @HandlerFactory.register_handler("csv")
+  class CSVHandler(FileHandler):
+    def write(self, data):
+      print("Successfully wrote to CSV!")
+  
+  @HandlerFactory.register_handler("json")
+  class JSONHandler(FileHandler):
+    def write(self, data):
+      print("Successfully wrote to JSON!")
+  
+  handler = HandlerFactory.get_handler("csv")
+  handler.write("dummy-data")
+  ```
 
 
 
