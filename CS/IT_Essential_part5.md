@@ -831,3 +831,135 @@
   - UUID5
     - UUID3와 유사하지만 MD5가 아닌 SHA-1 hash algorithm을 사용한다.
     - UUID3보다 보안성이 더 높다는 장점이 있으나, SHA-1도 현재는 안전하지 않다고 평가된다.
+
+
+
+- Trailing Slash
+  - URI에서 맨 마지막에 붙은 slash(`/`)를 trailing slash라고 부른다.
+    - e.g. https://www.example.com/
+    - RI의 spec에 대해 서술한 [RFC-3986](https://www.google.com/)에 trailing slash에 대한 명세가 있지는 않으므로 꼭 붙여야 하는 것은 아니다.
+  - 용도
+    - 일반적으로, trailing slash가 없을 경우 해당 URL이 file임을 나타내고, 있을 경우 directory임을 나타낸다.
+    - 예를 들어 `https://example.com/folder/`는 directory를 나타내고, `https://example.com/file`은 file을 나타낸다.
+    - 그러나 이는 일반적으로 그렇다는 것으로, 요즘에는 trailing slash를 붙이지 않는 경우가 많다.
+    - FastAPI의 경우 trailing slash를 붙이는 경우 trailing slash가 붙지 않은 endpoint로 redirect한다.
+  - 도메인 URL에서의 trailing slash
+    - Google이나 Naver에 접속하고, URL을 확인하면, 항상 trailing slash가 붙어있는 것을 확인할 수 있다.
+    - 이는 HTTP spec상 request에 resource 경로를 생략할 수 없기 때문이다.
+    - 예를 들어 `www.naver.com`은 domain일뿐 아무런 resource 경로도 포함되어 있지 않다.
+    - 따라서 `www.naver.com`으로는 request를 보낼 수 없다.
+    - 따라서 root resource 경로인 `/`를 뒤에 붙여 `www.naver.com/`로 request를 보내는 것이다.
+  - RESTful API에서의 trailing slash
+    - 이 역시 마찬가지로 붙이는 것과 붙이지 않는 것 중 어느 쪽이 옳은지에 대한 명세가 있지는 않다.
+    - 개발자의 선호에 따라 달라지는 것으로 보이지만, 대부분의 경우 붙이지 않는 것을 권한다.
+
+
+
+- Production 환경에서의 `.env` file
+  - 개발 환경에서는 편의를 위해 환경 변수를 저장하는 file(`.env` file)을 생성하고, 해당 file을 읽어서 환경 변수를 설정한다.
+  - 그러나, 운영 환경에 환경 변수를 file에 저장하고 이를 읽어 사용하는 방식은 지양해야한다.
+    - 이는 누구나 접근하여 쉽게 읽을 수 있는 파일에 민감한 정보를 저장하는 방식이 위험하기 때문이다.
+    - 환경 변수를 파일에 저장하는 대신, 실제 환경 변수로 저장하고 사용해야한다.
+
+
+
+- Lexer
+  - Lexer란 tokenizing을 통해 생성된 토큰들의 의미를 분석하는 역할을 한다.
+    - 일반적으로 compiler에서 사용되는 개념이다.
+    - 예를 들어 "while"이라는 단어는 단순히 "w", "h", "i", "l", "e"라는 character들의 나열일 뿐이다.
+    - 이를 "while"이라는 하나의 token으로 묶어주는 것이 tokenizer의 역할이다.
+    - Tokenizer가 묶은 "while"에 반복이라는 의미를 부여하는 것이 lexer의 역할이다.
+  - Tokenizer와 lexer를 합쳐 Lexical Analzer라고도 부른다.
+
+
+
+- FST(Finite State Transducer)
+
+  - FSM의 확장된 개념으로 입력-출력 관계를 처리할 수 있는 모델이다.
+    - 입력에 따라 상태만 전이되는 FSM과 달리, 입력에 따라 전이가 발생하고 ,전이에 따라 출력이 생성된다.
+    - 입력에 따라 상태를 변경하면서 동시에 출력을 생성한다.
+  - Arc
+    - 두 상태를 연결하는 전이를 나타낸다.
+    - Graph 이론에서 node 간 연결을 arc(호)로 표현한 데서 유래하여 상태 간의 연결을 나타내는 용어로 사용된다.
+    - 상태 간 연결을 정의하며, 입력과 출력의 관계를 설명한다.
+    - Transition과의 차이는 transition이 상태 전이 그 자체를 의미한다면, arc는 이를 구체적으로 표현한 구조라는 것이다.
+  - Arc의 구성 요소
+    - 시작 상태(Source State): 전이가 시작되는 상태
+    - 종료 상태(Destination State): 전이가 끝나는 상태
+    - 입력 심볼(Input Symbol): arc를 따라가기 위해 제공되어야 하는 입력값
+    - 출력 심볼(Output Symbol): 전이를 통해 생성되는 출력값
+    - 가중치(Weight): 이 전이에 할당된 비용 또는 확률 값으로, 최단 경로 탐색이나 확률적 FST에서 사용된다.
+
+  - Python으로 구현하기
+    - `weight`를 받기 하지만, 사용하진 않는다.
+
+  ```python
+  class Arc:
+      def __init__(self, input_symbol: str, output_symbol: str = None, weight: float = 0):
+          self.input_symbol = input_symbol
+          self.output_symbol = output_symbol
+          self.weight = weight
+          self.next_state = None  # 연결된 다음 상태
+  
+  
+  class FSTNode:
+      def __init__(self):
+          self.arcs: list[Arc] = []  # Arc 리스트로 상태 간 전이를 표현
+      
+      def add(self, arc: Arc):
+          self.arcs.append(arc)
+  
+  class FST:
+      def __init__(self):
+          self.start_node = FSTNode()
+  
+      def insert(self, word: str, output: str, weight: float = 0) -> None:
+          current_node = self.start_node
+  
+          for char in word:
+              # Arc가 존재하는지 확인
+              arc = next((a for a in current_node.arcs if a.input_symbol == char), None)
+              if not arc:
+                  next_node: FSTNode = FSTNode()
+                  arc = Arc(input_symbol=char, weight=weight)
+                  arc.next_state = next_node
+                  current_node.add(arc)
+              current_node = arc.next_state
+  
+          # 마지막 Arc의 출력값 설정
+          current_node.add(Arc(input_symbol=None, output_symbol=output, weight=weight))
+  
+      def search(self, word: str) -> tuple[str, float]:
+          current_node = self.start_node
+          total_weight = 0
+  
+          for char in word:
+              arc = next((a for a in current_node.arcs if a.input_symbol == char), None)
+              if not arc:
+                  return None  # 단어가 존재하지 않음
+              total_weight += arc.weight
+              current_node = arc.next_state
+  
+          # Arc의 출력 심볼 반환
+          final_arc: Arc = next((a for a in current_node.arcs if a.output_symbol), None)
+          if final_arc:
+              total_weight += final_arc.weight
+              return final_arc.output_symbol, total_weight
+          return None
+  
+  
+  # FST 사용 예제
+  fst = FST()
+  
+  # 단어 삽입 (단어, 출력값, 가중치)
+  fst.insert("cat", "고양이", weight=0.5)
+  fst.insert("car", "자동차", weight=0.2)
+  fst.insert("cart", "수레", weight=0.8)
+  
+  # 단어 검색
+  print(fst.search("cat"))
+  print(fst.search("car"))
+  print(fst.search("cart"))
+  print(fst.search("cow"))
+  ```
+

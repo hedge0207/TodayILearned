@@ -39,6 +39,45 @@
 
 
 
+- EC2 instance 표기
+
+  - Instance의 이름에는 아래와 같은 정보들이 담겨 있다.
+    - Instance Family: instance가 무엇에 특화되었는지 표기(예시에서 `c`)
+    - Instance generation: instance가 release된 세대(예시에서 `7`)
+    - Processor Familiy: instance의 processor를 나타내는 부분(예시에서 `g`)
+    - Additional Capability: 추가 기능을 나타내는 부분(예시에서 `n`)
+    - Instance Size: vCPU, Memory 등 사양에 대한 size를 나타내는 부분(예시에서 `xlarge`)
+
+  ```
+  c7gn.xlarge
+  ```
+
+  - Instance Family
+
+  | 종류            | 특징                                                   | 패밀리       |
+  | --------------- | ------------------------------------------------------ | ------------ |
+  | 범용            | Memory, CPU의 균형이 잡혀 있으며, 범용적으로 사용 가능 | T, M, A, Mac |
+  | 컴퓨팅 최적화   | vCPU 성능이 높음                                       | C            |
+  | 메모리 최적화   | Memory 성능이 높음                                     | R, X, z      |
+  | 고속 컴퓨팅     | GPU 탑재                                               | P G, F, Inf  |
+  | 스토리지 최적화 | Storage 접근이 빠름                                    | I, D, H      |
+  | 그 외           | 대용량 memory, AI를 위한 고성능 컴퓨팅 등 특수 모델    | Hpc, Trn, U  |
+
+  - Processor Family
+    - `a`: AMD processor
+    - `g`: AWS Gravition processor
+    - `i`: Intel processor
+  - Additional Capability
+    - `d`: Instance store volume
+    - `n`: Network 및 EBS 최적화
+    - `e`: 추가  storage 또는 memory
+    - `z`: 고성능
+    - `flex`: Flex instance
+
+
+
+
+
 ## EC2 인스턴스에 접속하기
 
 - ssh 명령어로 접속하기
