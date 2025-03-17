@@ -60,8 +60,6 @@
 
 - REST
 
-- Memory
-
 <br/>
 <br/>
 
@@ -81,6 +79,8 @@
 - IP
 
 - 진수
+
+- RAID
 
 - Shorts
 
@@ -182,6 +182,8 @@
 
 - 가상 메모리 관리
 
+- Shorts
+
 <br/>
 <br/>
 
@@ -199,6 +201,16 @@
 
 ## naming
 - boolean
+
+<br/>
+<br/>
+
+## statistics
+- 평균(Average)
+
+- 변이와 분포
+
+- Shorts
 
 <br/>
 <br/>
@@ -235,6 +247,9 @@
 <br/>
 
 # Database
+<br/>
+<br/>
+
 ## Database_part1
 - 데이터 베이스의 기본 개념
 
@@ -776,6 +791,8 @@
 
 - Raft Consensus Algorithm
 
+- Markov Model
+
 <br/>
 <br/>
 
@@ -800,11 +817,15 @@
 ## clean_code_part2
 - 객체와 자료 구조
 
+- 오류 처리
+
 <br/>
 <br/>
 
 ## code_readability
 - 코드 가독성
+
+- 오류 처리
 
 <br/>
 <br/>
@@ -813,6 +834,9 @@
 <br/>
 
 # design_pattern
+<br/>
+<br/>
+
 ## design_pattern_part1
 - Strategy Pattern
 
@@ -1067,6 +1091,9 @@
 <br/>
 
 # docker
+<br/>
+<br/>
+
 ## docker_part1
 - 컨테이너와 Docker
 
@@ -1115,8 +1142,6 @@
 - Docker Stack
 
 - Docker volume과 권한, 소유자, 소유 그룹
-
-- .bashrc에 umask 0002 명령어를 추가한다.
 
 - etc
 
@@ -1345,6 +1370,8 @@
 ## Lucene
 - Index File Formats
 
+- Lucene Anaylzer 동작 과정
+
 <br/>
 <br/>
 
@@ -1410,6 +1437,12 @@
 - Output Plugin
 
 - Dead letter queues(DLQ)
+
+<br/>
+<br/>
+
+## mecab
+- Mecab 사용해보기
 
 <br/>
 <br/>
@@ -2342,6 +2375,8 @@
 
 - contextvars
 
+- fcntl, filelock
+
 - Shorts
 
 <br/>
@@ -2367,6 +2402,8 @@
 - Interface
 
 - Python Bytecode
+
+- Metaprogramming
 
 <br/>
 <br/>
@@ -2530,6 +2567,29 @@
 - 빈 생명주기 콜백
 
 - 빈 스코프
+
+<br/>
+<br/>
+
+<br/>
+<br/>
+
+# test
+<br/>
+<br/>
+
+## test_part1
+- Unit Test
+
+- 테스트 코드 작성하기
+
+- 의존성 분리와 스텁
+
+<br/>
+<br/>
+
+## test_part2
+- 모의 객체를 사용한 상호 작용 테스트
 
 <br/>
 <br/>
