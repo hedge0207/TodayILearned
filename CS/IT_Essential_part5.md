@@ -475,6 +475,154 @@
 
 
 
+- Python으로 LRU cache 구현
+
+  > 아래 코드는 단순화한 예시일뿐, 실제 사용하기에는 제약이 있다.
+  >
+  > 실사용이 가능하려면, cache hit 발생시 해당 객체에 lock을 거는 과정이 있어야한다.
+
+  - 일반적으로 doubly linked list와 hash map을 사용하여 구현한다.
+    - Hash map을 사용하는 이유는 빠른 조회를 위해 사용하며, key를 기반으로 cache에 저장된 data를 O(1)에 찾을 수 있다.
+    - Doubly linked list를 사용하는 이유는 맨 앞이나 맨 뒤에 data를 추가할 때 O(1)의 시간복잡도로 처리가 가능하기 때문이다.
+    - LRU cache에서 data를 관리하는데 필요한 연산은 양 끝의 data 추가 및 삭제, 위치를 알고 있는 data의 삭제 인데, doubly linked list는 이 모든 연산을 O(1)에 처리가 가능하다.
+
+  ```python
+  class Node:
+      def __init__(self, key=None, value=None):
+          self.key = key
+          self.value = value
+          self.prev: Node = None
+          self.next: Node = None
+  
+  
+  class DoublyLinkedList:
+      def __init__(self):
+          self.head = Node()
+          self.tail = Node()
+          self.head.next = self.tail
+          self.tail.prev = self.head
+  
+      def add_to_front(self, node: Node):
+          node.next = self.head.next
+          node.prev = self.head
+          self.head.next.prev = node
+          self.head.next = node
+  
+      def remove(self, node: Node):
+          prev = node.prev
+          next = node.next
+          prev.next = next
+          next.prev = prev
+  
+      def move_to_front(self, node):
+          self.remove(node)
+          self.add_to_front(node)
+  
+      def remove_last(self):
+          if self.tail.prev == self.head:
+              return None
+          last_node = self.tail.prev
+          self.remove(last_node)
+          return last_node
+  
+  
+  class LRUCache:
+      def __init__(self, capacity: int):
+          self.capacity = capacity
+          self._hash_map = {}
+          self._doubly_linked_list = DoublyLinkedList()
+  
+      def get(self, key: int) -> int:
+          if key in self._hash_map:
+              node = self._hash_map[key]
+              self._doubly_linked_list.remove(node)
+              self._doubly_linked_list.add_to_front(node)
+              return node.value
+          return -1
+  
+      def put(self, key: int, value: int):
+          if key in self._hash_map:
+              node = self._hash_map[key]
+              self._doubly_linked_list.remove(node)
+          elif len(self._hash_map) >= self.capacity:
+              lru_node = self._doubly_linked_list.remove_last()
+              if lru_node:
+                  del self._hash_map[lru_node.key]
+  
+          new_node = Node(key, value)
+          self._hash_map[key] = new_node
+          self._doubly_linked_list.add_to_front(new_node)
+  ```
+
+    - `collections.OrderedDict` class를 사용하여 보다 간단하게 구현이 가능하다.
+
+  ```python
+  from collections import OrderedDict
+  
+  
+  class LRUCache:
+  
+      def __init__(self, capacity: int):
+          self._capacity = capacity
+          self._cache = OrderedDict()
+          
+      def get(self, key: int) -> int:
+          value = self._cache.get(key)
+          if value is None:
+              value = -1
+          else:
+              self._cache.move_to_end(key)
+          return value
+      
+      def put(self, key: int, value: int) -> None:
+          self._cache[key] = value
+          self._cache.move_to_end(key)
+          if len(self._cache) > self._capacity:
+              self._cache.popitem(last=False)
+  ```
+
+    - Python 3.6부터는 dictionary도 순서가 보장되어, dictionary를 사용해도 구현은 가능하다.
+
+  ```python
+  class LRUCache:
+  
+      def __init__(self, capacity: int):
+          self._capacity = capacity
+          self._cache = {}
+          
+      def get(self, key: int) -> int:
+          value = self._cache.get(key)
+          if value is None:
+              value = -1
+          else:
+              self._cache[key] = self._cache.pop(key)
+          return value
+      
+      def put(self, key: int, value: int) -> None:
+          if self._cache.get(key):
+              self._cache[key] = self._cache.pop(key)
+          self._cache[key] = value
+          
+          if len(self._cache) > self._capacity:
+              self._cache.pop(next(iter(self._cache)))
+  ```
+
+    - Python의 `functools` package에는 `lru_cache`라는 decorator가 있다.
+      - 특정 함수에 LRU cache를 적용해주는 decorator이다.
+      - Python 3.9에서는 `cache` decorator도 추가되었는데, 이 역시 `lru_cache`를 사용한다.
+      - 다만 `cache`의 경우 `lru_cache`의 `maxsize` parameter를 None으로 설정하여 제한 없이 사용할 수 있게 해준다.
+      - 아래는 `functools.cache`의 전체 코드이다.
+
+  ```python
+  def cache(user_function, /):
+      'Simple lightweight unbounded cache.  Sometimes called "memoize".'
+      return lru_cache(maxsize=None)(user_function)
+  ```
+
+
+
+
+
 
 
 # Shorts
