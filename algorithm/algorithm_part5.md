@@ -230,6 +230,188 @@
 
 
 
+## Union-Find
+
+- Union-Find Datastructure
+
+  - 서로 중복 되지 않는 부분 집합들을 저장하는 자료구조이다.
+    - 즉, 공통 원소가 없는 상호 배타적인 부분 집합들을 저장하는 자료구조이다.
+    - 각 부분 집합에는 대표 원소가 존재한다.
+  - Disjoint Set, Merge-Find Set이라고도 부른다.
+  - Union-Find는 아래와 같은 연산을 지원해야한다.
+    - MakeSet: 주어진 값만을 원소로 가지는 새로운 집합을 생성하고, 새로 생성된 집합을 disjoint set에 추가한다.
+    - Find: 주어진 값이 속한 집합의 대표 값을 반환한다.
+    - Union: 두 개의 집합을 병합한다.
+  - 위와 같은 연산을 지원하기 위해서 일반적으로 트리를 사용하여 구현한다.
+    - 각각의 서로소 집합을 트리로 구현하면 아래와 같은 이점이 있다.
+    - 루트 노드를 대표 노드로 설정하면 Find 연산은 루트 노드를 반환하면 된다.
+    - Union 연산시에 한 집합을 다른 집합의 루트에 연결하면 되므로 효율적인 병합이 가능하다.
+    - 경로 압축을 사용할 경우 트리가 평탄화되어 Find 연산의 시간 복잡도가 거의 O(1)이 된다.
+  - 트리로 구현할 경우의 시간 복잡도(경로 압축을 하지 않을 경우)
+    - MakeSet: O(1), 단순히 배열을 갱신하는 작업이므로 O(1)이다.
+    - Find: O(N), 대표 노드에 해당하는 루트 노드를 찾을 때 까지 올라가야 하므로 트리의 높이에 해당하는 N만큼이 걸린다.
+    - Union: O(N), 루트를 찾아야 병합이 가능하므로 루트를 찾는 Find의 시간 복잡도인 O(N)과 동일하다.
+    - 위 에서 알 수 있듯이 Union-Find의 성능은 Find 연산의 성능에 따라 결정된다.
+  - 구현
+
+  ```python
+  class UnionFind:
+      # MakeSet 대체
+      def __init__(self, size):
+          self.parent = [i for i in range(size)]
+  
+      def find(self, x):
+          if self.parent[x] == x:
+              return x
+          return self.find(self.parent[x])
+  
+      def union(self, x, y):
+          root_x = self.find(x)
+          root_y = self.find(y)
+  
+          if root_x != root_y:
+              self.parent[root_y] = root_x
+  
+  union_find = UnionFind(10)
+  union_find.union(1, 2)
+  union_find.union(2, 3)
+  union_find.union(4, 5)
+  
+  print(union_find.find(1))  # 1
+  print(union_find.find(2))  # 1
+  print(union_find.find(3))  # 1
+  print(union_find.find(4))  # 4
+  print(union_find.find(5))  # 4
+  ```
+
+
+
+- 경로 압축
+
+  - 최악의 경우 아래와 같이 편향된 트리가 생성될 수 있다.
+    - 아래의 경우 0 ← 1 ← 2 ← 3 ← 4 와 같이 편향된 트리가 되며, 연결 리스트와 다를 게 없는 상태가 된다.
+    - 이런 경우로 인해 Find 연산의 시간 복잡도가 O(N)인 것이다.
+
+  ```python
+  class UnionFind:
+      # MakeSet 대체
+      def __init__(self, size):
+          self.parent = [i for i in range(size)]
+  
+      def find(self, x):
+          if self.parent[x] == x:
+              return x
+          return self.find(self.parent[x])
+  
+      def union(self, x, y):
+          root_x = self.find(x)
+          root_y = self.find(y)
+  
+          if root_x != root_y:
+              self.parent[root_y] = root_x
+  
+  union_find = UnionFind(5)
+  union_find.union(3, 4)
+  union_find.union(2, 3)
+  union_find.union(1, 2)
+  union_find.union(0, 1)
+  print(union_find.parent)	# [0, 0, 1, 2, 3]
+  ```
+
+  - 경로 압축 적용하기
+    - Find 연산을 수행할 때 연산을 수행하면서 탐색한 모든 노드의 부모 노드를 루트 노드로 변경하는 연산을 수행한다.
+    - 이를 통해 트리가 평탄화되면서 더 빠른 속도로 루트 노드 탐색이 가능해진다.
+
+  ```python
+  class UnionFind:
+      # MakeSet 대체
+      def __init__(self, size):
+          self.parent = [i for i in range(size)]
+  
+      def find(self, x):
+          if self.parent[x] != x:
+              self.parent[x] = self.find(self.parent[x])  # 경로 압축
+          return self.parent[x]
+  
+      def union(self, x, y):
+          root_x = self.find(x)
+          root_y = self.find(y)
+  
+          if root_x != root_y:
+              self.parent[root_y] = root_x
+  ```
+
+  - 변경된 후의 Find와 Union의 시간 복잡도는 O(α(n)) ≈ O(1)이 된다.
+
+
+
+- Union 최적화
+
+  - Union 연산을 최적화하여 성능을 향상시킬 수 있다.
+    - 경로 압축을 통해 Find 연산의 시간 복잡도를 O(α(n)) ≈ O(1)으로 줄이는 것 만으로 Union 연산의 시간 복잡도 역시 O(α(n)) ≈ O(1)이 됐는데, 추가적인 성능 향상이 어떻게 가능한 것인지 의아할 수 있다.
+    - 그러나, 위에서 살펴본대로 경로 압축은 루트 노드를 찾는 과정에서 거치게 되는 모든 노드의 부모 노드를 루트 노드로 변경하는 작업으로, 병합이 빈번히 일어날 경우 Find 연산 역시 부모 노드를 루트 노드로 갱신하는 작업을 빈번히 수행하게 된다.
+    - 따라서 애초에 트리가 평탄하게 생성되도록 하면 Find연산이 수행될 때 평탄화를 하지 않아도 되므로 성능이 향상된다.
+  - Union by Rank
+    - 작은 높이의 트리를 큰 높이의 트리에 붙여 트리의 높이 증가를 방지하는 방법이다.
+
+  ```python
+  class UnionFindByRank:
+      def __init__(self, size):
+          self.parent = [i for i in range(size)]
+          self.rank = [0] * size  # 초기 랭크(트리 높이)는 0
+  
+      def find(self, x):
+          if self.parent[x] != x:
+              self.parent[x] = self.find(self.parent[x])  # 경로 압축
+          return self.parent[x]
+  
+      def union(self, x, y):
+          # Union by Rank: 랭크가 낮은 트리를 랭크가 높은 트리에 붙인다
+          root_x = self.find(x)
+          root_y = self.find(y)
+  
+          if root_x != root_y:
+              if self.rank[root_x] > self.rank[root_y]:
+                  self.parent[root_y] = root_x
+              elif self.rank[root_x] < self.rank[root_y]:
+                  self.parent[root_x] = root_y
+              else:
+                  self.parent[root_y] = root_x
+                  self.rank[root_x] += 1  # 같은 높이라면 하나 증가
+  ```
+
+  - Union by Size
+    - 노드 개수가 적은 트리를 노드 개수가 많은 트리에 붙여 트리의 균형을 유지하는 방법이다.
+
+  ```python
+  class UnionFindBySize:
+      def __init__(self, size):
+          self.parent = [i for i in range(size)]
+          self.size = [1] * size  # 각 트리의 노드 개수
+  
+      def find(self, x):
+          if self.parent[x] != x:
+              self.parent[x] = self.find(self.parent[x])
+          return self.parent[x]
+  
+      def union(self, x, y):
+          # 더 적은 개수의 트리를 더 많은 개수의 트리에 붙인다.
+          root_x = self.find(x)
+          root_y = self.find(y)
+  
+          if root_x != root_y:
+              if self.size[root_x] > self.size[root_y]:
+                  self.parent[root_y] = root_x
+                  self.size[root_x] += self.size[root_y]
+              else:
+                  self.parent[root_x] = root_y
+                  self.size[root_y] += self.size[root_x]
+  ```
+
+  
+
+
+
 # Heap
 
 - 힙의 특성을 만족하는 거의 완전한 트리(Almost Complete Tree)인 특수한 트리 기반의 자료 구조
