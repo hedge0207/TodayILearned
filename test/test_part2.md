@@ -111,3 +111,102 @@
 
 
 
+- 모듈 스타일의 목
+
+  - 의존할 모듈 생성하기
+    - 테스트 대상 코드가 의존할 두 개의 모듈을 생성한다.
+
+  ```python
+  # logger.py
+  import logging
+  
+  logging.basicConfig(
+      level=logging.DEBUG,
+      format='[%(levelname)s] %(message)s'
+  )
+  
+  def info(text):
+      logging.info(text)
+  
+  def debug(text):
+      logging.debug(text)
+  
+  
+  # logger_config.py
+  "def get_log_level():
+      return "info""
+  ```
+
+  - 모듈 의존성 예시
+    - 아래 코드에서 `verfiy_password` 함수는 `info`, `debug`라는 로깅 함수와 로거 레벨을 받아오는 `get_logger_level`이라는 두 가지 외부 의존성에 의존한다.
+
+  ```python
+  from logger import info, debug
+  from logger_config import get_log_level
+  
+  
+  def log(text):
+      if get_log_level() == "info":
+          info(text)
+      else:
+          debug(text)
+  
+  
+  def verify_password(value, rules):
+      failed = [rule for rule in rules if rule(value) == False]
+  
+      if len(failed) == 0:
+          log("PASSED")
+          return True
+      else:
+          log("FAIL")
+          return False
+  ```
+
+  - 위 코드에 대한 테스트 코드는 아래와 같이 `unittest.mock.patch` decorator를 사용하여 간단하게 작성할 수 있다.
+
+  ```python
+  import pytest
+  from unittest.mock import patch
+  from password_verifier import verify_password
+  
+  
+  @patch("logger_config.get_log_level", return_value="info")
+  @patch("logger.info")
+  @patch("logger.debug")
+  def test_password_passes_info_log(mock_debug, mock_info, mock_get_level):
+      rules = [
+          lambda x: len(x) >= 8,
+          lambda x: any(c.isdigit() for c in x)
+      ]
+      result = verify_password("abc12345", rules)
+  
+      assert result is True
+      mock_info.assert_called_once_with("PASSED")
+      mock_debug.assert_not_called()
+  ```
+
+
+
+- 객체 지향 스타일의 목
+
+  - 테스트 대상 코드
+    - 의존 대상인 logger를 클래스를 생성할 때 인자로 받아 인스턴스 변수로 할당한다.
+
+  ```python
+  class PasswordVerifier:
+      def __init__(self, rules, logger):
+          self._rules = rules
+          self._logger = logger
+      
+      def verify(self, value):
+          failed = list(filter(lambda result: not result, map(lambda rule: rule(value), self._rules)))
+          if len(failed) == 0:
+              self._logger.info("PASSED")
+              return True
+          
+          self._logger.info("FAIL")
+          return False
+
+
+

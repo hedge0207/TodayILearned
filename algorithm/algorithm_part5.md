@@ -382,7 +382,9 @@
 
   - Union by Size
     - 노드 개수가 적은 트리를 노드 개수가 많은 트리에 붙여 트리의 균형을 유지하는 방법이다.
-
+    - 병합 된 집합(노드의 개수가 더 작은 집합)의 size를 생신하지 않는 이유는 더 이상 사용되지 않는 정보이기에 굳이 갱신할 필요가 없기 때문이다.
+    - Union by rank와 union by size의 성능은 거의 유사하지만, 실제 사용할 때는 union by size의 성능이 평균적으로 우수하며, 더 많이 쓰인다.
+  
   ```python
   class UnionFindBySize:
       def __init__(self, size):
@@ -407,7 +409,7 @@
                   self.parent[root_x] = root_y
                   self.size[root_y] += self.size[root_x]
   ```
-
+  
   
 
 
