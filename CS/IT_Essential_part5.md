@@ -621,6 +621,251 @@
 
 
 
+- `functools`의 cache
+
+  - `cache`
+    - Python 3.9에 추가된 cache이다.
+    - Python 3.9 이전에도 `functools.lru_cache`를 사용할 수 있었다.
+    - 다만 `cache`의 경우 `lru_cache`의 `maxsize` parameter를 None으로 설정하여 제한 없이 사용할 수 있게 해준다.
+    - 아래는 `functools.cache`의 전체 코드이다.
+
+  ```python
+  def cache(user_function, /):
+      'Simple lightweight unbounded cache.  Sometimes called "memoize".'
+      return lru_cache(maxsize=None)(user_function)
+  ```
+
+  - `@cache` decorator를 사용하면 함수에 전달된 인자를 key로, 그 반환 값을 value로 caching한다.
+    - 아래 코드를 실행하면, 이전에 처리한 적 있는 `num` 인자가 들어올 경우 함수를 실행하지 않고 바로 값을 반환하는 것을 확인할 수 있다.
+
+  ```python
+  from functools import cache
+  
+  @cache
+  def double(num: int):
+      print("running, num:", num)
+      return num * 2
+  
+  double(1)
+  double(2)
+  double(3)
+  double(1)
+  double(1)
+  ```
+
+  - `@cache` decorator가 달린 함수의 `cache_info()` method를 통해 cache를 모니터링할 수 있다.
+    - `@lru_cache`도 마찬가지다.
+
+  ```python
+  from functools import cache
+  
+  @cache
+  def fibo(n):
+      if n < 2:
+          return n
+      return fibo(n-1) + fibo(n-2)
+  
+  fibo(10)
+  print(fibo.cache_info())	# CacheInfo(hits=8, misses=11, maxsize=None, currsize=11)
+  ```
+
+  - `cache_clear()` method를 통해 caching된 data를 삭제하는 것도 가능하다.
+
+  ```python
+  from functools import cache
+  
+  @cache
+  def fibo(n):
+      if n < 2:
+          return n
+      return fibo(n-1) + fibo(n-2)
+  
+  fibo(10)
+  print(fibo.cache_info())	# CacheInfo(hits=8, misses=11, maxsize=None, currsize=11)
+  fibo.cache_clear()
+  print(fibo.cache_info())	# CacheInfo(hits=0, misses=0, maxsize=None, currsize=0)
+  ```
+
+  - `@cache` 사용시 주의 사항
+    - 앞에서 말했듯 `cache`는 `maxsize`에 제한을 두지 않은 `lru_cache`와 동일하다.
+    - 따라서 caching할 수 있는 data의 양에 제한이 없고, caching된 data들은 application이 종료되기 전까지는 사라지지 않는다.
+    - 만약 매우 많은 양의 data가 caching될 것으로 예상되는 상황이라면, `cache` 대신 `lru_cache`를 사용해야 한다.
+
+  - `cached_property`
+    - `@property` decorator는 조회가 발생할 때마다 매 번 method를 실행하여 그 결과를 반환한다면, `cached_property`는 최초 실행시에만 method를 실행하고, 이후에는 저장된 결과를 반환한다.
+    - Python 3.8에 추가된 기능이다.
+    - 아래 코드를 실행해보면 `name`은 호출시마다 실행되는데 반해, `cached_name`은 최초 호출시에만 실행되고, 이후부터는 실행되지 않는 것을 확인할 수 있다.
+    - 또한 쓰기 연산이 불가능한 `property`와 달리, `cached_property`로 선언한 property는 쓰기 연산이 가능하다.
+
+  ```python
+  from functools import cached_property
+  
+  
+  class Person:
+      def __init__(self, name):
+          self._name = name
+  
+      @property
+      def name(self):
+          print("running")
+          return self._name
+      
+      @cached_property
+      def cached_name(self):
+          print("running?")
+          return self._name
+  
+  
+  person = Person("John")
+  person.name
+  person.name
+  person.cached_name
+  person.cached_name
+  # 쓰기 연산이 가능하다.
+  person.cached_name = "Tom"
+  ```
+
+
+
+
+
+
+- S3-FIFO(Simple and Scalable caching with three Static FIFO queue)
+
+  > [어떤 캐시가 일을 더 잘합니까? — FIFO가 LRU보다 낫습니다요](https://medium.com/rate-labs/%EC%96%B4%EB%96%A4-%EC%86%8C%EA%B0%80-%EC%9D%BC%EC%9D%84-%EB%8D%94-%EC%9E%98%ED%95%A9%EB%8B%88%EA%B9%8C-fifo%EA%B0%80-lru%EB%B3%B4%EB%8B%A4-%EB%82%AB%EC%8A%B5%EB%8B%88%EB%8B%A4%EC%9A%94-1a49b9060ce4)
+  >
+  > https://blog.jasony.me/system/cache/2023/08/01/s3fifo
+  >
+  > https://s3fifo.com/
+
+  - Juncheng Yang이 자신의 논문에서 제안한 새로운 cache replacement policy이다.
+  - Juncheng Yang은 LRU 방식에 아래와 같은 세 가지 문제가 있다고 주장한다.
+    - 일반적으로 LRU 구현에 doubly linked list를 사용하는데, 이는 cache 객체당 2개의 pointer(이전 node와 다음 node를 가리키는 pointer)를 요구한다. 이로 인해 cache 객체의 개수가 많을수록 overhead가 유발된다.
+    - LRU는 cache hit가 발생하면 object에 lock을 걸고 해당 객체를 list의 head로 promoting해야 한다(즉, list의 맨 앞으로 옮겨야 한다). 이 과정에서 최소 6번의 random access가 발생한다.
+    - LRU는 object 축출(eviction) 순서가 정렬되어 있지 않기 때문에 random access를 유발한다.
+  - One-hit-wonder
+    - 요청 sequence에 한 번만 등장하는 object의 비율을 의미한다.
+    - 일반적으로 sequence의 길이가 짧아질수록 one-hit-wonder의 비율이 증가한다.
+    - 예를 들어 아래 예시에서 sequence를 1~17로 잡으면 one-hit-wonder는 5개의 전체 request(A, B, C, D, E)중 E뿐으로 one-hit-wonder의 비율이 20%이다.
+    - 그러나 1~4로 잡으면 one-hit-wonder는 3개의 전체 request(A, B, C) 중 B, C의 2개로 one-hit-wonder의 비율이 67%가 된다.
+
+  | time    | 1    | 2    | 3    | 4    | 5    | 6    | 7    | 8    | 9    | 10   | 11   | 12   | 13   | 14   | 15   | 16   | 17   |
+  | ------- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
+  | request | A    | B    | A    | C    | B    | A    | D    | A    | B    | C    | B    | A    | E    | C    | A    | B    | D    |
+
+    - S3-FIFO의 주 목적은 one-hit-wonder의 비율을 낮추는 것이다.
+
+      - One-hit-wonder들을 제거할 수 있다면, cache에 불필요하게 저장되는 object들의 개수를 줄일 수 있다.
+      - 빠른 강등(quick demotion): 자리만 차지하고 쓸모 없는 객체들을 빠르게 cache에서 밀어내는 것을 의미한다.
+
+        - S3-FIFO는 세 개의 queue를 사용한다.
+          - Small queue: 전체 cache 크기의 10%를 차지하는 queue
+          - Main queue: 전체 cache의 90%를 차지하는 queue
+          - Ghost queue: main queue와 동일한 수의 data가 없는 항목들(ghost 항목)을 저장하며, ghost queue에서 요청이 발견된다 하더라도, ghost queue에는 data가 저장되지 않으므로 cache hit로 간주되지 않는다.
+
+    - 읽기 연산
+      - 각 object마다 2bits를 사용하여 빈도수 정보를 기록한다.
+        - Cache hit가 발생할 때마다 빈도수가 1씩 증가하며, 빈도수의 최대 값은 3이다.
+        - 아래는 읽기 연산의 pseudo code이다.
+
+  ```pseudocode
+  function READ(x)
+  	if x in S or x in M then // Cache Hit
+          x.freq = min(x.freq + 1, 3)
+      else // Cache Miss
+      	INSERT(x)
+          x.freq=0
+      end if
+  end function
+  ```
+
+    - 쓰기 연산
+      - 새로운 object는 먼저 G에 해당 object가 있는지 확인한 후 있으면 M에 삽입되고, 없으면 S에 삽입된다.
+
+  ```pseudocode
+  function INSERT(x)
+  	while cache is full do
+      	EVICT()
+      end while
+      if x in G then
+      	insert x to head of M
+      else
+      	insert x to head of S
+      end if
+  end function
+  ```
+
+    - 축출 연산
+      - 만약 S가 가득 찬 경우 S가 가장 먼저 들어온 객체부터 아래 조건에 따라 M또는 G로 이동시킨다.
+      - 만약 객체가 두 번 이상 접근 됐을 경우 M으로 이동시키고, 그렇지 않을 경우 G로 이동시킨다. 어느 곳으로 이동하던지, 이 때 객체의 빈도수는 초기화된다.
+      - G가 가득 찬 경우, FIFO 순서에 따라 객체를 제거한다.
+      - M이 가득 찬 경우 freq 변수가 0인 object만 제거하며, 만약 0이 아닐 경우 빈도수 값을 1 감소시킨 후 M의 맨 앞에 다시 삽입한다.
+
+  ```pseudocode
+  function EVICT()
+  	if S.size >= 0.1 * cache size then
+      	EVICTS()
+      else
+      	EVICTM()
+      end if
+  end function
+  
+  function EVICTS()
+  	evicted ← False
+      while not evicted and S.size > 0 do
+      	t ← tail of S
+          if t.freq > 1 then
+          	insert t to M
+              if M is full then
+              	EVICTM()
+              end if
+          else
+          	insert t to G
+              evicted ← true
+          end if
+          remove t from S
+      end while
+  end function
+  
+  function EVICTM()
+  	evicted ← false
+  	while not evicted and M.size > 0 do
+  		t ← tail of M
+  		if t.freq > 0 then
+  			insert t to head of M
+  			t.freq ← t.freq-1
+  		else
+  			remove t from M
+  			evicted ← true
+  		end if
+  	end while
+  end function
+  ```
+
+    - 연산 비용
+
+      - Cache miss가 발생할 경우 S 또는 M에서 cache 축출이 발생한다.
+      - 만약 S에서 축출이 발생할 경우 queue의 tail object를 M 또는 G로 이동시키는 연산이 실행된다.
+      - 또한 M에서 축출이 발생할 경우 tail object의 freq 변수를 확인하여, 축출 또는 head로 promoting하는 연산이 실행된다.
+      - Head로 promoting하는 과정은 while문에 포함되어 있는데, 논문 저자들은 이게 실제로 발생하는 경우가 cache hit 보다 현저히 적어 이 정도 overhead는 무시해도 된다고 주장한다.
+
+      - G는 객체의 고유 ID만을 저장하기에 전체 cache 크기 중 극히 일부만을 차지하며, 꼭 queue일 필요는 없고, bucket hash table 같은 자료 구조를 사용해도 된다.
+      - 모든 연산이 lock-free 자료구조를 이용하면 lock을 설정하지 않아도 thread-safe하게 구현이 가능하며, 따라서 LRU보다 성능이 좋아질 수 있다.
+
+        - 성능
+
+          - 논문의 저자가 직접 테스트한 결과에 따르면 다른 cache algorithm보다 cache miss의 비율이 낮아 효율성이 뛰어나다.
+          - 또한 S3-FIFO의 경우 small queue와 ghost queue를 memory에 배치하고, main queue를 SSD에 배치하면, 플래시 친화성을 높을 수 있다.
+          - 또한 LRU의 경우 lock을 설정해야하기에 thread 개수를 증가로 인한 성능 향상을 기대하기 어려운데 반해, S3-FIFO의 경우 lock-free queue를 사용하기에 thread 개수 증가로 인한 성능 향상을 기대할 수 있다(즉, 확장성이 높다).
+
+    - Python 구현
+
+      > https://github.com/cacheMon/py-cachemonCache에 논문 저자인 Juncheng Yang이 S3-FIFO를 Python으로 구현한 코드가 있다.
+
+      - 기본적으로 Python은 GIL로 인해 global lock이 걸리므로, lock-free한 자료구조가 없다.
+      - 따라서 저자가 이야기한 것과는 달리 thread의 개수를 증가시키더라도 성능 향상을 기대할 수 없다.
+      - 따라서 위 코드는 S3-FIFO를 완벽히 구현한 것은 아니라는 것에 주의해야한다.
+
 
 
 
