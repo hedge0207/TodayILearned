@@ -213,3 +213,556 @@
 
 
 
+- Conway's Game of Life
+
+  > https://blog.miguelgrinberg.com/post/how-to-write-unit-tests-in-python-part-2-game-of-life
+
+  - Conway's Game of Life 개요
+    - Game of Life는 2차원 격자에서 실행된다.
+    - 격자 내부의 각 cell은 살아 있거나 죽어 있는 두 가지 상태 중 하나의 상태를 가진다.
+    - 각 time step마다 모든 cell의 상태가 변경되며, 상태 변경에는 cell의 현재 상태와, 8개의 이웃 cell이 영향을 미친다.
+  - Game of Life의 규칙
+    - 생존 규칙: 만약 cell이 alive 상태이고, 2개 또는 3개의 이웃 cell이 alive상태이면, 해당 cell은 alive 상태를 유지하고, 아니면 죽는다.
+
+    - 탄생 규칙: 만약 cell이 dead 상태이고, 3개의 이웃 cell이 alive 상태이면, 해당 cell은 alive 상태가 되고, 아니면 dead 상태를 유지한다.
+
+  - 구현하기
+    - Cell들의 정보를 담고 있는 `CellList` class와 simulation logic을 구현할 `Life` class를 구현한다.
+    - Game of Life와 같은 cellular automata를 저장하기 위한 format인 Life 1.05와 Life 1.06을 모두 지원하는 code이다.
+    - 화면으로 출력하는 부분 없이, engine 부분만 구현한 것이다.
+    - `Life.advance()` method를 통해 cell들이 갱신된다.
+
+  ```python
+  class CellList:
+      """Maintain a list of (x, y) cells."""
+  
+      def __init__(self):
+          self.cells = {}
+  
+      def has(self, x, y):
+          """Check if a cell exists in this list."""
+          return x in self.cells.get(y, [])
+  
+      def set(self, x, y, value=None):
+          """Add, remove or toggle a cell in this list."""
+          if value is None:
+              value = not self.has(x, y)
+          if value:
+              row = self.cells.setdefault(y, set())
+              if x not in row:
+                  row.add(x)
+          else:
+              try:
+                  self.cells[y].remove(x)
+              except KeyError:
+                  pass
+              else:
+                  if not self.cells[y]:
+                      del self.cells[y]
+  
+      def __iter__(self):
+          """Iterator over the cells in this list."""
+          for y in self.cells:
+              for x in self.cells[y]:
+                  yield (x, y)
+  
+  
+  class Life:
+      """Game of Life simulation."""
+  
+      def __init__(self, survival=[2, 3], birth=[3]):
+          self.survival = survival
+          self.birth = birth
+          self.alive = CellList()
+  
+      def rules_str(self):
+          """Return the rules of the game as a printable string."""
+          survival_rule = "".join([str(n) for n in self.survival])
+          birth_rule = "".join([str(n) for n in self.birth])
+          return f'{survival_rule}/{birth_rule}'
+  
+      def load(self, filename):
+          """Load a pattern from a file into the game grid."""
+          with open(filename, "rt") as f:
+              header = f.readline()
+              if header == '#Life 1.05\n':
+                  x = y = 0
+                  for line in f.readlines():
+                      if line.startswith('#D'):
+                          continue
+                      elif line.startswith('#N'):
+                          self.survival = [2, 3]
+                          self.birth = [3]
+                      elif line.startswith('#R'):
+                          self.survival, self.birth = [
+                              [int(n) for n in i]
+                              for i in line[2:].strip().split('/', 1)]
+                      elif line.startswith('#P'):
+                          x, y = [int(i) for i in line[2:].strip().split(' ', 1)]
+                      else:
+                          i = line.find('*')
+                          while i != -1:
+                              self.alive.set(x + i, y, True)
+                              i = line.find('*', i + 1)
+                          y += 1
+              elif header == '#Life 1.06\n':
+                  for line in f.readlines():
+                      if not line.startswith('#'):
+                          x, y = [int(i) for i in line.strip().split(' ', 1)]
+                          self.alive.set(x, y, True)
+              else:
+                  raise RuntimeError('Unknown file format')
+  
+      def toggle(self, x, y):
+          """Toggle a cell in the grid."""
+          self.alive.set(x, y)
+  
+      def living_cells(self):
+          """Iterate over the living cells."""
+          return self.alive.__iter__()
+  
+      def bounding_box(self):
+          """Return the bounding box that includes all living cells."""
+          minx = miny = maxx = maxy = None
+          for cell in self.living_cells():
+              x = cell[0]
+              y = cell[1]
+              if minx is None or x < minx:
+                  minx = x
+              if miny is None or y < miny:
+                  miny = y
+              if maxx is None or x > maxx:
+                  maxx = x
+              if maxy is None or y > maxy:
+                  maxy = y
+          return (minx or 0, miny or 0, maxx or 0, maxy or 0)
+  
+      def advance(self):
+          """Advance the simulation by one time unit."""
+          processed = CellList()
+          new_alive = CellList()
+          for cell in self.living_cells():
+              x = cell[0]
+              y = cell[1]
+              for i in range(-1, 2):
+                  for j in range(-1, 2):
+                      if (x + i, y + j) in processed:
+                          continue
+                      processed.set(x + i, y + j, True)
+                      if self._advance_cell(x + i, y + j):
+                          new_alive.set(x + i, y + j, True)
+          self.alive = new_alive
+  
+      def _advance_cell(self, x, y):
+          """Calculate the new state of a cell."""
+          neighbors = 0
+          for i in range(-1, 2):
+              for j in range(-1, 2):
+                  if i != 0 or j != 0:
+                      neighbors += 1 if self.alive.has(x + i, y + j) else 0
+  
+          if self.alive.has(x, y):
+              return neighbors in self.survival
+          else:
+              return neighbors in self.birth
+  ```
+
+  - GUI 작성하기
+    - `pygame` pacakge를 사용한다.
+    - GUI는 test 대상이 아니다.
+
+  ```python
+  # life_gui.py
+  import sys
+  import pygame
+  from life import Life
+  
+  SCREEN_SIZE = 500
+  FPS = 5
+  
+  life = Life()
+  
+  
+  def initialize_game(pattern_file=None):
+      pygame.init()
+      screen = pygame.display.set_mode([SCREEN_SIZE, SCREEN_SIZE])
+  
+      if pattern_file:
+          life.load(pattern_file)
+  
+      pygame.display.set_caption(f'Game of Life [{life.rules_str()}]')
+      return screen
+  
+  
+  def center(scale):
+      cell_count = SCREEN_SIZE // scale
+      minx, miny, maxx, maxy = life.bounding_box()
+  
+      basex = minx - (cell_count - (maxx - minx + 1)) // 2
+      basey = miny - (cell_count - (maxy - miny + 1)) // 2
+      return basex, basey
+  
+  
+  def game_loop(screen):
+      running = True
+      paused = False
+      scale = 20
+      basex, basey = center(scale)
+      interval = 1000 // FPS
+  
+      while running:
+          start_time = pygame.time.get_ticks()
+  
+          screen.fill((255, 255, 255))
+          for i in range(0, SCREEN_SIZE, scale):
+              pygame.draw.line(screen, (0, 0, 0), (i, 0), (i, SCREEN_SIZE))
+              pygame.draw.line(screen, (0, 0, 0), (0, i), (SCREEN_SIZE, i))
+          for cell in life.alive:
+              x = cell[0]
+              y = cell[1]
+              pygame.draw.rect(screen, (80, 80, 192),
+                               ((x - basex) * scale + 2, (y - basey) * scale + 2,
+                                scale - 3, scale - 3))
+  
+          pygame.display.flip()
+          if not paused:
+              life.advance()
+  
+          wait_time = 1
+          while wait_time > 0:
+              event = pygame.event.wait(timeout=wait_time)
+              while event:
+                  if event.type == pygame.QUIT:
+                      running = False
+                      break
+                  elif event.type == pygame.KEYDOWN:
+                      if event.key == pygame.K_ESCAPE:
+                          running = False
+                      elif event.key == pygame.K_LEFT:
+                          basex -= 2
+                      elif event.key == pygame.K_RIGHT:
+                          basex += 2
+                      elif event.key == pygame.K_UP:
+                          basey -= 2
+                      elif event.key == pygame.K_DOWN:
+                          basey += 2
+                      elif event.unicode == ' ':
+                          paused = not paused
+                          if paused:
+                              pygame.display.set_caption('Game of Life (paused)')
+                          else:
+                              pygame.display.set_caption(
+                                  f'Game of Life [{life.rules_str()}]')
+                      elif event.unicode == '+':
+                          if scale < 50:
+                              scale += 5
+                      elif event.unicode == '-':
+                          if scale > 10:
+                              scale -= 5
+                      elif event.unicode == 'c':
+                          basex, basey = center(scale)
+                      break
+                  elif event.type == pygame.MOUSEBUTTONUP:
+                      mx, my = pygame.mouse.get_pos()
+                      x = mx // scale + basex
+                      y = my // scale + basey
+                      life.toggle(x, y)
+                      break
+                  event = pygame.event.poll()
+              if event:
+                  break
+  
+              current_time = pygame.time.get_ticks()
+              wait_time = interval - (current_time - start_time)
+  
+  
+  if __name__ == '__main__':
+      pattern_file = sys.argv[1] if len(sys.argv) > 1 else None
+      screen = initialize_game(pattern_file)
+      print('''
+  Press: Arrows to scroll
+         Space to pause/resume the simulation
+         +/- to zoom in/out
+         c to re-center
+         mouse click to toggle the state of a cell
+         Esc to exit''')
+      game_loop(screen)
+      pygame.quit()
+  ```
+
+  - `pygame` package 설치
+
+  ```bash
+  $ pip install pygame
+  ```
+
+  - Pattern 파일 작성
+
+  ```
+  #Life 1.05
+  #N
+  .***.
+  .....
+  *...*
+  *...*
+  .....
+  .***.
+  .....
+  .....
+  .***.
+  .....
+  *...*
+  *...*
+  .....
+  .***.
+  ```
+
+  - 실행
+    - Pattern file을 입력하지 않아도 실행 가능하다.
+
+  ```bash
+  $ python life_gui.py [pattern_file]
+  ```
+
+
+
+- `CellList` class 테스트하기
+
+  - `CellList.set()` method의 `value` parameter가 True일 경우 새로운 cell을 추가하고, False일 경우 cell을 제거하며, None일 경우 toggle을 의미한다.
+
+  ```python
+  import unittest
+  from life import CellList, Life
+  
+  
+  class TestCellList(unittest.TestCase):
+      def test_empty(self):
+          c = CellList()
+          assert list(c) == []
+  
+      def test_set_true(self):
+          c = CellList()
+          c.set(1, 2, True)
+          assert c.has(1, 2)
+          assert list(c) == [(1, 2)]
+          c.set(500, 600, True)
+          assert c.has(1, 2) and c.has(500, 600)
+          assert list(c) == [(1, 2), (500, 600)]
+          c.set(1, 2, True)  # make sure a cell can be set to True twice
+          assert c.has(1, 2) and c.has(500, 600)
+          assert list(c) == [(1, 2), (500, 600)]
+          
+      def test_set_false(self):
+          c = CellList()
+          c.set(1, 2, False)
+          assert not c.has(1, 2)
+          assert list(c) == []
+          c.set(1, 2, True)
+          c.set(1, 2, False)
+          assert not c.has(1, 2)
+          assert list(c) == []
+          c.set(1, 2, True)
+          c.set(3, 2, True)
+          c.set(1, 2, False)
+          assert not c.has(1, 2)
+          assert c.has(3, 2)
+          assert list(c) == [(3, 2)]
+      
+      def test_set_default(self):
+          c = CellList()
+          c.set(1, 2)
+          assert c.has(1, 2)
+          assert list(c) == [(1, 2)]
+          c.set(1, 2)
+          assert not c.has(1, 2)
+          assert list(c) == []
+  ```
+
+
+
+- `Life` class 테스트하기
+
+  - `Life` class의 생성자와 `rules_str` method를 test하기 위한 코드를 작성한다.
+
+  ```python
+  import unittest
+  from life import CellList, Life
+  
+  
+  class TestLife(unittest.TestCase):
+      def test_new(self):
+          life = Life()
+          assert life.survival == [2, 3]
+          assert life.birth == [3]
+          assert list(life.living_cells()) == []
+  	
+      def test_new_custom(self):
+          life = Life([3, 4], [4, 7, 8])
+          assert life.survival == [3, 4]
+          assert life.birth == [4, 7, 8]
+          assert list(life.living_cells()) == []
+  ```
+
+  - `Life` class의 `load` method를 test하기 위한 txt 파일을 작성한다.
+
+  ```
+  pattern1.txt
+  
+  #Life 1.05
+  #D test pattern 1
+  #N
+  #P 10 10
+  *.
+  .*
+  #P 15 10
+  *.*
+  
+  
+  pattern2.txt
+  
+  #Life 1.06
+  # test pattern 2
+  10 10
+  11 11
+  15 10
+  17 10
+  ```
+
+  - `Life` class의 `load`와 `bounding_box` method를 test하기 위한 코드를 작성한다.
+    - 아래 두 코드는 `load` method의 argument로 넘기는 file명을 제외하고 전부 동일하다.
+
+  ```python
+  class TestLife(unittest.TestCase):
+      # ...
+  
+      def test_load_life_1_05(self):
+          life = Life()
+          life.load('pattern1.txt')
+          assert set(life.living_cells()) == {
+              (10, 10), (11, 11), (15, 10), (17, 10)}
+          assert life.bounding_box() == (10, 10, 17, 11)
+  
+      def test_load_life_1_06(self):
+          life = Life()
+          life.load('pattern2.txt')
+          assert set(life.living_cells()) == {
+              (10, 10), (11, 11), (15, 10), (17, 10)}
+          assert life.bounding_box() == (10, 10, 17, 11)
+  ```
+
+  - Parameter 활용하기
+    - 위에서 `load` method를 test하는 두 개의 unit test는 argument로 넘기는 file명을 제외하고 전부 동일하다.
+    - 이를 parameterization하면 중복 코드를 줄일 수 있다.
+    - `pytest` 기반의 unit test에서는 `@pytest.mark.parametrize` decorator를 사용하면 되지만, `unittest` 기반의 unit test에서는 별도의 package를 설치해야한다.
+
+  ```bash
+  $ pip install parameterized
+  ```
+
+  - `parameterized`를 활용하도록 test 코드 수정하기
+    - `parameterized.expand`를 사용한다.
+
+  ```python
+  from parameterized import parameterized
+  
+  class TestLife(unittest.TestCase):
+      @parameterized.expand([('pattern1.txt'), ('pattern2.txt')])
+      def test_load(self, pattern_file):
+          life = Life()
+          life.load(pattern_file)
+          assert set(life.living_cells()) == {
+              (10, 10), (11, 11), (15, 10), (17, 10)}
+          assert life.bounding_box() == (10, 10, 17, 11)
+  ```
+
+  - Coverage 확인
+
+  ```bash
+  $ pytest --cov=life --cov-report=term-missing --cov-branch
+  
+  # output
+  ---------- coverage: platform win32, python 3.12.0-final-0 -----------
+  Name      Stmts   Miss Branch BrPart  Cover   Missing
+  -----------------------------------------------------
+  life.py      98     24     60      2    72%   62, 79, 83, 107-119, 123-132
+  -----------------------------------------------------
+  TOTAL        98     24     60      2    72%
+  ```
+
+  - Coverage를 높이기 위해 새로운 pattern file을 추가한다.
+    - `pattern1.txt`와 `pattern2.txt`에는 `#R`을 사용하는 부분이 없어 62번째 줄이 실행되지 않는다.
+    - 또한, 모두 유효한 foramt으로 작성되어 79번째 줄도 실행되지 않는다.
+    - 따라서 두 경우를 모두 포함하기 위한 새로운 pattern file을 작성한다.
+
+  ```
+  pattern3.txt
+  
+  #Life 1.05
+  #D test pattern 3
+  #R 34/45
+  #P 10 10
+  *.
+  .*
+  *.
+  
+  
+  pattern4.txt
+  
+  this is not a life file
+  ```
+
+  - 위 두 경우를 test하기 위한 코드를 추가한다.
+    - `assert`로는 error가 raise되는 경우를 검사할 수 없다.
+    - `pytest.raises`를 사용하여 의도한 대로 error가 raise되는지 검사할 수 있다.
+
+  ```python
+  import pytest
+  
+  class TestLife(unittest.TestCase):
+      # ...
+      
+      def test_load_life_custom_rules(self):
+          life = Life()
+          life.load('pattern3.txt')
+          assert life.survival == [3, 4]
+          assert life.birth == [4, 5]
+          assert list(life.living_cells()) == [(10, 10), (11, 11), (10, 12)]
+          assert life.bounding_box() == (10, 10, 11, 12)
+          
+      def test_load_invalid(self):
+          life = Life()
+          with pytest.raises(RuntimeError):
+              life.load('pattern4.txt')
+  ```
+
+  - `Life.toggle` method를 test하기 위한 코드를 작성한다.
+    - 기존에 test가 cover하지 못 했던 83번째 줄을 cover한다.
+
+  ```python
+  class TestLife(unittest.TestCase):
+      # ...
+  
+      def test_toggle(self):
+          life = Life()
+          life.toggle(5, 5)
+          assert list(life.living_cells()) == [(5, 5)]
+          life.toggle(5, 6)
+          life.toggle(5, 5)
+          assert list(life.living_cells()) == [(5, 6)]
+  ```
+
+  - 여기까지 작성 후 다시 coverage를 확인한다.
+    - Coverage가 상승한 것을 확인할 수 있다.
+
+  ```bash
+  $ pytest --cov=life --cov-report=term-missing --cov-branch
+  
+  # output
+  ---------- coverage: platform win32, python 3.12.0-final-0 -----------
+  Name      Stmts   Miss Branch BrPart  Cover   Missing
+  -----------------------------------------------------
+  life.py      98     21     60      0    75%   107-119, 123-132
+  -----------------------------------------------------
+  TOTAL        98     21     60      0    75%
+  ```
+
