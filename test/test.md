@@ -766,3 +766,280 @@
   TOTAL        98     21     60      0    75%
   ```
 
+
+
+- Code coverage의 맹점
+
+  - `Life` class의 핵심 method는 `advance`와 `_advance_cell` method이다.
+    - 이 두 method가 위에서 아직 테스트 범위에 포함되지 않은 107-119, 123-132 line에 해당한다.
+    - `_advance_cell` method는 Game of Life의 핵심 logic을 구현한 method로, cell의 x와 y 좌표를 받아 다음 time step에 cell의 생사 여부를 boolean 값으로 반환한다.
+    - `_advance_cell` method는 살아있는 이웃 cell들의 개수를 계산하여 현재 cell의 다음 상태를 결정한다.
+    - `advance` method는 모든 cell들을 순회하면서 `_advance_cell` method를 호출하여 각 cell의 상태를 갱신한다.
+  - Code coverage의 맹점
+    - `_advance_cell` method가 특정 cell이 alive 상태이고, 그 이웃 cell 중 3개가 alive 상태면 True를 반환하는지를 test한다.
+    - Cell (0, 0)과 그 이웃 cell들을 가지고 test를 진행하며, `random`을 통해 매 test마다 이웃 cell을 무선적으로 선택한다.
+    - 그 후 code coverage를 확인해보면, `_advance_cell` method 중 132번째 line을 제외한 모든 line이 실행되어, code coverage가 85%까지 상승한 것을 확인할 수 있다.
+    - 그러나, 이 code coverage의 상승에는 맹점이 있다.
+    - 실행 되지 않은 132번째 line은 탄생 규칙과 관련된 line으로, 아래 예시에서는 이미 생존 상태인 cell로 test를 진행했으므로, 실행되지 않는다.
+    - 또한 생존 규칙으로만 한정하여 생각하더라도, 생존 규칙은 총 9가지 경우의 수가 있는데(이웃 cell 중 생존한 cell의 개수가 1~9인 경우), 아래 예시는 생존한 cell의 수가 3개일 때만을 test한다.
+    - 또한, `Life` class를 생성할 때 생존 규칙을 custom하게 설정할 수 있는데(기본 값은 이웃 cell 중 2개 또는 3개가 alive 상태면 생존), 아래 예시는 custom하게 설정된 경우를 test하지 못 한다.
+    - 이처럼 code coverage가 수치상으로 상승했다고 해서 test의 품질이 향상됐다고 볼 수는 없다.
+
+  ```python
+  import random
+  
+  # ...
+  
+  class TestLife(unittest.TestCase):
+      # ...
+      
+      def test_advance_cell(self):
+          life = Life()
+          life.toggle(0, 0)
+          # cell (0, 0)을 기준으로 한 이웃 cell들
+          neighbors = [(-1, -1), (0, -1), (1, -1),
+                       (-1, 0), (1, 0),
+                       (-1, 1), (0, 1), (1, 1)]
+          for _ in range(3):
+              n = random.choice(neighbors)
+              neighbors.remove(n)
+              life.toggle(*n)
+  
+          assert life._advance_cell(0, 0)
+  ```
+
+  - 모든 경우의 이웃 cell의 개수에 대해 test하도록 변경한다.
+    - 이전 test에 비해서 수치상의 code coverage는 상승하지 않았지만, test의 품질은 향상됐다.
+
+  ```python
+  import random
+  
+  # ...
+  
+  class TestLife(unittest.TestCase):
+      # ...
+      
+      @parameterized.expand([(n,) for n in range(9)])
+      def test_advance_cell(self, num_neighbors):
+          life = Life()
+          life.toggle(0, 0)
+          neighbors = [(-1, -1), (0, -1), (1, -1),
+                       (-1, 0), (1, 0),
+                       (-1, 1), (0, 1), (1, 1)]
+          
+          for _ in range(num_neighbors):
+              n = random.choice(neighbors)
+              neighbors.remove(n)
+              life.toggle(*n)
+  		
+          new_state = life._advance_cell(0, 0)
+          if num_neighbors in [2, 3]:
+              assert new_state is True
+          else:
+              assert new_state is False
+  ```
+
+  - 이제 생존 규칙뿐만 아니라 탄생 규칙도 test하도록 변경한다.
+    - Test 대상 cell이 생존 상태일 때의 모든 생존한 이웃 cell의 개수와, test 대상 cell이 사망 상태일 때의 모든 생존한 이웃 cell의 개수에 대해 test하도록 변경한다(즉 2*9=18개의 경우에 대해 test를 실행한다).
+    - 아래와 같이 변경함으로써 탄생 규칙도 test하게 되어 모든 `_advance_cell()` method의 모든 부분이 실행되게 된다.
+
+  ```python
+  import itertools
+  
+  # ...
+  
+  class TestLife(unittest.TestCase):
+      # ...
+  
+      @parameterized.expand(itertools.product([True, False], range(9)))
+      def test_advance_cell(self, alive, num_neighbors):
+          life = Life()
+          if alive:
+              life.toggle(0, 0)
+          neighbors = [(-1, -1), (0, -1), (1, -1),
+                       (-1, 0), (1, 0),
+                       (-1, 1), (0, 1), (1, 1)]
+          
+          for _ in range(num_neighbors):
+              n = random.choice(neighbors)
+              neighbors.remove(n)
+              life.toggle(*n)
+  
+          new_state = life._advance_cell(0, 0)
+          if alive:
+              # survival rule
+              if num_neighbors in [2, 3]:
+                  assert new_state is True
+              else:
+                  assert new_state is False
+          else:
+              # birth rule
+              if num_neighbors in [3]:
+                  assert new_state is True
+              else:
+                  assert new_state is False
+  ```
+
+  - 마지막으로 보다 다양한 생존 규칙과 탄생 규칙에 대해서도 test할 수 있게 변경한다.
+    - 위 예시에서는 생존 규칙은 생존한 이웃의 개수가 2개 또는 3개일 경우, 탄생 규칙은 생존한 이웃의 개수가 3개일 때만을 대상으로 test했다.
+    - 아래와 같이 다양한 생존, 탄생 규칙에 대해 test할 수 있도록 변경한다.
+
+  ```python
+  class TestLife(unittest.TestCase):
+      # ...
+  
+      @parameterized.expand(itertools.product(
+          [[2, 3], [4]],  # two different survival rules
+          [[3], [3, 4]],  # two different birth rules
+          [True, False],  # two possible states for the cell
+          range(0, 9),    # nine number of possible neighbors
+      ))
+      def test_advance_cell(self, survival, birth, alive, num_neighbors):
+          life = Life(survival, birth)
+          if alive:
+              life.toggle(0, 0)
+          neighbors = [(-1, -1), (0, -1), (1, -1),
+                       (-1, 0), (1, 0),
+                       (-1, 1), (0, 1), (1, 1)]
+          for _ in range(num_neighbors):
+              n = random.choice(neighbors)
+              neighbors.remove(n)
+              life.toggle(*n)
+  
+          new_state = life._advance_cell(0, 0)
+          if alive:
+              # survival rule
+              if num_neighbors in survival:
+                  assert new_state is True
+              else:
+                  assert new_state is False
+          else:
+              # birth rule
+              if num_neighbors in birth:
+                  assert new_state is True
+              else:
+                  assert new_state is False
+  ```
+
+  - Test 결과는 아래와 같다.
+    - Code coverage는 크게 달라지지 않았으나, 실제로는 더 많은 경우를 test하게 되었다.
+
+  ```bash
+  $ pytest --cov=life --cov-report=term-missing --cov-branch
+  
+  # output
+  Name      Stmts   Miss Branch BrPart  Cover   Missing
+  -----------------------------------------------------
+  life.py      98     13     60      0    85%   107-119
+  -----------------------------------------------------
+  TOTAL        98     13     60      0    85%
+  ```
+
+
+
+- Mocking
+
+  - 마지막으로 남은 `advance()` method를 test할 것이다.
+    - `advance()` method는 `_advance_cell()` method를 호출한다.
+    - 이 둘의 logic을 분리하는 것은 쉽지 않다.
+  - Mocking의 필요성
+    - `advance()`는 `_advance_cell()`에 의존하므로 아래와 같은 test가 필요하다. 
+    - 먼저 `_advance_cell()`의 반환 결과에 따라 `advance()` method가 적절히 실행되는지 test해야한다.
+    - 또한 `advance()` method가 `_advance_cell()` method를 적절히 호출하는지(하나의 cell에 대해 `_advance_cell()` method를 여러번 호출하지는 않는지, 상태가 변경될 가능성이 없는 cell에 대해 호출하지는 않는지)도 test해야한다.
+    - 그런데, `_advance_cell()` method는 이미 철저하게 test가 끝났으므로, 추가적인 test를 할 필요는 없다.
+    - 따라서 `_advance_cell()`을 대체할 mock을 사용하여 test하면 보다 편리하게 test가 가능하다.
+  - `unittest.mock` 사용하기
+    - 아래와 같이 `MagicMock`의 instance에 `return_value`를 지정하면, 어떤 argument로 해당 instance를 호출하던 `return_value`를 반환하게 된다.
+    - 또한 `MagucMock` instance는 호출 횟수와 호출시에 사용된 argument 정보를 계속 가지고 있는다.
+
+  ```python
+  from unittest import mock
+  
+  fake = mock.MagicMock()
+  fake.return_value = 42
+  print(fake())					# 42
+  print(fake("Hello"))			# 42
+  print(fake("World", num=1))		# 42
+  
+  # 호출 횟수
+  print(fake.call_count)			# 3
+  # 호출 argument
+  print(fake.call_args_list)		# [call(), call('Hello'), call('World', num=1)]
+  ```
+
+  - `_advance_cell`이 False를 반환하는 경우에 대해 test하기
+    - 아래와 같이 `mock.patch.object()` decorator를 통해 `MagicMock` instance를 주입할 수 있으며, 아래 예시는 `Life._advance_cell()` method를 patch하겠다는 것을 의미한다.
+    - 이를 통해 `_advance_cell()` method가 호출되더라도 실제 `Life._advance_cell()` 이 실행되는 것이 아닌, mock object가 실행된다.
+
+  ```python
+  from unittest import mock
+  
+  
+  class TestLife(unittest.TestCase):
+      # ...
+      
+      @mock.patch.object(Life, '_advance_cell')
+      def test_advance_false(self, mock_advance_cell):
+          mock_advance_cell.return_value = False
+          life = Life()
+          life.toggle(10, 10)
+          life.toggle(12, 10)
+          life.toggle(20, 20)
+          life.advance()
+  
+          # _advance_cell method를 정확히 24번 호출돼야 한다.
+          # (10, 10) cell일 때 9번
+          # (12, 10) cell일 때 6번(3번은 (10, 10) 일 때 이미 호출되었으므로 호출할 필요 없다)
+          # (20, 20) cell일 때 9번
+          assert mock_advance_cell.call_count == 24
+          assert list(life.living_cells()) == []
+  ```
+
+  - `_advance_cell`이 True를 반환하는 경우에 대해 test하기
+    - Check 대상인 모든 cell이 alive 상태가 되므로, 최종적으로 21개의 cell이 alive상태가 된다.
+
+  ```python
+  class TestLife(unittest.TestCase):
+      # ...
+  
+      @mock.patch.object(Life, '_advance_cell')
+      def test_advance_true(self, mock_advance_cell):
+          mock_advance_cell.return_value = True
+          life = Life()
+          life.toggle(10, 10)
+          life.toggle(11, 10)
+          life.toggle(20, 20)
+          life.advance()
+  
+          # _advance_cell method를 정확히 21번 호출돼야 한다.
+          # (10, 10) cell일 때 9번
+          # (12, 10) cell일 때 3번(6번은 (10, 10) 일 때 이미 호출되었으므로 호출할 필요 없다)
+          # (20, 20) cell일 때 9번
+          assert mock_advance_cell.call_count == 21
+  
+          # 최종적으로 21개의 cell이 alive 상태가 된다.
+          assert set(life.living_cells()) == {
+              (9, 9), (10, 9), (11, 9), (12, 9),
+              (9, 10), (10, 10), (11, 10), (12, 10),
+              (9, 11), (10, 11), (11, 11), (12, 11),
+              (19, 19), (20, 19), (21, 19),
+              (19, 20), (20, 20), (21, 20),
+              (19, 21), (20, 21), (21, 21),
+          }
+  ```
+
+  - 테스트를 실행한다.
+
+  ```bash
+  $ pytest --cov=life --cov-report=term-missing --cov-branch
+  
+  # output
+  Name      Stmts   Miss Branch BrPart  Cover   Missing
+  -----------------------------------------------------
+  life.py      98      0     70      0   100%
+  -----------------------------------------------------
+  TOTAL        98      0     70      0   100%
+  ```
+
+
+
