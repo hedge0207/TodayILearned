@@ -1805,3 +1805,186 @@ keep='last'
   - [Black Playground](https://black.vercel.app/)에서 test해볼 수 있다.
   - Pycharm, Visual Studio Code, Vim 등의 editor에서 자동으로 실행되도록 설정이 가능하다.
     - 각 editor별 설정 방법은 [공식문서](https://black.readthedocs.io/en/stable/integrations/editors.html#)참고
+
+
+
+
+
+# uvloop
+
+- uvloop
+  - Cython(Cpython이 아닌 Cython이다)과 libuv를 사용하여 개발한 비동기 event loop이다.
+  - Uvicorn은 uvloop를 기반으로 동작한다.
+  - [uvloop github](https://github.com/MagicStack/uvloop)에서 benchmark 결과를 볼 수 있다.
+    - Stream, socket, protocol 등 거의 모든 면에서 asyncio보다 빠르다.
+
+
+
+- 사용 방법
+
+  - 아래와 같이 사용하면 된다.
+    - 아래와 같이 `asyncio.set_event_loop_policy` method를 통해 `uvloop.EventLoopPolicy` 객체를 event loop policy로 설정한다.
+
+  ```python
+  import asyncio
+  import uvloop
+  
+  asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+  ```
+
+  - `uvloop.EventLoopPolicy`는 asyncio의 `BaseDefaultEventLoopPolicy` 클래스를 상속 받는 클래스이다.
+
+
+
+- 동작 방식
+
+  > https://blue-hope.medium.com/asynchronous-engine-2-uvloop-ef895d2c2b4a
+
+  - `EventLoopPolicy` 클래스는 부모 클래스로부터 `_loop_factory`만 override한다.
+    - `EventLoopPolicy._loop_factory`가 호출하는 `new_event_loop`는 객체의 메서드가 아닌 일반 함수이다.
+    - `new_event_loop` 함수는 `Loop` 객체를 반환하는데, `Loop` 객체는 `uvloop.loop.Loop`와 `asynio.AbstractEventLoop`를 상속 받는다.
+    - `uvloop.loop.Loop`는 Cython으로 구현되었다.
+
+  ```python
+  class Loop(__BaseLoop, __asyncio.AbstractEventLoop):  # type: ignore[misc]
+      pass
+  
+  def new_event_loop() -> Loop:
+      """Return a new event loop."""
+      return Loop()
+  
+  class EventLoopPolicy(__BasePolicy):
+      # ...
+  
+      def _loop_factory(self) -> Loop:
+          return new_event_loop()
+  ```
+
+  - 부모 클래스인 `BaseDefaultEventLoopPolicy`는 아래와 같다.
+    - `get_event_loop()`가 호출됐을 때, 현재 loop가 없으면 `new_event_loop()`가 호출되고, 이 때, `EventLoopPolicy._loop_factory`가 호출된다.
+    - `EventLoopPolicy._loop_factory`가 호출 되면 `BaseDefaultEventLoopPolicy.new_event_loop`가 아닌 일반 함수인 `new_event_loop`가 호출된다.
+
+  ```python
+  class BaseDefaultEventLoopPolicy(AbstractEventLoopPolicy):
+      """Default policy implementation for accessing the event loop.
+  
+      In this policy, each thread has its own event loop.  However, we
+      only automatically create an event loop by default for the main
+      thread; other threads by default have no event loop.
+  
+      Other policies may have different rules (e.g. a single global
+      event loop, or automatically creating an event loop per thread, or
+      using some other notion of context to which an event loop is
+      associated).
+      """
+  
+      _loop_factory = None
+  
+      class _Local(threading.local):
+          _loop = None
+          _set_called = False
+  
+      def __init__(self):
+          self._local = self._Local()
+  
+      def get_event_loop(self):
+          """Get the event loop for the current context.
+  
+          Returns an instance of EventLoop or raises an exception.
+          """
+          if (self._local._loop is None and
+                  not self._local._set_called and
+                  threading.current_thread() is threading.main_thread()):
+              self.set_event_loop(self.new_event_loop())
+  
+          if self._local._loop is None:
+              raise RuntimeError('There is no current event loop in thread %r.'
+                                 % threading.current_thread().name)
+  
+          return self._local._loop
+  
+      def set_event_loop(self, loop):
+          """Set the event loop."""
+          self._local._set_called = True
+          assert loop is None or isinstance(loop, AbstractEventLoop)
+          self._local._loop = loop
+  
+      def new_event_loop(self):
+          """Create a new event loop.
+  
+          You must call set_event_loop() to make this the current event
+          loop.
+          """
+          return self._loop_factory()
+  ```
+
+  - `uvloop/loop.pyx`
+    - `Loop`내에 uvloop를 내장하고 있으며, 할당된 메모리만큼 uvloop를 동적 생성해준다.
+    - `uv.uv_loop_init`로 loop를 동작시킨다.
+
+  ```cython
+  @cython.no_gc_clear
+  cdef class Loop:
+      def __cinit__(self):
+          # Loop 내에 uvloop를 내장하고 있다.
+          self.uvloop = <uv.uv_loop_t*>PyMem_RawMalloc(sizeof(uv.uv_loop_t))
+          
+          # ...
+          
+          # loop를 동작 시킨다.
+          err = uv.uv_loop_init(self.uvloop)
+          
+          # ...
+          
+          # loop에 필요한 데이터를 주입한다.
+          self.uvloop.data = <void*> self
+  ```
+
+  - 실제 `asyncio.loop`를 사용할 때는 `loop.run_until_complete`를 호출한다.
+
+  ```cython
+  def run_until_complete(self, future):
+      # ...
+      # future 객체를 받아(asyncio.ensure_future에 해당) aio_ensure_future로 루프 태스크로 등록한다.
+      future = aio_ensure_future(future, loop=self)
+      # ...
+      try:
+          # 이후 run_forever를 호출한다.
+          self.run_forever()
+      except BaseException:
+          # ...
+  ```
+
+  - 혹은 `loop.run_forever`를 호출한다.
+    - `self._run(mode)`이 실행되고, `self._run(mode)`은 `self.__run(model)`를 호출한다.
+
+  ```cython
+  def run_forever(self):
+      # ...
+      try:
+          self._run(mode)
+      finally:
+          # ...
+  ```
+
+  - `__run`(uvloop/loop.pyx)
+    - `uv_run`으로 loop의 여러 단계를 거치도록 한다.
+    - GIL을 release한 뒤 해당 loop가 실행되게 함으로써 GIL은 다른 CPU-bounded job을 수행할 수 있게된다.
+
+  ```cython
+  cdef __run(self, uv.uv_run_mode mode):
+          # Although every UVHandle holds a reference to the loop,
+          # we want to do everything to ensure that the loop will
+          # never deallocate during the run -- so we do some
+          # manual refs management.
+          Py_INCREF(self)
+          with nogil:	# GIL을 release한 뒤 해당 loop가 실행되게 한다.
+              err = uv.uv_run(self.uvloop, mode)
+          Py_DECREF(self)
+  
+          if err < 0:
+              raise convert_error(err)
+  ```
+
+
+
