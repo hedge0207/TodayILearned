@@ -840,10 +840,21 @@
   
     - `poll.interval.ms`
       - 각 table에서 새로운 data를 가져올 주기를 ms단위로 설정한다.
-        - 기본값은 100ms이다.
+      - 기본값은 100ms이다.
+    - `dialect.name`
+      - Connector에서 사용할 DB dialect을 설정한다.
+      - 아무 값도 주지 않을 경우 빈 문자열(`""`)이 설정되며, 이 경우 `connection.url`에 설정된 JDBC URL 값에서 DB를 확인하고 dialect을 결정한다.
   
 
 
+
+- JDBC connector에 JDBC driver 추가하기
+  - JDBC connector에는 기본적으로 다양한 DB에 연결하기 위한 JDBC driver가 내장되어 있다.
+    - 그러나 JDBC connector에 포함되어 있지 않은 driver를 추가해야 하는 경우가 있을 수 있다.
+    - 만약 연결하고자하는 DB에 해당하는 JDBC driver`No suitable driver found for <jdbc_url>`과 같은 error가 발생할 수 있다.
+    - 예를 들어 Tibero에 연결해야 하는 경우 Tibero에 연결하기 위한 JDBC driver가 JDBC connector에 포함되어있지 않으므로, 추가를 해줘야한다.
+  - `<JDBC_connector_dir>/lib` 내부에 JDBC driver를 추가하면 된다.
+    - 추가한 후에는 Kafka Connect를 재실행해야한다.
 
 
 

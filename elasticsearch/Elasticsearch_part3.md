@@ -1166,6 +1166,31 @@
 
 
 
+- Elasticsearch에서 BM25 점수를 0~1사이로 변환하는 방법
+
+  - `script_score` query를 아래와 같이 작성한다.
+    - Sigmoid 함수를 사용하는 방식이다.
+
+  ```json
+  // GET my-index/_search
+  {
+    "query": {
+      "script_score": {
+        "script": {
+          "source": "1 / (Math.exp(-_score) + 1)"
+        },
+        "query": {
+          "match": {
+            "text": "ipsum"
+          }
+        }
+      }
+    }
+  }
+  ```
+
+
+
 
 
 

@@ -2440,34 +2440,7 @@
 
 
 
-# Exist query
-
-- exist query
-
-  - 특정 field에 색인 된 값이 존재하는 document들을 검색하는 query
-    - 값이 null이거나 빈 배열(`[]`)이면 값이 없는 것으로 판단한다.
-    - 그러나 빈 문자열, `"-"`, null과 다른 값을 함께 가진 배열(e.g. `[null, "foo"]`), custom_null value 등은 값이 있는 것으로 판단한다.
-
-  ```json
-  // GET /_search
-  {
-    "query": {
-      "bool": {
-        "must_not": {
-          "exists": {
-            "field": "user.id"
-          }
-        }
-      }
-    }
-  }
-  ```
-
-
-
-
-
-# Nested query
+## Nested query
 
 - Nested field를 검색하기 위한 query이다.
 
@@ -2663,7 +2636,9 @@
 
 
 
-## inner hits
+
+
+### inner hits
 
 - `nested` query, `has_child` query, `has_parent` 쿼리 등 중첩된 검색할 때 활용할 수 있는 옵션이다.
 
@@ -2793,6 +2768,90 @@
   - `from`, `size`, `sort` 등의 옵션을 사용 가능하다.
   - `name` 옵션으로 반환 받을 `inner_hits`의 이름을 설정 가능하다.
   - 그 밖의 옵션은 [링크](https://www.elastic.co/guide/en/elasticsearch/reference/current/inner-hits.html#inner-hits-options)참조
+
+
+
+# 기타 query
+
+- Combined fields query
+
+  - 여러 text field를 대상으로 검색을 할 수 있게 해주는 기능이다.
+    - 각 field의 내용이 한 index에 색인된 것 처럼 검색이 가능하다.
+    - 입력으로 들어온 검색어에 대해서 term-centric 관점을 취한다.
+    - 먼저 query string을 개별적인 term으로 분석한 후 각 term을 여러 field들에서 찾는다.
+    - BM25F를 기반으로 점수를 계산하는데, 검색 대상 필드들이 단일 field에 색인된 것 처럼 점수를 계산한다.
+    - 정확히 BM25F와 동일한 점수를 산출하지는 않으며, 근사치를 산출한다.
+    - 모든 field가 같은 search analyzer를 사용해야 사용이 가능하다.
+  - 아래와 같은 `combined_fields` query는
+
+  ```json
+  // GET /_search
+  {
+      "query": {
+          "combined_fields" : {
+              "query":      "database systems",
+              "fields":     [ "title", "abstract"],
+              "operator":   "and"
+          }
+      }
+  }
+  ```
+
+  - 아래와 같이 실행된다.
+
+  ```
+  +(combined("database", fields:["title" "abstract"]))
+  +(combined("systems", fields:["title", "abstract"]))
+  ```
+
+  - 옵션들
+    - `operator`
+    - `minimum_should_match`
+    - `auto_generate_synonyms_phrase_query`: boolean 값을 받으며 true로 줄 경우 `match_phrase` query가 자동으로 생성된다(기본값은 true).
+
+  - 각 field에 boosting이 가능하다.
+    - Field이름 뒤에 `^2`와 같이 설정하면 된다.
+
+  ```json
+  // GET /_search
+  {
+      "query": {
+          "combined_fields" : {
+              "query" : "distributed consensus",
+              "fields" : [ "title^2", "body" ] 
+          }
+      }
+  }
+  ```
+
+  - `multi_match` query에서 `cross_fields`로 설정했을 때와 차이점.
+    - `cross_fields`도 `conbined_fields` query와 마찬가지로 term-centric한 접근법을 취하고, `operator`와 `minimum_shoul_match`가 term 단위로 적용된다는 점은 동일하다.
+    - 그러나 `combined_fields`를 썼을 때의 이점은 BM25F에 기반한 점수 계산이 가능하다는 점이다.
+
+
+
+- exist query
+
+  - 특정 field에 색인 된 값이 존재하는 document들을 검색하는 query
+    - 값이 null이거나 빈 배열(`[]`)이면 값이 없는 것으로 판단한다.
+    - 그러나 빈 문자열, `"-"`, null과 다른 값을 함께 가진 배열(e.g. `[null, "foo"]`), custom_null value 등은 값이 있는 것으로 판단한다.
+
+  ```json
+  // GET /_search
+  {
+    "query": {
+      "bool": {
+        "must_not": {
+          "exists": {
+            "field": "user.id"
+          }
+        }
+      }
+    }
+  }
+  ```
+
+
 
 
 
