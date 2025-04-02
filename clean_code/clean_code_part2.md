@@ -542,6 +542,196 @@
 
 
 
+- null을 반환하지 마라
+
+  - 아래와 같이 null인지 자주 확인하는 코드는 좋지 않은 코드다.
+
+  ```java
+  public void registerItem(Item item) {
+      if (item != null) {
+          ItemRegistry registry = perinstentStore.getItemRegistry();
+          if (registry != null) {
+              Item existing = registry.getItem(item.getId());
+              if (existing.getBillingPeriod().hashRetailOwner()){
+                  existing.register(item)
+              }
+          }
+      }
+  }
+  ```
+
+  - null을 반환하면 안 되는 이유
+    - null을 반환하는 코드는 호출자로 하여금 반환값이 null인지 확인하게 만든다.
+    - 이는 호출자의 코드가 복잡해지는 것을 의미한다.
+    - 또한 null 확인을 잘 못 할 경우 버그가 발생할 수 도 있으며, 이 책임은 null을 반환한 함수가 아닌 호출자가 지게 된다.
+  - 메서드에서 null을 반환하고픈 유혹이 든다면 그 대신 예외를 던지거나 특수 사례 객체를 반환하는 것이 낫다.
+    - 사용하려는 외부 API가 null을 반환한다면 감싸기 메서드를 구현해 예외를 던지거나 특수 사례 객체를 반환하는 방식을 고려해야한다.
+    - 많은 경우 특수 사례 객체가 손쉬운 해결책이다.
+  - 예를 들어 아래 코드를 보자
+    - 아래 코드에서 `getEmployees`는 null도 반환한다.
+    - 따라서 호출자는 `getEmployees`의 반환값이 null인지 확인하는 과정을 거쳐야한다.
+
+  ```java
+  List<Employee> employees = getEmployees();
+  if (employees != null) {
+      for (Employee e : employees) {
+          totalPay += e.getPay();
+      }
+  }
+  ```
+
+  - 위 코드에서 `getEmployees`가 null을 반환해야 할 때 대신 빈 배열을 반환하게 만들면, 호출자의 코드는 아래와 같이 보다 깔끔해진다.
+
+  ```java
+  List<Employee> employees = getEmployees();
+  for(Employee e : employess) {
+      totalPay += e.getPay();
+  }
+  ```
+
+
+
+- null을 전달하지 마라
+
+  - 메서드에서 null을 반환하는 방식도 나쁘지만 메서드에 null을 전달하는 방식은 더 나쁘다.
+    - 정상적인 인자로 null을 기대하는 API가 아니라면 메서드로 null을 전달하는 코드는 최대한 피해야한다.
+  - 예를 들어 아래 코드에서 `xProjection` 메서드의 인자로 null이 전달된다면, NullPointException이 발생할 것이다.
+
+  ```java
+  public class MetricCalculator {
+      public double xProjection(Point p1, Point p2) {
+          return (p2.x - p1.x) * 1.5;
+      }
+  }
+  ```
+
+  - NullPointException이 발생하는 것을 방지하기 위해 아래와 같이 코드를 변경할 수도 있다.
+    - 두 인자 중 하나라도 null이 들어온다면 InvalidArguemtnException를 방생시킨다.
+    - 문제는 호출자가 InvalidArguemtnException를 받아서 처리해야 한다는 점이다.
+
+  ```java
+  public class MetricsCalculator {
+      public double xProjection(Point p1, Point p2) {
+          if (p1 == null || p2 == null) {
+              throw InvalidArguemtnException("...")
+          }
+          return (p2.x - p1.x) * 1.5; 
+      }
+  }
+  ```
+
+  - 또 다른 대안으로는 assert 문을 사용하는 방식도 있다.
+    - 코드를 읽기는 더 편할 수 있지만 이 역시 문제를 해결하지는 못하며, 인자로 null을 전달하면 여전히 오류가 발생한다.
+
+  ```java
+  public class MetricCalculator {
+      public double xProjection(Point p1, Point p2) {
+          assert p1 == null : "p1 should not be null";
+          assert p2 == null : "p2 should not be null";
+          return (p2.x - p1.x) * 1.5; 
+      } 
+  }
+  ```
+
+  - 애초에 null을 넘기지 못하도록 금지하는 정책이 합리적이다.
+    - 위에서 살펴본 것 처럼 대부분의 프로그래밍 언어는 호출자가 실수로 넘기는 null을 적절히 처리하는 방법이 없다.
+
+
+
+
+
+# 경계
+
+- 외부 코드 사용하기
+
+  - 인터페이스 제공자와 인터페이스 사용자
+    - 패키지 또는 프레임워크 제공자는 적용성을 최대한 넗히려 애쓴다.
+    - 더 많은 환경에서 실행이 가능해야 더 많은 고객이 이용하기 때문이다.
+    - 반면 사용자는 자신의 요구 사항에 집중하는 인터페이스를 원한다.
+    - 인터페이스 제공자와 사용자 사이의 이러한 차이로 인해 시스템 경계에서 문제가 생길 소지가 다분하다.
+  - `java.util.Map`의 경우
+    - `Map`은 굉장히 다양한 인터페이스로 수많은 기능을 제공하는데, 이러한 기능성과 유연성은 유용하지만 위험도 크다.
+    - 예를 들어 프로그램에서 Map을 만들어 여기저기 넘긴다고 가정하자.
+    - 넘기는 쪽에서는 아무도 `Map` 내용을 삭제하지 않으리라 믿고 넘기지만 `Map`은 내용을 지울 수 있는 `clear` 메서드를 지원하므로, `Map`을 사용하는 사용자라면 누구나 내용을 삭제할 수 있다.
+    - 또 다른 예로 설계 시 `Map`에 특정 객체 유형만 저장하기로 결정했다고 가정하자.
+    - 그렇지만 `Map`은 객체 유형을 제한하지 않으며, 사용자는 어떤 객체 유형이든 `Map`에 추가할 수 있다.
+
+  ```java
+  // 누군가 아래와 같이 Sensor 유형의 객체를 담으려고 sensors라는 Map의 인스턴스를 생성했다.
+  Map sensors = new HashMap();
+  
+  // Sensor 객체가 필요한 코드는 아래와 같이 Sensor 개체를 가져온다.
+  // 이 때, `Map`이 반환하는 객체를 올바른 유형으로 변환할 책임은 `Map`을 사용하는 클라이언트에 있다.
+  Sensor s = (Sensor)sensors.get(sensorId);
+  ```
+
+  - 제네릭스를 사용하면 가독성을 높일 수는 있다.
+    - 그러나 `Map<String, Sensor>`이 사용자에게 필요하지 않은 기능까지 제공한다는 문제는 해결하지 못한다.
+    - 또, 아래 코드에서 `Map<String, Sensor>` 인스턴스를 여기저기로 넘긴다면 `Map` 인터페이스가 변경될 경우, 수정할 코드가 상당히 많아진다.
+    - 인터페이스가 변할 가능성이 없다고 생각할수 있지만, Java5가 제네릭스를 지원하면서 `Map` 인터페이스가 변한적이 있다.
+
+  ```java
+  // 
+  Map<String, Sensor> sensors = new HashMap<Sensor>();
+  // ...
+  Sensor s = sensors.get(sensorId);
+  ```
+
+  - 아래는 `Map`을 좀 더 깔끔하게 사용한 코드다.
+    - 경계 인터페이스인 `Map`을 `Sensors` 안으로 숨겨 `Map` 인터페이스가 변하더라도 나머지 프로그램에는 영향을 미치지 않게 한다.
+    - `Sensors` 클래스 안에서 객체 유형을 관리하고 변환하기 때문에 제네릭스를 사용하든 사용하지 않든 더 이상 문제가 안 된다.
+    - 또한 `Sensors` 클래스는 프로그램에 필요한 인터페이스만 제공하므로 코드는 이해하기 쉽고 오용하기 어렵다.
+
+  ```java
+  public class Seonsors {
+      private Map sensors = new HashMap();
+      
+      public Sensor getById(String id) {
+          return (Sensor) sensors.get(id);
+      }
+  }
+  ```
+
+  - 핵심은 `Map`과 같은 경계 인터페이스를 여기저기 넘기지 말라는 말이다.
+    - 모든 경계 클래스를 위와 같이 캡슐화하라는 말이 아니다.
+    - 경계 인터페이스를 사용할 때는 이를 이용하는 클래스나 클래스 계열 밖으로 노출되지 않도록 주의해야한다.
+    - 또한 경계 인터페이스를 공개 API의 인수로 넘기거나 반환값으로 사용해선 안 된다.
+
+
+
+- 경계 살피고 익히기
+  - 학습 테스트
+    - 외부 코드를 익히고 외부 코드를 우리가 작성한 코드와 통합하는 것은 어려운 일이다.
+    - 시간을 들여서 외부 코드의 사용법을 익히고 우리쪽 코드에서 외부 코드를 사용하는 코드를 작성한 후 예상대로 동작하는 지 확인하는 것은 시간이 오래 걸릴뿐더러 버그가 발생했을 때, 우리 코드의 문제인지 외부 코드의 문제인지 파악하는 것도 쉽지 않다.
+    - 따라서 외부 코드를 우리 코드에 바로 적용하기 보다는 먼저 간단한 테스트 케이스를 작성해 외부 코드를 익히는 것이 도움이 될 수 있다.
+    - 이러한 테스트를 학습 테스트라 부른다.
+    - 학습 테스트는 프로그램에서 사용하려는 방식대로 외부 API를 호출한다.
+    - 즉 외부 코드의 전체를 테스트하는 것이 아니라, 우리가 사용하고자 하는 부분만 테스트하는 것이다.
+    - 테스트 코드를 작성하는 과정에서 외부 코드에 대한 학습도 할 수 있으며, 버그가 발생했을 때 외부 코드와 우리가 작성한 코드 중 어느 부분에 문제가 있는 것인지도 쉽게 파악할 수 있다.
+  - 학습 테스트는 공짜 이상이다.
+    - 학습 테스트에 드는 비용은 없다.
+    - 오히려 필요한 지식만 확보하는 손쉬운 방법이다.
+    - 또한 외부 코드의 새로운 버전이 나왔을 때에도 학습 테스트를 실행해 새로운 버전과 우리가 작성한 코드에 어떤 차이가 있는지도 확인할 수 있다.
+
+
+
+- 아직 존재하지 않는 코드를 사용해야 할 경우
+  - 다른 개발자와 협업을 하다 보면 다른 개발자의 작업 진행도에 내 작업의 진행도가 종속되는 경우가 생길 수 있다.
+    - 예를 들어 협업하는 개발자가 API를 개발해줘야 내가 해당 API를 호출하여 작업을 할 수 있는 경우 등이 있을 수 있다.
+  - 이럴 경우 adapter 패턴을 사용하면 다른 개발자의 진행도와 무관하게 내 작업이 가능하다.
+    - 먼저 내가 바라는 API의 인터페이스를 정의하고, 해당 인터페이스를 기반으로 작업을 진행한다.
+    - 이후에 협업자가 API 개발을 완료하면 adapter를 추가하여 내가 정의한 인터페이스와 협업자가 작성한 API 사이를 중재한다.
+
+
+
+- 깨끗한 경계
+  - 경계에서는 변경이 이루어진다.
+    - 소프트웨어 설계가 우수하다면 변경하는데 많은 투자와 재작업이 필요하지 않다.
+    - 통제할 수 없는 코드를 사용할 때는 너무 많은 투자를 하거나 향후 변경 비용이 지나치게 커지지 않도록 각별히 주의해야한다.
+  - 경계에 위치하는 코드는 깔끔히 분리해야 한다.
+
+
+
 
 
 
