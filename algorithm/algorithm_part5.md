@@ -145,9 +145,195 @@
   ```
   
   - 모든 순회에서 오른쪽 서브 트리보다 왼쪽 서브트리를 먼저 방문하는 이유
-    - 만약 단순히 노드의 개수를 세기 위함이라면 오른쪽 서브트리를 먼저 방문해도 상관 없다.
-    - 그러나 아래에서 살펴볼 BST는 왼쪽 서브트리의 값으 항상 오른쪽 서브트리보다 작게 정렬되어 있다.
-    - 따라서 오름차순으로 노드들을 방문하기 위해서는 왼쪽 서브트리 먼저 방문해야 한다.
+    - 만약 단순히 노드의 개수를 세기 위함이라면 오른쪽 서브 트리를 먼저 방문해도 상관 없다.
+    - 그러나 아래에서 살펴볼 BST는 왼쪽 서브트리의 값이 항상 오른쪽 서브 트리보다 작게 정렬되어 있다.
+    - 따라서 오름차순으로 노드들을 방문하기 위해서는 왼쪽 서브 트리 먼저 방문해야 한다.
+
+
+
+- Lowest Common Ancestor(LCA)
+
+  - 여러 노드들의 가장 낮은 공통 조상을 의미한다.
+    - 노드의 집합 S가 있을 때, 이 노드들의 최소 공통 조상은 집합 S의 모든 노드들을 포함하는 서브 트리의 루트이다.
+    - 예를 들어 아래와 같은 트리가 있을 때, 7과 4의 LCA는 2, 6과 4의 LCA는 5, 7과 8의 LCA는 3이다.
+
+  ```
+            3
+         /     \
+       5         1
+     /   \     /   \
+   6      2   0     8
+        /  \
+       7    4
+  ```
+
+  - 트리와 배열로부터 이진 트리를 생성하는 코드는 아래와 같다.
+
+  ```python
+  from collections import deque
+  
+  class TreeNode:
+      def __init__(self, val=0, left=None, right=None):
+          self.val = val
+          self.left = left
+          self.right = right
+  
+  def build_tree(values):
+      if not values or values[0] is None:
+          return None
+  
+      root = TreeNode(values[0])
+      queue = deque([root])
+      i = 1
+  
+      while i < len(values):
+          node = queue.popleft()
+  
+          if i < len(values) and values[i] is not None:
+              node.left = TreeNode(values[i])
+              queue.append(node.left)
+          i += 1
+  
+          if i < len(values) and values[i] is not None:
+              node.right = TreeNode(values[i])
+              queue.append(node.right)
+          i += 1
+  
+      return root
+  ```
+
+  - Tree에서 노드 p, 노드 q의 LCA를 찾는 코드는 아래와 같다.
+    - 시간 복잡도는 O(N)이다.
+
+  ```python
+  def lowestCommonAncestor(root: TreeNode, p: TreeNode, q: TreeNode) -> TreeNode:
+      # 종료 조건: 루트가 없거나, p나 q를 찾으면 루트 반환
+      if not root or root == p or root == q:
+          return root
+  
+      # 왼쪽, 오른쪽 탐색
+      left = lowestCommonAncestor(root.left, p, q)
+      right = lowestCommonAncestor(root.right, p, q)
+  
+      # 둘 다 찾았다면, 현재 노드가 공통 조상
+      if left and right:
+          return root
+  
+      # 한쪽에만 있다면 한쪽을 반환
+      return left if left else right
+  ```
+
+  - 혹은 아래와 같이 구하는 것도 가능하다.
+    - 먼저 각 노드의 부모와 깊이를 기록한다.
+    - 그 후 더 깊은 쪽을 위로 끌어올려 높이를 맞춘다.
+    - 함께 올라가며 처음으로 같은 노드가 되는 순간이 LCA가 된다.
+    - 시간 복잡도는 위 방식과 동일하다.
+
+  ```python
+  # 부모와 깊이를 기록하기 위한 DFS
+  def dfs(node, parent_node, depth_value, parent, depth):
+      if not node:
+          return
+      parent[node] = parent_node
+      depth[node] = depth_value
+      dfs(node.left, node, depth_value + 1, parent, depth)
+      dfs(node.right, node, depth_value + 1, parent, depth)
+  
+  # LCA를 찾기 위한 함수
+  def find_lca(a, b, parent, depth):
+      # 깊이가 다르면 맞춘다.
+      while depth[a] > depth[b]:
+          a = parent[a]
+      while depth[b] > depth[a]:
+          b = parent[b]
+  
+      # 같은 깊이에서 출발하여 같은 노드가 나올때 까지 올라간다.
+      while a != b:
+          a = parent[a]
+          b = parent[b]
+  
+      return a
+  
+  parent = {}
+  depth = {}
+  dfs(root, None, 0, parent, depth)
+  
+  # 노드 찾기 함수
+  def find_node(node, val):
+      if not node:
+          return None
+      if node.val == val:
+          return node
+      return find_node(node.left, val) or find_node(node.right, val)
+  
+  # 테스트: LCA(7, 4)
+  p = find_node(root, 7)
+  q = find_node(root, 4)
+  lca = find_lca(p, q, parent, depth)
+  
+  print(f"LCA of {p.val} and {q.val} is {lca.val}")
+  ```
+
+  - DP를 적용하면 보다 빠른 시간에 찾을 수 있다.
+    - 트리에서 각 노드의 2^k 번째 부모를 미리 계산해두고 이를 이용해 O(n log n)로 LCA를 구할 수 있다.
+    - 이 방식을 binary lifting이라고 부른다.
+    - 전처리에 O(n log n)이 걸리고, LCA를 찾는 데는 O(log n)이 걸리므로, 한 번만 수행하는 경우 시간 복잡도는 O(n log n), 전처리를 한 후 두 번째 수행 부터는 O(log n)이 걸린다.
+
+  ```python
+  from math import log2, ceil
+  import sys
+  sys.setrecursionlimit(10**6)
+  
+  class LCATree:
+      def __init__(self, n):
+          self.n = n
+          self.LOG = ceil(log2(n)) + 1
+          self.tree = [[] for _ in range(n + 1)]
+          self.depth = [0] * (n + 1)
+          self.parent = [[-1] * self.LOG for _ in range(n + 1)]
+  
+      def add_edge(self, u, v):
+          self.tree[u].append(v)
+          self.tree[v].append(u)
+  
+      def dfs(self, node, par):
+          for child in self.tree[node]:
+              if child != par:
+                  self.depth[child] = self.depth[node] + 1
+                  self.parent[child][0] = node  # 2^0번째 부모
+                  self.dfs(child, node)
+  
+      def preprocess(self, root=1):
+          self.dfs(root, -1)
+          for k in range(1, self.LOG):
+              for node in range(1, self.n + 1):
+                  if self.parent[node][k - 1] != -1:
+                      self.parent[node][k] = self.parent[self.parent[node][k - 1]][k - 1]
+  
+      def lca(self, u, v):
+          # 깊이를 맞춘다.
+          if self.depth[u] < self.depth[v]:
+              u, v = v, u
+          for k in reversed(range(self.LOG)):
+              if self.depth[u] - (1 << k) >= self.depth[v]:
+                  u = self.parent[u][k]
+  
+          # LCA를 찾으면 반환한다.
+          if u == v:
+              return u
+  
+          # 동시에 올라가면서 LCA를 찾는다.
+          for k in reversed(range(self.LOG)):
+              if self.parent[u][k] != -1 and self.parent[u][k] != self.parent[v][k]:
+                  u = self.parent[u][k]
+                  v = self.parent[v][k]
+  
+          return self.parent[u][0]
+  ```
+
+  
+
+  
 
 
 
