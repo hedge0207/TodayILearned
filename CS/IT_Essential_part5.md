@@ -1356,3 +1356,92 @@
   print(fst.search("cow"))
   ```
 
+
+
+- Bastion Host
+  - 침입 차단 소프트웨어가 설치되어 내부와 외부 네트워크 사이에서 게이트 역할을 수행하는 호스트이다.
+    - 외부에서 내부로 접근할 수 있는 유일한 접근점으로, 인프라와 외부 인터넷을 연결하는 외부 인터넷을 연결하는 중계 서버로 작동한다.
+    - 모든 inbound traffic은 bastion host를 통과해야 내부 네트워크로 들어갈 수 있다.
+  - 아래와 같은 기능을 수행한다.
+    - 인터넷과 내부 네트워크 사이의 보안 경계
+    - Inbound traffic의 제어와 모니터링
+    - SSH 또는 RDP 같은 안전한 원격 접속 제공
+
+
+
+- DNS lookup
+  - Domain name과 IP 주소 사이의 mapping 정보를 확인하는 과정이다.
+    - Domain name을 IP 주소로 변환하거나, IP 주소에서 domain name을 확인하는 작업을 말한다.
+    - Forward DNS Lookup과 Revers DNS Lookup이 있다.
+  - Forward DNS Lookup
+    - Domain name을 기반으로 해당하는 IP 주소를 찾는 과정이다.
+    - e.g. `example.com` → `93.184.216.34`
+  - Reverse DNS Lookup
+    - IP 주소를 기반으로 해당 IP가 연결된 domain name을 찾는 과정이다.
+    - e.g. `93.184.216.34` → `example.com`
+  - Linux의 dnsutils 패키지에 포함된 `nslookup` 명령어를 통해 수행할 수도 있다.
+
+
+
+- SRV Record(Service Record)
+
+  - DNS에서 특정 서비스를 제공하는 서버의 위치를 나타내는 resource record 유형이다.
+    - 주로 서비스를 제공하는 hostname, port, 우선 순위, 가중치를 지정하는 데 사용된다.
+  - 구조
+    - `<_service._protocol.domain>`에서 `_service`는 서비스 이름, `_protocol`는 protocol을, `domain`은 서비스가 소속된 domain을 나타낸다.
+    - `TTL`(Time To Live) 초 단위 캐싱 시간을 나타낸다.
+    - `Class`에는 보통 internet을 의미하는 `IN`이 온다.
+    - `SRV`는 record 유형을 나타낸다.
+
+  ```bash
+  <_service._protocol.domain> <TTL> <Class> <SRV> <Priority> <Weight> <Port> <Target>
+  
+  # e.g.
+  _sip._tcp.example.com. 3600 IN SRV 10 5 5060 sipserver.example.com.
+  ```
+
+
+
+- A Record와 AAAA Record
+
+  - 둘 다 DNS에서 사용되는 resource record 유형으로, domain name을 IP 주소로 mapping하는 데 사용된다.
+    - 두 record는 internet protocol에 따라 다르다.
+  - A Record(Address Record)
+    - Domain name을 IPv4(32bit) 주소로 mapping한다.
+    - 아래가 A Record의 형태이며 중간에 `A`는 SRV Record의 `SRV`와 같이 record 유형을 나타낸다.
+
+  ```bash
+  <domain_name> <TTL> <Class> A <IPv4_address>
+  
+  # e.g.
+  example.com.  3600  IN  A  93.184.216.34
+  ```
+
+  - AAAA Record(Quad-A Record)
+    - Domain name을 IPv4(128bit) 주소로 mapping한다.
+
+  ```bash
+  <domain_name> <TTL> <Class> AAAA <IPv6_address>
+  
+  # e.g.
+  example.com.  3600  IN  AAAA  2606:2800:220:1:248:1893:25c8:1946
+  ```
+
+
+
+- CNAME(Canonical Name)
+
+  - DNS에서 사용되는 resource record로 domain name에 alias를 지정하는 데 사용된다.
+    - 이를 통해 여러 domain name이 동일한 resource를 가리키도록 할 수 있다.
+  - 예시
+    - 아래 예시는 `www.example.com`를 `example.com`로 mapping한 것이다.
+
+  ```bash
+  www.example.com  IN  CNAME  example.com
+  ```
+
+  - 원리
+    - DNS query가 CNAME record를 만다면 실제 주소를 제공하는 A record나 AAAA recrod로 query를 재실행한다.
+    - 예를 들어 위 예시에서 `www.example.com `으로 접속하면 `example.com`의 IP 주소를 반환한다.
+    - CNAME record는 query를 재귀적으로 처리하기에 조회 시간이 늘어날 수 있다.
+
