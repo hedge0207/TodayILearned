@@ -192,7 +192,11 @@
 
   - 테스트 대상 코드
     - 의존 대상인 logger를 클래스를 생성할 때 인자로 받아 인스턴스 변수로 할당한다.
-
+    - 이렇게 하면 객체를 생성할 때 필요한 의존성을 명확히 알 수 있다.
+    - 생성자가 아닌 프로퍼티를 사용한다면 의존성은 선택사항이 되어 객체를 생성한 후 설정할 수 있다.
+    - 그러나 이 경우 필요한 의존성을 설정하지 않고도 객체가 생성될 수 있어 의존성 주입이 명확하지 않게 된다.
+    - 생성자를 사용하면 의존성이 필수적이라는 것을 명확히 나타낼 수 있어 코드의 가독성과 유지 보수성을 높일 수 있다.
+  
   ```python
   class PasswordVerifier:
       def __init__(self, rules, logger):
@@ -207,6 +211,203 @@
           
           self._logger.info("FAIL")
           return False
+  ```
+  
+  - 아래와 같이 `MockLogger`르를 생성해서 테스트한다.
+  
+  ```python
+  class MockLogger:
+      def __init__(self):
+          self.text = ""
+      
+      def info(self, text: str):
+          self.text = text
+  
+  def test_verify_passed_logs_passed():
+      mock_logger = MockLogger()
+      verifier = PasswordVerifier([], mock_logger)
+  
+      verifier.verify("any-value")
+  
+      assert mock_logger.text == "PASSED"
+  ```
+  
+  - `unittest.mock.MagicMock`을 사용하면 mock을 위한 클래스를 직접 생성하지 않아도 된다.
+  
+  ```python
+  from unittest.mock import MagicMock
+  
+  def test_verify_passed_logs_passed():
+      mock_logger = MagicMock()
+      verifier = PasswordVerifier([], mock_logger)
+  
+      verifier.verify("any-value")
+  
+      mock_logger.info.assert_called_once_with("PASSED")
+  ```
 
 
 
+- 인터페이스 주입을 이용한 코드 리팩터링
+
+  - 객체 지향 프로그램에서 인터페이스는 동일한 인터페이스를 구현하는 객체들을 서로 대체할 수 있게 하여 다형성을 이루게 해준다.
+    - JavaScript나 Python 같이 덕 타이핑을 허용하는 언어에서는 굳이 인터페이스를 필요로 하지 않는다.
+    - 이 언어들은 객체를 특정 인터페이스를 변환하지 않아도 되기 때문이다.
+  - 아래 코드는 인터페이스와 인터페이스를 구현한 클래스, 그리고 인터페이스에 의존하는 클래스이다.
+
+  ```python
+  # 인터페이스
+  class Logger(ABC):
+      @abstractmethod
+      def info(self, text: str):
+          ...
+  
+  # 인터페이스를 구현한 클래스
+  class SimpleLogger(Logger):
+      def info(self, text: str):
+          print(text)
+  
+  # 인터페이스에 의존하는 클래스
+  class PasswordVerifier:
+      def __init__(self, rules: list, logger: Logger):
+          self._rules = rules
+          self._logger = logger
+      
+      def verify(self, value):
+          failed = list(filter(lambda result: not result, map(lambda rule: rule(value), self._rules)))
+          if len(failed) == 0:
+              self._logger.info("PASSED")
+              return True
+          
+          self._logger.info("FAIL")
+          return False
+  ```
+
+  - 위와 같이 인터페이스에 의존하는 클래스를 테스트 할 때는, 해당 인터페이스를 구현한 가짜 객체를 생성하여 사용하면 된다.
+
+  ```python
+  class FakeLogger(Logger):
+      def __init__(self):
+          self.written = ""
+          
+      def info(self, text: str):
+          self.written = text
+  
+  
+  def test_verify_passed_logs_passed():
+      mock_logger = FakeLogger()
+      verifier = PasswordVerifier([], mock_logger)
+  
+      verifier.verify("any-value")
+  
+      assert mock_logger.written == "PASSED"
+  ```
+
+
+
+- 복잡한 인터페이스 다루기
+
+  - 복잡한 인터페이스 예시
+    - `PasswordVerifier` 클래스가 생성자로 받는 로거는 `ComplicatedLogger` 인터페이스를 구현한 객체이며, 이는 서로 다른 함수를 네 개 포함하고 있다.
+    - 각 함수는 하나 이상의 매개 변수를 받아야 하며, 모든 함수는 테스트에서 가짜로 만들어야한다.
+    - 이는 코드와 테스트가 복잡해지고, 유지 보수가 어려워지는 원인이 될 수 있다.
+
+  ```python
+  from typing import Any
+  
+  class ComplicatedLogger(ABC):
+      @abstractmethod
+      def info(self, text: str): ...
+      
+      @abstractmethod
+      def debug(self, text: str, obj: Any): ...
+      
+      @abstractmethod
+      def warn(self, text: str): ...
+      
+      @abstractmethod
+      def error(self, text: str, location: str, stacktrace: str): ...
+      
+      
+  class PasswordVerifier:
+      def __init__(self, rules: list, logger: ComplicatedLogger):
+          self._rules = rules
+          self._logger = logger
+      
+      # ...
+  ```
+
+  - 복잡한 인터페이스를 사용하여 테스트하기
+    - 테스트에 사용하기 위해 `ComplicatedLogger`를 구현하는 클래스를 만든다.
+    - 인터페이스의 모든 메서드를 오버라이드해야 하므로 반복 코드가 생기고 코드 길이도 길어진다.
+
+  ```python
+  class FakeComplicatedLogger(ComplicatedLogger):
+      def __init__(self):
+          self.info_written = ""
+          self.debug_written = ""
+          self.warn_written = ""
+          self.error_written = ""
+      
+      def info(self, text: str):
+          self.info_written = text
+          
+      def debug(self, text: str):
+          self.debug_written = text
+      
+      def warn(self, text: str):
+          self.warn_written = text
+          
+      def error(self, text: str, location: str, stacktrace: str):
+          self.error_wrtten = text
+  
+  
+  def test_verify_passed_logs_passed():
+      mock_logger = FakeComplicatedLogger()
+      verifier = PasswordVerifier([], mock_logger)
+  
+      verifier.verify("any-value")
+  
+      assert mock_logger.info_written == "PASSED"
+  ```
+
+  - 테스트 내에서 복잡한 인터페이스를 사용할 때 단점
+    - 인터페이스의 각 메서드를 호출할 때 전달받은 매개 변수를 인스턴스 변수(`self.info_written`, `self.debug_written` 등)에 직접 저장해야하므로 메서드마다 각 호출에 대한 매개 변수를 검증하는 것이 더 번거로워진다.
+    - 내부 인터페이스가 아닌 서드 파티 인터페이스에 의존할 때가 많아 시간이 지나면서 테스트가 더 불안정해질 수 있다.
+    - 내부 인터페이스에 의존하더라도 긴 인터페이스는 변경될 가능성이 높아 테스트를 변경해야 할 이유도 많아진다.
+  - 위와 같은 단점으로 인해, 아래 두 조건을 만족하는 경우에만 가짜 인터페이스를 사용하는 것이 좋다.
+    - 인터페이스에 대해 온전히 제어권을 가지고 있다(즉, 서드 파티에서 제공하는 인터페이스가 아니어야 한다).
+    - 작업 단위나 컴포넌트의 요구 사항에 맞게 설계된 인터페이스여야 한다.
+  - 인터페이스 분리 원칙
+    - 위 두 가지 조건 중 두 번째 조건은 ISP와 관련 있다.
+    - ISP는 인터페이스에 필요한 것보다 더 많은 기능이 포함되어 있으면 필요한 기능만 포함된 더 작은 어댑터 인터페이스를 만들어야 한다는 것이다.
+    - 따라서 가능한 한 함수를 더 적게 만들고 이름을 더 명확하게 짓고 매개변수를 덜 사용하도록 하면 좋다.
+
+
+
+- 부분 모의 객체
+  - 대부분의 언어와 테스트 프레임워크에서는 기존 객체와 함수를 감시(spy)하는 것이 가능하다.
+  - 이를 통해 나중에 해당 객체나 함수가 호출 되었는지, 몇 번 호출되었는지, 어떤 인수로 호출되었는지를 파악할 수 있다.
+    - 이 방식을 사용하면 실제 객체 일부를 모의 함수로 변환하면서 나머지 부분은 실제 객체로 유지할 수 있다.
+    - 이렇게 할 경우 테스트가 더 복잡해지거나 불안정해질 수 있지만, 레거시 코드를 다루어야 할 때 괜찮은 선택이 될 수도 있다.
+
+
+
+- 부분 모의 객체를 함수형 방식으로 풀어보기
+
+  - 아래 코드는 부분 모의 객체를 사용하는 테스트가 어떻게 생겼는지 보여준다.
+    - 실제 로거를 의미하는 `RealLogger` 인스턴스를 만든 후 기존 메서드 중 하나를 가짜 함수로 덮어쓴다.
+
+  ```python
+  def test_verify_with_logger():
+      testable_logger = RealLogger()
+      # lambda에서는 대입을 할 수 없으므로 가변 객체인 dictionary 사용
+      logged = {"message":""}
+      testable_logger.info = lambda text: logged.update({"message":text})
+      verifier = PasswordVerifier([], testable_logger)
+      verifier.verify("any-value")
+      assert logged["message"] == "PASSED"
+  ```
+
+  - 여기서 중요한 것은 `testable_logger`는 부분 모의 객체라는 것이다.
+    - 이는 `testable_logger`의 메서드 중 일부가 실제 의존성과 로직을 포함한 함수라는 의미다.
