@@ -196,7 +196,7 @@
     - 생성자가 아닌 프로퍼티를 사용한다면 의존성은 선택사항이 되어 객체를 생성한 후 설정할 수 있다.
     - 그러나 이 경우 필요한 의존성을 설정하지 않고도 객체가 생성될 수 있어 의존성 주입이 명확하지 않게 된다.
     - 생성자를 사용하면 의존성이 필수적이라는 것을 명확히 나타낼 수 있어 코드의 가독성과 유지 보수성을 높일 수 있다.
-  
+
   ```python
   class PasswordVerifier:
       def __init__(self, rules, logger):
@@ -212,9 +212,9 @@
           self._logger.info("FAIL")
           return False
   ```
-  
+
   - 아래와 같이 `MockLogger`르를 생성해서 테스트한다.
-  
+
   ```python
   class MockLogger:
       def __init__(self):
@@ -231,9 +231,9 @@
   
       assert mock_logger.text == "PASSED"
   ```
-  
+
   - `unittest.mock.MagicMock`을 사용하면 mock을 위한 클래스를 직접 생성하지 않아도 된다.
-  
+
   ```python
   from unittest.mock import MagicMock
   
@@ -411,3 +411,139 @@
 
   - 여기서 중요한 것은 `testable_logger`는 부분 모의 객체라는 것이다.
     - 이는 `testable_logger`의 메서드 중 일부가 실제 의존성과 로직을 포함한 함수라는 의미다.
+
+
+
+- 부분 모의 객체를 객체 지향 방식으로 풀어보기
+
+  - 실제 클래스의 메서드를 오버라이드하여 해당 메서드가 호출되었는지 검증하는 방식을 사용한다.
+    - 실제 클래스인 `RealLogger`를 상속 받아 일부 메서드만 오버라이드한다.
+
+  ```python
+  class TestableLogger(RealLogger):
+      def __init__(self):
+          self.logged = ""
+  
+      def info(self, text):
+          self.logged = text
+  
+  def test_verify_with_logger():
+      testable_logger = TestableLogger()
+      verifier = PasswordVerifier([], testable_logger)
+      verifier.verify("any-value")
+      assert testable_logger.logged == "PASSED"
+  ```
+
+  - 이 방식을 추출 및 오버라이드(extract and override)라고 한다.
+    - 이 방식은 프로덕션 코드의 클래스(예시의 경우 `RealLogger`)가 상속을 허용하고 오버라이딩을 허용해야 한다는 전제가 필요하다.
+
+
+
+
+
+
+
+# 격리 프레임워크
+
+- 격리 프레임워크
+  - 정의
+    - 객체나 함수 형태의 목이나 스텁을 동적으로 생성, 구성, 검증할 수 있게 해 주는 프로그래밍 가능한 API다.
+    - 격리 프레임워크를 사용하면 이러한 작업을 수작업으로 했을 때보다 더 간단하고 빠르며 코드도 더 짧게 작성할 수 있다.
+  - 결국 격리 프레임워크란 런타임에 가짜 객체를 생성하고 설정할 수 있는 재사용 가능한 라이브러리를 의미한다.
+    - 이러한 객체를 동적 스텁(dynamic stubs)과 동적 목(dynamic mocks)이라고 한다.
+    - 격리 프레임워크라 칭하는 이유는 작업 단위를 그 의존성으로부터 격리시킬 수 있기 때문이다.
+
+
+
+- 동적으로 가짜 모델 만들기
+
+  - 아래와 같은 코드가 있다고 가정해보자.
+    - 아래 코드를 테스트하려면 아래 두 가지 작업을 수행해야한다.
+    - `get_log_level`함수가 반환하난 값을 스텁을 사용하여 가짜로 만들어야한다.
+    - `info`, `debug` 함수가 호출되었는지 모의 함수를 사용하여 검증해야한다.
+    - 즉 내부로 들어오는 의존성인 `get_log_level`는 스텁으로 만들고, 나가는 의존성(`info`, `debug`)을 목으로 만들어야한다.
+
+  ```python
+  from logger_config import get_log_level
+  from logger import info, debug
+  
+  
+  def log(text: str):
+      if get_log_level() == "info":
+          info(text)
+      elif get_log_level() == "debug":
+          debug(text)
+  
+  
+  def verify_password(value: str, rules: list):
+      failed = [rule for rule in rules if rule(value) == False]
+  
+      if len(failed) == 0:
+          log("PASSED")
+          return True
+      else:
+          log("FAIL")
+          return False
+  ```
+  
+  - `unittest.mock` 사용하여 스텁 생성하기
+    - 내부로 들어오는 의존성인 `get_log_level`을 스텁으로 만든다.
+    - `patch`는 첫 번째 인자로 경로를 받는데, 주의할 점은 실제 의존성의 경로가 아니라 의존성을 사용하고 있는 테스트 대상을 기준으로 경로를 작성해야 한다는 점이다.
+    - 예를 들어 예시에서 `get_log_level`는 `logger_config` 모듈에 있으므로 `@mock.patch("logger_config.get_log_level")`과 같이 작성해야 한다고 생각할 수 있지만, 그렇지 않다.
+  
+  ```py
+  from unittest import mock
+  
+  
+  @mock.patch("password_verifier.get_log_level", return_value="info")
+  def test_info_log_level_and_no_rules(stub):
+      verify_password("anything", [])
+  ```
+  
+  - `pytest-mock`을 사용하면 보다 단순하게 스텁을 생성 할 수 있다.
+    - `pip install pytest-mock`으로 설치한다.
+    - pytest-mock의 `mocker`는 fixture로 동작하기에 아래와 같이 사용이 가능하다.
+  
+  ```python
+  def test_info_log_level_and_no_rules(mocker):
+      mocker.patch("password_verifier.get_log_level").return_value="info"
+      verify_password("anything", [])
+  ```
+  
+  - 목 생성하기
+    - 마찬가지로 `pytest-mock`을 사용하여 목을 생성할 수 있다.
+  
+  ```python
+  def test_info_log_level_and_no_rules(mocker):
+      mocker.patch("password_verifier.get_log_level", return_value="info")
+      mock_info = mocker.patch("password_verifier.info")    
+      verify_password("anything", [])
+  ```
+  
+  - 스텁과 목을 사용하여 테스트 실행하기
+    - `assert_called_with` 메서드는 어떤 인자와 함께 mock이 호출되었는지를 검증한다.
+  
+  ```python
+  def test_info_log_level_and_no_rules(mocker):
+      # stub
+      mocker.patch("password_verifier.get_log_level", return_value="info")
+      # mock
+      mock_info = mocker.patch("password_verifier.info")
+      
+      verify_password("anything", [])
+  
+      mock_info.assert_called_with("PASSED")
+  
+  def test_debug_log_level_and_no_rules(mocker):
+      # stub
+      mocker.patch("password_verifier.get_log_level", return_value="debug")
+      # mock
+      mock_debug = mocker.patch("password_verifier.debug")
+      
+      verify_password("anything", [])
+  
+      mock_debug.assert_called_with("PASSED")
+  
+  ```
+  
+  
