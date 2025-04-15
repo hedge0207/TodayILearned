@@ -452,6 +452,10 @@
   - 결국 격리 프레임워크란 런타임에 가짜 객체를 생성하고 설정할 수 있는 재사용 가능한 라이브러리를 의미한다.
     - 이러한 객체를 동적 스텁(dynamic stubs)과 동적 목(dynamic mocks)이라고 한다.
     - 격리 프레임워크라 칭하는 이유는 작업 단위를 그 의존성으로부터 격리시킬 수 있기 때문이다.
+  - 격리 프레임워크는 아래와 같은 장점이 있다.
+    - 손쉬운 가짜 모듈 생성으로 보일러 플에이트 코드를 제거하여 모듈 의존성을 쉽게 처리할 수 있게 도와준다.
+    - 값이나 오류를 만들어 내기가 더 쉬워진다.
+    - 가짜 객체 생성이 더 쉬워진다.
 
 
 
@@ -546,4 +550,185 @@
   
   ```
   
+
+
+
+- 객체 지향 스타일의 동적 목과 스텁
+
+  - 아래와 같은 코드가 있다고 가정해보자.
+    - `PasswordVerifier` 클래스는 복잡한 인터페이스(`ComplicatedLogger`)에 의존한다.
+
+  ```python
+  class ComplicatedLogger(ABC):
+      @abstractmethod
+      def info(self, text: str, method: str): ...
+      
+      @abstractmethod
+      def debug(self, text: str, method: str): ...
+      
+      @abstractmethod
+      def warn(self, text: str, method: str): ...
+      
+      @abstractmethod
+      def error(self, text: str, method: str): ...
+      
   
+  class PasswordVerifier:
+      def __init__(self, rules: list, logger: ComplicatedLogger):
+          self._rules = rules
+          self._logger = logger
+      
+      def verify(self, value):
+          failed = list(filter(lambda result: not result, map(lambda rule: rule(value), self._rules)))
+          if len(failed) == 0:
+              self._logger.info("PASSED", "verify")
+              return True
+          
+          self._logger.info("FAIL", "verify")
+          return False
+  ```
+
+  - 위와 같은 코드에서 복잡한 인터페이스인 `ComplicatedLogger`를 대체하는 스텁을 만들어야 하는 경우, 아래와 같이 긴 보일러 플레이트 코드를 작성해야한다.
+
+  ```python
+  
+  class FakeLogger(ComplicatedLogger):
+      def __init__(self):
+          self.info_text = ""
+          self.info_method = ""
+          self.debug_text = ""
+          self.debug_method = ""
+          self.warn_text = ""
+          self.warn_method = ""
+          self.error_text = ""
+          self.error_method = ""
+      
+      def info(self, text: str, method: str):
+          self.info_text = text
+          self.info_method = method
+  
+      def debug(self, text: str, method: str):
+          self.debug_text = text
+          self.debug_method = method
+  
+      def warn(self, text: str, method: str):
+          self.warn_text = text
+          self.warn_method = method
+      
+      def error(self, text: str, method: str):
+          self.error_text = text
+          self.error_method = method
+  
+  
+  def test_verify_with_logger():
+      mock_logger = FakeLogger()
+      verifier = PasswordVerifier([], mock_logger)
+      verifier.verify("any-value")
+      assert mock_logger.info_text == "PASSED"
+  ```
+
+  - 이 역시 mock을 사용하면 보다 단순하게 테스트가 가능하다.
+
+  ```python
+  def test_verify_with_logger(mocker):
+      mock_logger = mocker.Mock()
+      verifier = PasswordVerifier([], mock_logger)
+  
+      verifier.verify("any-value")
+  
+      mock_logger.info.assert_called_with("PASSED", "verify")
+  ```
+
+
+
+- 목과 스텁을 사용한 객체 지향 예제
+
+  - 비밀번호 검증기에 아래와 같은 요소를 추가한다.
+    - 소프트웨어가 업데이트되는 유지 보수 기간 동안 비밀번호 검증기가 비활성화 된다.
+    - 유지 보수 기간 중에는 비밀번호 검증기의 verify()를 호출하면 `logger.info()`에 "Under Maintenance"라는 메시지를 전달한다.
+    - 유지 보수 기간이 아닐 때는 `logger.info()`에 passed 또는 failed 결과를 전달한다.
+  - 변경된 코드는 아래와 같다.
+    - `MainTenanceWindow` 인터페이스는 생성자 매개변수로 주입되어 비밀번호 검증을 실행할지 여부를 결정한다.
+
+  ```python
+  class MainTenanceWindow:
+      def is_under_maintenance(self) -> bool:
+          # ...
+  
+  class PasswordVerifier:
+      def __init__(self, rules: list, logger: ComplicatedLogger, maintenance_window: MainTenanceWindow):
+          self._rules = rules
+          self._logger = logger
+          self._maintenance_window = maintenance_window
+      
+      def verify(self, value):
+          if self._maintenance_window.is_under_maintenance():
+              self._logger.info("Under Maintenance", "verify")
+              return False
+          
+          failed = list(filter(lambda result: not result, map(lambda rule: rule(value), self._rules)))
+          if len(failed) == 0:
+              self._logger.info("PASSED", "verify")
+              return True
+          
+          self._logger.info("FAIL", "verify")
+          return False
+  ```
+
+  - 아래와 같이 테스트한다.
+    - 기존과 마찬가지로 logger를 mock으로 대체한다.
+    - `MainTenanceWindow.is_inder_maintenance`의 반환값을 스텁으로 대체해야한다.
+
+  ```python
+  def test_verify_during_maintenance_with_logger(mocker):
+      stub_maintain_window = mocker.Mock()
+      stub_maintain_window.is_under_maintenance.return_value=True
+      mock_logger = mocker.Mock()
+      verifier = PasswordVerifier([], mock_logger, stub_maintain_window)
+  
+      verifier.verify("any-value")
+  
+      mock_logger.info.assert_called_with("Under Maintenance", "verify")
+  
+  
+  def test_verify_outside_maintenance_with_logger(mocker):
+      stub_maintain_window = mocker.Mock()
+      stub_maintain_window.is_under_maintenance.return_value=False
+      mock_logger = mocker.Mock()
+      verifier = PasswordVerifier([], mock_logger, stub_maintain_window)
+  
+      verifier.verify("any-value")
+  
+      mock_logger.info.assert_called_with("PASSED", "verify")
+  ```
+
+
+
+- 격리 프레임워크의 함정
+  - 대부분의 경우 모의 객체가 필요하지 않다.
+    - 격리 프레임워크의 가장 위험하면서도 무시하기 힘든 함정은 무엇이든 쉽게 가짜로 만들 수 있다는 것과 애초에 모의 객체가 필요하다고 생각하게 하는 것이다.
+    - 스텁이 필요하지 않다는 것은 아니지만, 모의 객체는 대부분의 단위 테스트에서 기본적으로 사용해서는 안 된다.
+    - 작업 단위에는 반환 값, 상태 변화, 서드 파티 의존성 이렇게 세 가지 종류의 종료점이 있을 수 있다는 점을 항상 기억하자.
+    - 이 중 단 하나의 유형만 테스트에서 모의 객체를 사용했을 때 이점을 누릴 수 있고, 나머지는 그렇지 않다.
+    - 테스트를 정의하면서 모의 객체나 모의 함수가 호출되었는지 검즈아기 전에 모의 객체 없이도 동일한 기능을 검증할 수 있는지 잠시 생각해보자.
+    - 모의 객체나 스텁을 사용하면 외부 의존성이 영향을 받아 테스트 난이도가 올라갈 수 있다.
+    - 의도한 대로 제대로 동작하는지 확인하는 과정 자체가 힘들 수 있기 때문이다.
+    - 대신에 반환 값을 검증하거나 작업 단위의 동작 변화를 외부에서 확인하는 것이 훨씬 쉬울 수 있다.
+    - 예를 들어 함수가 실행되었는지 확인하는 대신 해당 함수가 예상한 대로 예외를 발생시키는지 확인할 수 있다.
+  - 읽기 어려운 테스트 코드
+    - 테스트에서 목을 사용하면 테스트 가독성이 조금 떨어지지만, 여전히 코드를 읽는 사람 입장에서는 큰 문제없이 이해할 수 있다.
+    - 그러나 하나의 테스트에 많은 목을 만들거나 검증 단계를 너무 많이 추가하면 테스트 가독성이 떨어져 유지 보수가 어렵고, 무엇을 테스트하고 있는지 이해하기도 힘들다.
+  - 잘못된 대상 검증
+    - 모의 객체를 사용하면 인터페이스의 메서드나 함수가 호출되었는지 확인할 수 있지만, 그렇다고 해서 항상 올바른 대상을 테스트하고 있는 것은 아니다.
+    - 아래와 같은 경우는 검증하지 않아야 할 대상을 검증하는 것이다.
+    - 내부 함수가 다른 내부 함수를 호출했는지 검증(종료점이 아닌 대상을 검증).
+    - 스텁이 호출되었는지 검증(들어오는 의존성을 검증).
+  - 테스트당 하나를 초과하는 목을 사용
+    - 하나의 테스트에 목을 두 개 이상 사용하는 것은 동일한 작업 단위의 여러 종료점을 한꺼번에 테스트하는 것과 같다.
+    - 각 종료점마다 별도의 테스트를 작성하는 것이 좋다.
+  - 테스트의 과도한 명세화
+    - 테스트에 검증 항목이 너무 많으면 아주 작은 프로덕션 코드 변경에도 쉽게 깨질 수 있다.
+    - 상호 작용을 테스트하는 것은 양날의 검과 같아서 너무 많이 테스트하면 전체 기능이라는 큰 그림을 놓치게 되고, 너무 적게 테스트하면 작업 단위 간 중요한 상호 작용을 놓치게 된다.
+    - 이를 균형있게 유지하기 위해선 아래 사항을 고려해야한다.
+    - 목 대신 스텁을 사용한다. 전체 테스트 중 모의 객체를 사용하는 테스트가 5% 이상이라면 너무 많이 사용하고 있는 것일지도 모른다.
+    - 가능한 스텁을 목으로 사용하지 않는다. 스텁에서 메서드 호출 여부는 검증하지 않아야한다.
