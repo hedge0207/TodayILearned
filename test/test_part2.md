@@ -732,3 +732,188 @@
     - 이를 균형있게 유지하기 위해선 아래 사항을 고려해야한다.
     - 목 대신 스텁을 사용한다. 전체 테스트 중 모의 객체를 사용하는 테스트가 5% 이상이라면 너무 많이 사용하고 있는 것일지도 모른다.
     - 가능한 스텁을 목으로 사용하지 않는다. 스텁에서 메서드 호출 여부는 검증하지 않아야한다.
+
+
+
+
+
+
+
+# 비동기 코드 단위 테스트
+
+- 통합 테스트
+
+  - 아래와 같이 비동기 방식으로 특정 웹사이트로부터 데이터를 가져오는 코드를 작성했다.
+    - 메인 URL에서 콘텐츠를 가져와 "illustrative"라는 단어가 포함되어 있는지를 확인하여 웹 사이트가 정상인지 판단한다.
+    - 아래 코드는 많은 것이 하드코딩 되어 있다.
+
+  ```python
+  import aiohttp
+  import asyncio
+  
+  async def is_website_alive():
+      try:
+          async with aiohttp.ClientSession() as session:
+              async with session.get("http://example.com") as resp:
+                  if resp.status != 200:
+                      raise Exception(resp.reason)
+                  
+                  text = await resp.text()
+                  if "illustrative" in text:
+                      return {"success": True, "status": "ok"}
+                  raise Exception("text missing")
+      except Exception as err:
+          return {"success": False, "status": str(err)}
+  
+  
+  async def main():
+      result = await is_website_alive()
+      print(result)
+  
+  if __name__ == "__main__":
+      asyncio.run(main())
+  ```
+
+  - 단위 테스트를 실행하기 전에 통합테스트를 먼저 실행해본다.
+    - pytest는 비동기 함수를 테스트하기 위한 `pytest-asyncio` 패키지를 지원한다.
+    - `pip install pytest-asyncio`로 설치한다.
+
+  ```python
+  import pytest
+  
+  from fetch_data import is_website_alive
+  
+  
+  @pytest.mark.asyncio
+  async def test_is_website_alive():
+      response = await is_website_alive()
+      assert response["success"]
+  ```
+
+
+
+- 통합 테스트의 한계
+  - 긴 실행 시간
+    - 단위 테스트에 비해 훨씬 속도가 느리다.
+  - 불안정성
+    - 환경에 따라 실행 시간이 달러지거나 실패와 성공이 일관되지 않을 수 있다.
+  - 테스트와는 관계없는 코드나 환경 검증
+    - 테스트와 직접적인 관련이 없거나 개발자가 신경쓰지 않는 환경까지도 테스트한다.
+    - 네트워크 상태, 방화벽, 외부 웹 사이트 기능 등.
+  - 파악하는 데 더 많은 시간이 걸린다
+    - 통합 테스트가 실패하면 실패 원인으로 의심되는 것이 다양하다.
+    - 때문에 어디가 잘못되었는지 찾아보고 디버깅하는 데 더 많은 시간이 필요하다.
+  - 상황을 재현하기 어려움.
+    - 잘못된 웹 사이트 콘텐츠, 웹 사이트 다운, 네트워크 다운 등 부정적인 상황을 재현하는 것이 필요 이상으로 어렵다.
+  - 결과를 신뢰하기 어려움
+    - 통합 테스트 실패가 외부 문제라고 생각할 수 있지만 실제로는 코드 내부에 버그가 있을 수 있다.
+
+
+
+- 코드를 단위 테스트에 적합하게 만들기
+  - 코드를 단위 테스트로 테스트할 때 주로 사용되는 두 가지 패턴이 있다.
+  - 진입점 분리 패턴
+    - 프로덕션 코드에서 순수 로직 부분을 별도의 함수로 분리하여 그 함수를 테스트의 시작점으로 사용하는 패턴.
+  - 어댑터 분리 패턴
+    - 본질적으로 비동기적인 요소를 분리하고 이를 추상화하여 동기적인 요소로 대체할 수 있게 하는 패턴.
+
+
+
+- 진입점 분리 패턴
+
+  - 이 패턴에서는 특정 비동기 작업을 두 부분으로 나눈다.
+    - 비동기 부분(이 부분은 그대로 둔다).
+    - 비동기 작업이 끝난 후 실행할 부분
+  - 비동기 작업이 끝난 후 실행할 부분을 새로운 함수로 분리하여 순수 논리 작업 단위의 진입점으로 사용한다.
+    - 비동기 작업이 끝난 후 실행되던 부분을 분리하여 새로운 진입점으로 사용한다.
+
+  ```python
+  import aiohttp
+  import asyncio
+  
+  def throw_if_response_not_ok(resp):
+      if resp.status != 200:
+          raise Exception(resp.reason)
+  
+  # 새로운 진입점
+  def process_fetch_content(text):
+      if "illustrative" in text:
+          return {"success": True, "status": "ok"}
+      return {"success": False, "status": "missing text"}
+  
+  # 새로운 진입점
+  def process_fetch_error(err):
+      raise err
+  
+  async def is_website_alive():
+      try:
+          async with aiohttp.ClientSession() as session:
+              async with session.get("http://example.com") as resp:
+                  throw_if_response_not_ok(resp)
+                  text = await resp.text()
+                  return process_fetch_content(text)
+      except Exception as err:
+          process_fetch_error(err)
+  
+  async def main():
+      try:
+          result = await is_website_alive()
+          print(result)
+      except Exception as e:
+          print("에러 발생:", e)
+  
+  if __name__ == "__main__":
+      asyncio.run(main())
+  
+  ```
+
+  - 분리된 진입점에 대한 단위 테스트를 작성한다.
+    - 이제 비동기가 아닌 부분에 대해서는 async/await와 관련된 키워드를 추가하거나 코드 실행을 기다릴 필요가 없다.
+    - 이는 로직 작업 단위를 비동기 부분과 분리했기 때문에 가능하다.
+
+  ```python
+  def test_on_fetch_success_with_good_content():
+      result = process_fetch_content("illustrative")
+      assert result["success"]
+      assert result["status"] == "ok"
+  
+  def test_on_fetch_success_with_bad_content_returns_false():
+      result = process_fetch_content("text not on site")
+      assert not result["success"]
+      assert result["status"] == "missing text"
+  
+  def test_on_fetch_fail_raise():
+      with pytest.raises(Exception):
+          process_fetch_error(Exception)
+  ```
+
+
+
+- 어댑터 분리 패턴
+
+  - 비동기 코드를 의존성 처럼 여기는 전략이다.
+    - 테스트에서 더 쉽게 제어하고 테스트 시나리오를 다양하게 만들기 위해 대체하고 싶은 대상으로 본다.
+    - 논리 코드를 별도의 진입점으로 분리하는 대신 기존 코드에서는 의존성으로 있던 비동기 코드를 분리하여 어댑터로 감싸고, 이를 다른 의존성처럼 주입할 수 있게 한다.
+  - 어댑터를 사용하는 쪽 필요에 맞게 단순화된 특별한 인터페이스를 만드는 것도 일반적이다.
+    - 이를 인터페이스 분리원칙(ISP)이라고도 한다.
+    - 이 경우 실제 데이터를 가져오는 기능을 숨기고 자체적인 함수를 가진 네트워크 어댑터 모듈을 만들 수 있다.
+    - 아래 코드는 네트워크 어댑터에 해당하는 모듈을 간단하게 표현한 것이다.
+    - 함수의 이름과 기능을 모두 단순한다.
+
+  ```python
+  import aiohttp
+  import asyncio
+  
+  async def fetch_url_text(url):
+      async with aiohttp.ClientSession() as session:
+          async with session.get(url) as resp:
+              if resp.status == 200:
+                  text = await resp.text()
+                  return {"ok": True, "text": text}
+              return {"ok": False, "text": resp.reason}
+  ```
+
+  
+
+
+
