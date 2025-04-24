@@ -681,7 +681,7 @@
 
   ```python
   def test_verify_during_maintenance_with_logger(mocker):
-      stub_maintain_window = mocker.Mock()
+      s
       stub_maintain_window.is_under_maintenance.return_value=True
       mock_logger = mocker.Mock()
       verifier = PasswordVerifier([], mock_logger, stub_maintain_window)
@@ -828,6 +828,7 @@
     - 비동기 작업이 끝난 후 실행되던 부분을 분리하여 새로운 진입점으로 사용한다.
 
   ```python
+  # website_verifier.py
   import aiohttp
   import asyncio
   
@@ -866,11 +867,11 @@
       asyncio.run(main())
   
   ```
-
+  
   - 분리된 진입점에 대한 단위 테스트를 작성한다.
     - 이제 비동기가 아닌 부분에 대해서는 async/await와 관련된 키워드를 추가하거나 코드 실행을 기다릴 필요가 없다.
     - 이는 로직 작업 단위를 비동기 부분과 분리했기 때문에 가능하다.
-
+  
   ```python
   def test_on_fetch_success_with_good_content():
       result = process_fetch_content("illustrative")
@@ -898,11 +899,13 @@
     - 이를 인터페이스 분리원칙(ISP)이라고도 한다.
     - 이 경우 실제 데이터를 가져오는 기능을 숨기고 자체적인 함수를 가진 네트워크 어댑터 모듈을 만들 수 있다.
     - 아래 코드는 네트워크 어댑터에 해당하는 모듈을 간단하게 표현한 것이다.
-    - 함수의 이름과 기능을 모두 단순한다.
-
+    - 함수의 이름과 기능을 모두 단순화한다.
+    - URL에서 상태와 텍스트를 가져오는 과정을 숨기고, 이를 더 사용하기 쉬운 하나의 함수로 추상화한다.
+  
   ```python
+  # network_adapter.py
   import aiohttp
-  import asyncio
+  
   
   async def fetch_url_text(url):
       async with aiohttp.ClientSession() as session:
@@ -912,8 +915,353 @@
                   return {"ok": True, "text": text}
               return {"ok": False, "text": resp.reason}
   ```
-
   
+  - 위에서 만든 어댑터를 모듈 형식으로 사용하기
+    - 이후 테스트에서는 실제 네트워크 어댑터 모듈을 가짜 모듈로 대체한다.
+  
+  ```python
+  # website_verifier.py
+  from network_adapter import fetch_url_text
+  
+  async def is_website_alive():
+      try:
+          result = await fetch_url_text("http://example.com")
+          if not result["ok"]:
+              raise Exception(result["text"])
+          text = result["text"]
+          return process_fetch_content(text)
+      except Exception as err:
+          process_fetch_error(err)
+  ```
+  
+  - 모듈 형식으로 사용했을 때의 테스트 코드 작성하기
+    - 네트워크 어댑터를 가짜로 대체한다.
+  
+  ```python
+  @pytest.mark.asyncio
+  async def test_with_good_content_return_true(mocker):
+      mocker.patch("website_verifier.fetch_url_text", return_value={"ok": True, "text": "illustrative"})
+      result = await is_website_alive()
+      assert result["success"]
+      assert result["status"] == "ok"
+  
+  @pytest.mark.asyncio
+  async def test_with_bad_content_return_false(mocker):
+      mocker.patch("website_verifier.fetch_url_text", return_value={"ok": True, "text": "Hello World!"})
+      result = await is_website_alive()
+      assert not result["success"]
+      assert result["status"] == "missing text"
+  ```
+  
+  - 어댑터를 객체 지향 형식으로 만들기.
+    - 매개 변수 주입을 생성자 주입 패턴으로 확장한다.
+  
+  ```python
+  from abc import ABC, abstractmethod
+  
+  from pydantic import BaseModel
+  import aiohttp
+  
+  
+  class NetworkAdapterFetchResults(BaseModel):
+      ok: bool
+      text: str
+  
+  
+  class INetworkAdapter(ABC):
+      @abstractmethod
+      def fetch_url_text(self, url: str) -> NetworkAdapterFetchResults:
+          ...
+  
+  
+  class NetworkAdapter(INetworkAdapter):
+      async def fetch_url_text(self, url: str) -> NetworkAdapterFetchResults:
+          with aiohttp.ClientSession() as session:
+              async with session.get(url) as resp:
+                  if resp.status == 200:
+                      text = await resp.text()
+                      return NetworkAdapterFetchResults(**{"ok": True, "text": text})
+                  return NetworkAdapterFetchResults(**{"ok": False, "text": resp.reason})
+  ```
+  
+  - 어댑터를 사용하는 코드도 객체지향 형식으로 변경한다.
+  
+  ```python
+  from pydantic import BaseModel
+  
+  from network_adapter import INetworkAdapter
+  
+  
+  class WebsiteAliveResult(BaseModel):
+      success: bool
+      status: str
+      
+  
+  class WebsiteVerifier:
+      def __init__(self, network: INetworkAdapter):
+          self._network = network
+      
+      def _process_fetch_content(self, text) -> WebsiteAliveResult:
+          if "illustrative" in text:
+              return WebsiteAliveResult(**{"success": True, "status": "ok"})
+          return WebsiteAliveResult(**{"success": False, "status": "missing text"})
+      
+      def _process_fetch_error(self, err):
+          raise err
+      
+      async def is_website_alive(self) -> WebsiteAliveResult:
+          try:
+              result = await self._network.fetch_url_text("http://example.com")
+              if not result.ok:
+                  raise Exception(result.text)
+              text = result.text
+              return self._process_fetch_content(text)
+          except Exception as err:
+              self._process_fetch_error(err)
+  ```
+  
+  - 객체 지향 방식의 코드를 테스트하기
+    - 가짜 네트워크 어댑터를 생성하고, 생성자를 사용하여 주입한다.
+    - `unittest.mock.create_autospec`를 사용하면 간편하게 생성이 가능하다.
+  
+  ```python
+  from website_verifier import WebsiteVerifier
+  from network_adapter import INetworkAdapter, NetworkAdapterFetchResults
+  
+  from unittest.mock import create_autospec
+  
+  
+  def make_stub_network_with_result(fake_result: NetworkAdapterFetchResults):
+      stub_network = create_autospec(INetworkAdapter)
+      stub_network.fetch_url_text.return_value = fake_result
+      return stub_network
+  
+  @pytest.mark.asyncio
+  async def test_with_good_content_return_true():
+      stub_network = make_stub_network_with_result(NetworkAdapterFetchResults(**{"ok": True, "text": "illustrative"}))
+      web_verifier = WebsiteVerifier(stub_network)
+      result = await web_verifier.is_website_alive()
+      assert result.success
+      assert result.status == "ok"
+  
+  @pytest.mark.asyncio
+  async def test_with_bad_content_return_false():
+      stub_network = make_stub_network_with_result(NetworkAdapterFetchResults(**{"ok": True, "text": "Hello World!"}))
+      web_verifier = WebsiteVerifier(stub_network)
+      result = await web_verifier.is_website_alive()
+      assert not result.success
+      assert result.status == "missing text"
+  ```
+
+
+
+
+
+
+
+# 신뢰할 수 있는 테스트
+
+- 좋은 테스트는 아래 세 가징 특성을 만족해야한다.
+  - 신뢰성
+    - 아무런 의심과 걱정 없이 테스트 결과를 받아볼 수 있어야한다.
+    - 신뢰할 수 있는 테스트란 버그가 없고 올바른 대상을 테스트함을 의미한다.
+  - 유지 보수성
+    - 유지 보수성이 떨어지는 테스트는 항상 골칫거리다.
+    - 프로젝트 일정이 촉박한 경우 아무도 챙길 여유가 없어 그대로 방치될 수 있다.
+    - 코드가 조금만 바뀌어도 테스트를 계속 수정해야 한다면 결국 유지 보수에 지친 개발자들이 손을 놓는다.
+  - 가독성
+    - 가독성은 테스트를 읽을 수 있는 것 외에도 테스트가 잘못된 경우 문제를 파악할 수 있는 능력을 의미한다.
+    - 가독성이 없으면 신뢰성이나 유지 보수성도 큰 힘을 발휘하지 못한다.
+    - 테스트를 유지 보수하기 어려워지고 이해하지 못하므로 결국 테스트를 신뢰할 수 없게 된다.
+
+
+
+- 테스트를 신뢰할 수 있는지 판단하는 방법
+  - 일반적으로 아래 상황에서는 테스트를 신뢰하지 않는다.
+    - 테스트는 실패했지만 이는 거짓 양성 때문이라고 생각한다.
+    - 테스트가 가끔 통과하거나 테스트가 현재 작업과 관련 없다고 생각하거나 테스트에 버그가 있다고 느껴 테스트 결과를 무시한다.
+    - 테스트가 통과했지만 의심스러워 거짓 음성이라고 생각한다.
+    - 만약에 대비하여 직접 디버깅하거나 프로그램을 테스트할 필요를 느낀다.
+  - 아래 상황에서는 테스트를 신뢰한다.
+    - 테스트가 실패했을 때, 코드의 무언가가 잘못되었을까 봐 진심으로 걱정하여 쉽게 넘어가지 않고 테스트가 틀렸다고 생각한다.
+    - 테스트가 통과하면 따로 수동으로 테스트하거나 디버깅할 필요가 없다고 여긴다.
+
+
+
+
+
+## 테스트가 실패하는 이유
+
+- 테스트가 실패하는 이유
+
+  - 단위 테스트를 포함한 모든 종류의 테스트 실패는 합당한 이유가 있어야 납득할 수 있다.
+    - 합당한 이유란 실제 버그가 프로덕션 코드에서 발견된 경우를 의미한다.
+  - 테스트는 다양한 이유로 실패할 수 있다.
+    - 실제 버그 외의 다른 이유로 테스트가 실패한다면 그 테스트는 신뢰할 수 없는 것으로 간주해야 한다.
+    - 모든 테스트가 동일한 방식으로 실패하는 것은 아니므로 실패하는 이유를 파악하면 각 상황에 맞는 대응 방안을 마련하는 데 도움이 된다.
+
+  - 테스트가 실패하는 이유는 아래와 같다.
+    - 프로덕션 코드에서 실제 버그가 발견된 경우.
+    - 테스트가 거짓 실패를 일으키는 경우.
+    - 기능 변경으로 테스트가 최신 상태가 아닌 경우.
+    - 테스트가 다른 테스트와 충돌하는 경우.
+    - 테스트가 불안정한 경우.
+  - 위 이유 중에서 첫 번째 이유를 제외한 나머지 이유는 모두 현재 단계에서는 테스트를 신뢰할 수 없음을 의미한다.
+
+
+
+- 테스트가 거짓 실패를 일으키는 경우
+
+  - 테스트 자체에 버그가 있으면 거짓 실패(프로덕션 코드에는 문제가 없지만 테스트가 실패)가 발생할 수 있다.
+    - 종료점의 예상 결과를 잘못 설정했거나 테스트 대상 시스템(SUT)을 잘못 사용한 것이 원인일 수 있다.
+    - 아니면 테스트 환경을 잘못 설정했거나 테스트해야 하는 내용을 잘못 이해했을 수도 있다.
+    - 테스트에 버그가 있으면 테스트가 통과하더라도 실제로는 문제가 있는 상황을 발견하지 못할 수도 있다.
+
+  - 테스트에 버그가 있는지 찾아내는 방법.
+    - 테스트가 실패했는데 프로덕션 코드를 디버깅해도 버그를 찾을 수 없을 때는 테스트 코드 자체를 의심해야한다.
+    - 아래 항목에 해당하면 거짓 실패를 일으킨다고 볼 수 있다.
+    - 잘못된 항목이나 잘못된 종료점을 검증하는 경우.
+    - 잘못된 값을 진입점에 전달하는 경우.
+    - 진입점을 잘못 호출하는 경우.
+  - 해결 방법
+    - 테스트의 버그를 수정하고 다시 실행하여 통과하는지 확인한다.
+    - 이 때 통과했다고 해서 바로 안심하지 말고, 프로덕션 코드에 일부러 버그를 넣어 테스트가 실패하는지도 확인한다.
+  - 예방법
+    - TDD 방식으로 코드를 작성하면 코드의 어디가 잘못되었는지 쉽게 찾을 수 있어 버그를 미리 막을 수 있다.
+    - 테스트 주도 개발은 이러한 목적으로 사용하기에 가장 좋은 방법 중 하나이다.
+
+
+
+- 기능 변경으로 테스트가 최신 상태가 아닌 경우
+  - 기능이 변경되면 테스트가 현재 기능과 맞지 않아 실패할 수 있다.
+    - 예를 들어 로그인 기능의 이전 버전에서는 사용자 이름과 비밀번호를 입력해야 로그인이 가능했다.
+    - 그러나 새로운 버전에서는 이중 인증 방식이 도입되었다면, 기존 테스트는 로그인 함수에 필요한 값을 제대로 제공하지 못해 실패한다.
+  - 해결 방법
+    - 테스트를 새로운 기능에 맞게 수정한다.
+    - 새로운 기능을 대상으로 새 테스트를 만들고 기존 테스트는 삭제한다.
+
+
+
+- 테스트가 다른 테스트와 충돌하는 경우
+  - 결코 동시에 성공할 수 없는 두 개의 테스트가 있을 수 있다.
+    - 이 경우 일반적으로 통과하는 테스트는 눈에 띄지 않기 때문에 우리는 실패하는 테스트만 보게 된다.
+    - 예를 들어 어떤 테스트는 새로운 기능과 호환이 되지 않아 실패하는데, 또 다른 테스트는 새로운 기능이 있어야 하는데 그 기능이 없어 실패할 수 있다.
+  - 이러한 문제가 발생하는 원인.
+    - 근본적인 원인은 두 테스트 중 하나가 더 이상 쓸모없어졌다는 것이다.
+  - 해결 방법
+    - 어떤 기능이 필요한지, 어떤 기능이 서비스의 요구 사항을 만족하는지를 파악하여 쓸모없어진 기능을 테스트하는 코드를 없애야한다.
+  - 예방법
+    - 테스트와 기능이 발전하는 과정에서 자연스러운 현상이다.
+    - 따라서 굳이 예방하려 하지 않아도 된다.
+
+
+
+- 테스트가 불안정한 경우
+  - 테스트가 불규칙하게 실패할 때가 있다.
+    - 프로덕션 코드가 바뀌지 않았는데도 테스트가 갑자기 실패했다가 다시 통과하고 또다시 실패하는 경우가 있다.
+    - 이러한 테스트를 불안정한 테스트라고 한다.
+  - 이는 특수한 경우이므로 추후에 다시 다룬다.
+
+
+
+
+
+## 단위 테스트에서 불필요한 로직 제거하기
+
+- 테스트에 로직을 많이 넣을수록 테스트에 버그가 생길 확률이 기하급수적으로 증가한다.
+  - 아래와 같은 경우 테스트에 버그가 생길 확률이 높아진다.
+    - 간단하게 끝날 테스트가 동적인 로직을 갖는다.
+    - 난수를 생성한다.
+    - 스레드를 만든다.
+    - 파일을 쓴다.
+  - 테스트 코드도 코드이기에 버그가 있을 수 있다는 사실을 항상 염두에 두어야한다.
+    - 철저한 테스트를 만들기 위해 테스트가 복잡해질수록 테스트 자체의 버그가 발생할 확률도 올라간다는 사실을 기억해야한다.
+    - 물론 로직이 있는 테스트가 전혀 가치가 없다는 것은 아지만 가능한 지양해야 한다.
+  - 아래 내용이 단위 테스트에 포함되어 있다면 불필요한 로직이 포함된 것이므로 이를 줄이거나 완전히 없애는 것이 좋다.
+    - switch, if, else문
+    - foreach, for, while 루프
+    - 문자열 연결 등
+    - try / catch 블록
+
+
+
+- Assert문에서 로직
+
+  - 아래는 잘 못 작성한 테스트 코드의 예시이다.
+    - "hello"와 name을 연결하는 방식이 테스트 코드와 테스트 대상 코드에서 모두 반복된다.
+    - 문자열을 연결하는 것은 매우 단순하긴 하지만 분명한 로직이며, 테스트 대상 코드에서 사용하는 로직이 테스트 코드에서도 그대로 사용되고 있다.
+    - 만약 테스트 대상 코드에 버그가 있다면, 테스트에서도 동일한 버그가 발생할 것이고, 테스트는 버그를 잡아내지 못하고 오히려 잘못된 결과를 내놓게 된다.
+
+  ```python
+  # 테스트 대상 코드
+  def make_greeting(name: str):
+      return f"hello {name}"
+  
+  # 테스트 코드
+  def test_return_correct_greeting_for_name():
+      name = "foo"
+      result = make_greeting(name)
+      assert result == "hello "+ name
+  ```
+
+  - 테스트 코드가 실제 코드와 동일한 로직을 사용하면 테스트는 신뢰할 수 없다.
+    - 실제 코드에 버그가 있어도 테스트가 이를 감지하지 못하고 통과할 수 있기 때문이다.
+    - 테스트는 항상 실제 코드와 다른 방식으로 기댓값을 설정해야 버그를 제대로 잡아낼 수 있다.
+
+  - 검증 단계에서 기댓값을 동적으로 생성하지 말고 가능하면 하드코딩된 값을 사용해야 한다.
+    - 하드코딩하면 "foo"가 두 번 반복되어 유지보수성이 낮아진다고 생각할 수 있다.
+    - 그러나 유지 보수성보다 신뢰성이 훨씬 더 중요하다.
+
+  ```python
+  def test_return_correct_greeting_for_name():
+      name = "foo"
+      result = make_greeting(name)
+      assert result == "hello foo"
+  ```
+
+
+
+- 다른 형태의 로직
+
+  - 아래는 잘 못 작성한 테스트 코드이다.
+    - 아래 테스트는 여러 입력값을 사용하고 있는데, 이는 입력값을 반복해서 사용함으로써 테스트를 복잡하게 한다.
+    - 또 값에 따라 공백이 있는 경우와 없는 경우를 처리하는데 if/else문이 필요하다.
+    - 또한 프로덕션 코드에서 이미 사용한 로직을 테스트 코드에서 반복하고 있다.
+    - 마지막으로 테스트 이름이 너무 모호한데, 이는 여러 테스트 시나리오와 테스트 기댓값을 모두 포함하다 보니 이름을 "잘 동작한다" 정도밖에는 지을 수 없기 때문이다.
+
+  ```python
+  # 테스트 대상 코드
+  def is_name(value: str):
+      return len(value.split(" ")) == 2
+  
+  # 테스트 코드
+  def test_collectly_find_out_name():
+      names_to_test = ["fisrt_only", "first second", ""]
+      for name in names_to_test:
+          result = is_name(name)
+  
+          if " " in name:
+              assert result
+          else:
+              assert not result
+  ```
+
+  - 테스트가 복잡해지면 아래 문제가 생길 수 있다.
+    - 테스트를 읽고 이해하기 어렵다.
+    - 테스트를 재현하기가 어렵다.
+    - 테스트에 버그가 있을 가능성이 높아지거나 잘못된 것을 검증할 수 있다.
+    - 테스트가 여러 가지 일을 하므로 이름 짓기가 어렵다.
+  - 복잡한 테스트는 다양한 상황을 다루다 보니 특정 문제를 정확히 파악하기 어려워 실제 버그를 놓칠 가능성이 높다.
+
+
+
+- 로직이 더 많이 포함된 경우
+  - 테스트에는 다양한 로직이 추가될 수도 있다.
+    - 로직은 테스트뿐만 아니라 테스트에 필요한 헬퍼 함수, 직접 작성한 가짜 객체, 테스트 유틸리티 클래스에서도 찾아볼 수 있다.
+    - 이러한 곳에 로직을 추가할수록 코드를 읽기 어렵게 만들고 테스트에서 사용하는 헬퍼 함수에 버그가 발생할 가능성도 높다.
+  - 어떤 이유로든 테스트에 복잡한 로직이 필요하다면 최소한 유틸리티 함수의 로직을 검증하는 몇 가지 테스트를 추가하는 것이 좋다.
+
+
 
 
 
