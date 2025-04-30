@@ -233,3 +233,193 @@
       assert result
   ```
 
+
+
+- 유지 보수성을 높이는 리팩터링 방법
+
+  - private 또는 protected 메서드를 직접 테스트하지 않는다.
+    - 이들은 보통 특정한 이유로 메서드에 대한 접근을 제한하는 용도로 사용한다.
+    - 이는 구현 세부 사항을 숨겨 나중에 구현이 변경되더라도 외부에서 보이는 동작은 바뀌지 않도록 하기 위함이다.
+    - private 메서드를 테스트하는 것은 시스템 내부의 약속이나 규칙을 테스트하는 것과 같다.
+    - 테스트 할 때는 외부의 규칙만 신경쓰면 된다.
+    - private 메서드를 테스트하는 것은 내부적으로 어떤 동작을 발생시킬지 몰라 전체 코드의 동작을 테스트하는 것에 영향을 줄 수 있다.
+    - private 메서드는 홀로 존재하지 않으며, 결국에는 이를 호출하는 public 메서드가 있고, 그렇지 않더라도 실행의 연결 고리 중에는 반드시 어딘가에 public 메서드가 있다.
+    - 즉, private 메서드는 항상 외부 인터페이스로 시작하는 더 큰 작업의 일부이다.
+    - 따라서 private 메서드를 보면 시스템 내에서 이 메서드를 호출하는 public 메서드나 기능을 찾아야한다.
+    - private 메서드가 제대로 동작한다고 해도, 외부 인터페이스(public 메서드)에서 이를 잘못 사용하고 있으면 시스템 전체가 제대로 동작하지 않을 수 있다.
+    - 결국 중요한 것은 외부 동작(public 메서드)이 올바르게 작동하는지 확인하는 것이다.
+    - public 메서드로 private 메서드를 간접적으로 테스트하는 것이 더 효과적이다. 
+    - 테스트는 외부에서 관찰할수 있는 동작을 검증해야한다.
+  - 메서드를 public으로 만들기
+    - 이 방법이 객체 지향 원칙에 어긋나는 것처럼 보일 수 있지만, 항상 그런 것은 아니다.
+    - 어떤 메서드를 테스트하고 싶다는 것은 그 메서드가 일정하게 동작하거나 역할이 중요하다는 의미일 수 있다.
+    - 메서드를 public으로 만들면 이를 명확하게 드러내는 것이다.
+    - 반면에 private으로 두면 나중에 그 코드를 유지 보수할 때 해당 private 메서드를 사용하는 코드는 걱정할 필요 없이 private 메서드의 구현부를 마음대로 변경할 수 있다.
+  - 메서드를 새로운 클래스나 모듈로 분리하기
+    - 메서드에 독립적으로 동작할 수 있는 로직이 많이 포함되어 있거나, 해당 메서드와 관련된 특정 상태 값을 사용한다면 메서드를 시스템 내에서 특정 역할을 하는 새로운 클래스나 모듈로 분리하는 것이 좋다.
+    - 이렇게 하면 그 클래스만 따로 테스트할 수 있다.
+  - Stateless한 private 메서드를 public이나 static 메서드로 만들기
+    - 메서드가 stateless하다면 이 기능을 지원하는 언어에서는 이를 static으로 변경하는 것이 좋다.
+    - 이렇게 하면 테스트하기가 훨씬 쉽고 메서드 이름으로 유틸리티 메서드라는 점을 더 명확히 드러낼 수 있다.
+
+  - 테스트에서도 DRY 원칙 고수해야한다.
+    - 단위 테스트에서 중복은 프로덕션 코드에서의 중복만큼이나 해롭다.
+    - 헬퍼 함수를 사용하면 테스트에서 중복되는 부분을 줄일 수 있다.
+    - 다만, 중복을 제거하는 것이 지나치면 가독성을 해칠 수도 있다.
+
+  - 초기화 함수를 사용을 지양해야한다.
+    - 테스트 전에 한 번씩 실행되는 `beforeEach()` 함수(초기화 함수)는 중복을 제거하려는 목적으로 자주 사용되지만, 이 보다는 헬퍼 함수를 사용하는 것이 더 나을 수 있다.
+    - 초기화 함수는 잘못 사용되기 쉬워 개발자가 이를 원래 의도와는 다르게 사용할 가능성이 높아, 테스트 유지 보수가 어려워질 수 있기 때문이다.
+  - 초기화 함수는 아래와 같은 조건을 만족해야한다.
+    - 일부 테스트에서만 사용하는 객체를 초기화 함수에서 초기화하면 안 된다.
+    - 길고 이해하기 어려운 초기화 코드를 작성하면 안 된다. 
+    - 초기화 함수 내에서 목이나 가짜 객체를 만들어선 안 된다.
+    - 초기화 함수는 매개 변수나 반환 값을 가져서는 안 된다.
+    - 초기화 함수는 값을 반환하는 팩터리 매서드로 사용해선 안 된다.
+    - 초기화 함수는 모든 테스트에 동일한 초기화 작업을 적용해야 하므로 특정 상황에 맞춘 세밀한 조정 로직이 들어가선 안 된다.
+  - 매개 변수화된 테스트로 중복 코드를 제거한다.
+    - 초기화 함수를 사용하지 않고 코드를 전개할 수 있는 다른 좋은 방법은 모든 테스트가 비슷하게 작성되었다는 가정하에 매개 변수화된 테스트를 사용하는 것이다.
+    - 매개 변수화 패턴은 원래 초기화 함수에 있어야 할 설정을 각 테스트의 준비 단계로 옮길 수 있다.
+
+
+
+- 과잉 명세된 테스트
+  - 과잉 명세된 테스트는 단순히 코드의 외부 동작을 확인하는 것이 아니라 코드 내부가 어떻게 구현되어야 하는지까지 검증하는 테스트를 의미한다.
+    - 단순히 관찰 가능한 동작(종료점)이 올바른지 확인하는 것을 넘어서 코드 내부의 구현 세부 사항까지 확인한다.
+    - 예를 들어 메서드의 내부 로직이나 특정 상태 변화를 검증하는 테스트가 이에 해당한다.
+    - 이는 테스트가 지나치게 구체적이고 복잡해서 코드를 변경할 때 테스트를 자주 수정해야 하는 문제가 생길 수 있다.
+  - 아래는 단위 테스트가 과잉 명세되었다고 볼 수 있는 조건이다.
+    - 테스트가 객체의 내부 상태만 검증한다.
+    - 테스트가 목을 여러 개 만들어 사용한다.
+    - 테스트가 스텁을 목처럼 사용한다.
+    - 테스트가 필요하지 않은데도 특정 실행 순서나 정확한 문자열 비교를 포함한다.
+
+
+
+- 목을 사용한 내부 동작 과잉 명세
+
+  - 작업 단위의 종료점을 확인하는 대신 클래스나 모듈의 내부 함수가 호출되었는지만 검증하는 것이다.
+    - 예를 들어 아래 테스트 코드에서는 종료점을 검증하지 않으며, 내부 메서드를 호출하는지만 확인한다.
+    - 이는 아무 의미 없는 테스트이다.
+
+  ```python
+  class PasswordVerifier:
+      def __init__(self, rules: list):
+          self._rules = rules
+      
+      def verify(self, value):
+          failed = self._find_failed_rules(value)
+          if len(failed) == 0:
+              return True
+          return False
+      
+      # 내부 메서드
+      def _find_failed_rules(self, value):
+          return list(filter(lambda result: not result, map(lambda rule: rule(value), self._rules)))
+      
+      
+  def test_check_failed_rules_is_called(mocker):
+      verifier = PasswordVerifier([])
+      failed_mock = Mock()
+      failed_mock.return_value=[]
+      verifier._find_failed_rules = failed_mock
+      verifier.verify("foo")
+      failed_mock.assert_called()
+  ```
+
+  - 테스트는 내부 메서드에 신경 쓸 필요가 없다.
+    - `_find_failed_rules`메서드와 같이 값을 반환하는 메서드는 모의 함수로 만들지 않는 것이 좋은데, 이는 메서드 호출 자체는 종료점을 나타내지 않기 때문이다.
+    - 위 코드에서 종료점은 `verify()` 메서드가 반환하는 값이며, 내부 메서드가 존재하는지 여부는 중요하지 않다.
+    - 종료점이 아닌 protected 메서드를 모의 함수로 만들어 검증하는 것은 별다른 이점 없이 테스트 코드 내부 구현의 결합도만 올리는 행위다.
+    - 메서드 내에서 클래스 내부 메서드 호출이 변경될 때마다 관련된 모든 테스트를 수정해야 하는데, 이는 바람직하지 않다.
+
+
+
+- 결과와 순서를 지나치게 세밀하게 검증
+
+  - 반환된 값의 순서와 구조를 지나치게 세분화하는 것은 바람직하지 않다.
+    - 전체 목록괴 각 항목을 한꺼번에 검증하려고 하면 목록의 사소한 변경에도 테스트를 수정해야 하는 부담이 생긴다.
+    - 한 번에 모든 것을 검증하려고 하지 말고, 검증을 여러 작은 검증 구문으로 나누어 각각의 측면을 명확하게 확인하는 것이 좋다.
+
+  - 예를 들어 아래와 같은 코드를 테스트하려고 한다.
+
+  ```python
+  class PasswordVerifier:
+      def __init__(self, rules: list):
+          self._rules = rules
+      
+      def verify(self, values: list[str]) -> list[Result]:
+          failed_results = list(map(self._check_single_input, values))
+          return failed_results
+      
+      def _check_single_input(self, value: str) -> Result:
+          failed = self._find_failed_rules(value)
+          return Result(result=len(failed)==0, input_=value)
+      
+      def find_result_for(self, results: list[Result], value: str) -> bool:
+          found_result = None
+          for result in results:
+              if result.input_ == value:
+                  found_result = result
+                  break
+          return found_result.result if found_result else False
+      
+      def _find_failed_rules(self, value: str):
+          return list(filter(lambda result: not result, map(lambda rule: rule(value), self._rules)))
+      
+      def _find_failed_rules(self, value: str):
+          return list(filter(lambda result: not result, map(lambda rule: rule(value), self._rules)))
+  ```
+
+  - 아래와 같이 결과의 순서와 구조를 단일 검증문을 이용하여 확인하도록 테스트 코드를 작성한다.
+    - 아래 테스트는 결과값뿐만 아니라 결과의 순서와 구조까지도 검증한다.
+    - 즉, 한 번에 너무 많은 것을 검증한다.
+    - `results`의 배열 길이가 변경되거나, 각 객체에 속성이 추가되거나 삭제되거나, 결과의 순서가 변경되면 테스트도 함께 변경해줘야한다.
+    - 심지에 테스트에서 해당 속성을 사용하지 않더라도 속성이 추가되거나 삭제되면 테스트도 변경해야한다.
+
+  ```python
+  def test_overspecify_order_and_schema():
+      verifier = PasswordVerifier([lambda x: "abc" in x])
+      results = verifier.verify(["a", "ab", "abc", "abcd"])
+      assert results == [
+          Result(result=False, input_='a'), 
+          Result(result=False, input_='ab'), 
+          Result(result=True, input_='abc'), 
+          Result(result=True, input_='abcd')
+      ]
+  ```
+
+  - 구조는 무시하고 순서와 결과만 확인하도록 변경하면 아래와 같다.
+    - 이 코드 역시 결과 값의 순서가 바뀌면 여전히 문제가 될 수 있다.
+
+  ```python
+  def test_overspecify_order_and_schema():
+      verifier = PasswordVerifier([lambda x: "abc" in x])
+      results = verifier.verify(["a", "ab", "abc", "abcd"])
+      assert len(results) == 4
+      assert results[0].result == False
+      assert results[1].result == False
+      assert results[2].result == True
+      assert results[3].result == True
+  ```
+
+  - 순서가 그다지 중요하지 않다면 결과 값에 특정 값이 포함되어 있는지만 확인하면 된다.
+
+  ```python
+  def test_overspecify_order_and_schema():
+      verifier = PasswordVerifier([lambda x: "abc" in x])
+      results = verifier.verify(["a", "ab", "abc", "abcd"])
+      assert len(results) == 4
+      assert verifier.find_result_for(results, "a") == False
+      assert verifier.find_result_for(results, "ab") == False
+      assert verifier.find_result_for(results, "abc") == True
+      assert verifier.find_result_for(results, "abcd") == True
+  ```
+
+  - 단위 테스트에서 반환값이나 속성에 대해 하드코딩된 문자열을 사용하여 검증하는 것 역시 쉽게 저지를 수 있는 실수이다.
+    - 사실 필요한 것은 문자열으 특정 부분만 확인하는 것이라면 문자열이 완벽히 일치하는지보다는 필요한 내용의 포함 유무를 확인 가능한지 생각해봐야한다.
+    - 문자열이 정확히 일치하는지 확인하는 것 보다는 원하는 대로 문자열이 구성되었는지를 확인하는 것이 중요하다.
+    - 문자열이 정확히 일치하는지 확인하는 경우, 띄어쓰기, 쉼표, 마침표 하나에도 테스트가 실패할 수 있다.
+
+
+
