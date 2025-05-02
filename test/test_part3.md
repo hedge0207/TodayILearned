@@ -423,3 +423,124 @@
 
 
 
+
+
+# 가독성
+
+- 단위 테스트 이름 짓기
+  - 테스트 이름이나 테스트가 포함된 파일 구조에는 아래 세 가지 중요한 정보가 포함되어야 한다.
+    - 작업 단위의 진입점(혹은 현재 테스트 중인 기능 이름)
+    - 진입점을 테스트하는 상황
+    - 작업 단위의 종료점이 실행해야하는 동작
+  - 작업 단위나 진입점의 이름은 테스트를 읽는 사람이 코드의 기능 범위를 쉽게 알 수 있게 해준다.
+    - 테스트 이름의 첫 부분에 이를 포함하면 테스트 파일에서 쉽게 탐색할 수 있다.
+    - 예를 들어 "진입점 x를 null 값으로 호출하면 y를 실행한다." 형식으로 작성한다.
+  - 작업 단위의 종료점에서 무엇을 해야하거나 반환해야 하는지, 또는 어떻게 동작해야 하는지 알기 쉬운 말로 설명해야한다.
+    - 예를 들어 "진입점 x를 null 값으로 호출하면, 작업 단위의 종료점에서 y가 수행되어야 한다." 형식으로 작성한다.
+  - 테스트를 실패할 때 표시되는 정보가 보통 테스트의 이름이라는 것도 단위 테스트의 중요성을 더한다.
+    - 테스트가 실패했을 때, 실패한 테스트의 이름만 보고도 실패 원인을 이해할 수 있다.
+    - 이렇게 하면 디버깅 시간과 코드를 읽는 시간을 훨씬 절약할 수 있다.
+  - 좋은 테스트 이름은 문서 역할도 할 수 있다.
+    - 테스트 이름만으로 시스템이나 컴포넌트의 동작을 이해할 수 있다면 좋은 이름이다.
+
+
+
+- 매직 넘버와 변수명
+
+  - 매직 넘버
+    - 하드코딩된 값, 기록에 남지 않은 값, 명확하게 이해되지 않는 상수나 변수를 의미한다.
+    - 매직이라는 표현은 마치 마법처럼 이 값들이 작동하지만 왜 그렇게 작동하는지 알 수 없다는 의미로 쓰인다.
+    - 예를 들어 아래 테스트는 매직 넘버를 포함하고 있다.
+
+  ```python
+  def test_on_weekends_raise_exceptions():
+      with pytest.raises(Exception, match=r"It's the weekend!"):
+          verify_password("foobar123", [], 0)
+  ```
+
+  - 위 코드의 문제점
+    - 0은 여러 가지 의미로 해석될 수 있으며, 코드를 읽는 사람이 이 값이 일요일을 나타낸다는 것을 이해하려면 코드를 찾아봐야한다.
+    - 코드를 읽는 사람 입장에서 빈 배열이 무엇을 뜻하는지 알려면 역시 코드를 봐야한다.
+    - "foobar123"은 비밀번호처럼 보이긴 하지만 코드를 읽는 사람 입장에서는 왜 이 특정한 값을 사용했는지 의문이 들 것이다.
+  - 매직 넘버 문제를 수정하면 아래와 같다.
+    - 비밀번호 값은 "아무거나"라는 의미를 전달하기 위해 "anything"으로 변경한다.
+    - 나머지 두 개의 매직 넘버 역시 변수에 할당해 의미를 분명히 한다.
+
+  ```python
+  def test_on_weekends_raise_exceptions():
+      NO_RULES = []
+      SUNDAY = 0
+      with pytest.raises(Exception, match=r"It's the weekend!"):
+          verify_password("anything", NO_RULES, SUNDAY)
+  ```
+
+
+
+- 검증과 실행 단계 분리
+
+  - 가독성을 높이려면 검증 단계와 실행 단계를 한 문장에 넣지 말아야 한다.
+    - 아래 예시는 검증 단계와 실행 단계가 한 문장에 들어가 있다.
+    - 이로인해 테스트를 읽고 이해하기거 어렵다.
+    - 또한 디버깅도 어렵다.
+
+  ```python
+  assert "fake reason" in verifier.verify("anything")[0]
+  ```
+
+  - 아래와 같이 검증 단계와 실행 단계를 분리하는 것이 좋다.
+    - 디버깅을 위해 함수 호출 후 값을 확인하고 싶을때에도 훨씬 편하다.
+
+  ```python
+  result = verifier.verify("anything")
+  assert "fake reason" in result[0]
+  ```
+
+
+
+- 초기화 설정 및 설정 해제
+
+  - 단위 테스트에서 초기화(setup)와 해제(teardown) 함수는 남용되기 쉽다.
+    - 이는 테스트에 필요한 초기 설정이나 테스트가 끝난 후 목을 다시 초기화하는 등 해제 작업의 가독성을 떨어뜨린다.
+    - 특히 초기화 함수에서는 이 현상이 더욱 두드러진다.
+
+  - 예를 들어 아래 테스트는 초기화 함수를 사용하여 목을 설정한다.
+    - `mock_logger` fixture에서 목을 초기화하고, 테스트 함수에서 목을 사용한다.
+    - 만약 파일에 이러한 테스트가 수십 개 이상 있다고 가정하면, 목을 어디서 초기화시켰는지 찾기가 매우 힘들어진다.
+    - 또한 테스트에서 사용되는 상태가 많아질수록, 초기화 함수는 모든 테스트에서 사용되는 상태를 처리하는 곳이 되어 버린다.
+
+  ```python
+  @pytest.fixture
+  def mock_logger():
+      yield create_autospec(ComplicatedLogger)
+  
+  def test_verify_with_logger_calls_logger_with_pass(mock_logger):
+      verifier = PasswordVerifier([], mock_logger)
+      verifier.verify("anything")
+      mock_logger.info.assert_called_with("PASSED", "verify")
+  ```
+
+  - 목은 테스트 내에서 직접 초기화하고 모든 기댓값을 설정하는 것이 훨씬 더 가독성이 좋다.
+    - 아래와 같이 테스트 내에서 목을 초기화하도록 변경한다.
+
+  ```python
+  def test_verify_with_logger_calls_logger_with_pass():
+      mock_logger = create_autospec(ComplicatedLogger)
+      verifier = PasswordVerifier([], mock_logger)
+      verifier.verify("anything")
+      mock_logger.info.assert_called_with("PASSED", "verify")
+  ```
+
+  - 만약 유지 보수성을 좀 더 생각한다면 일종의 팩토리 함수를 만들어 목을 생성하고 이를 여러 곳에서 사용할 수 있도록 리팩터링할 수 있다.
+    - 이렇게 하면 초기화 함수 대신 여러 테스트에서 동일한 팩토리 함수를 사용 할 수 있다.
+
+  ```python
+  def make_mock_logger():
+      yield create_autospec(ComplicatedLogger)
+  
+  def test_verify_with_logger_calls_logger_with_pass():
+      mock_logger = make_mock_logger()
+      verifier = PasswordVerifier([], mock_logger)
+      verifier.verify("anything")
+      mock_logger.info.assert_called_with("PASSED", "verify")
+  ```
+
