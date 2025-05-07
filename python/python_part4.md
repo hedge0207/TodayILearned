@@ -820,10 +820,99 @@
 
 
 
+- 추상 클래스
+
+  -  0개 이상의 추상 메서드 이상 포함하는 클래스.
+     - 추상 클래스를 상속 받는 클래스에서 메서드 구현을 강제하기 위해 사용한다.
+     - 추상 클래스를 상속 받은 자식 클래스에 추상 클래스에 정의된 추상 메서드가 정의되지 않았다면, 자식 클래스의 객체 생성시 에러가 발생한다. 
+     - 추상 메서드가 아닌 일반 메서드를 포함할 수 있다.
+     - 추상 클래스는 인스턴스를 생성할 수 없다.
+     - 기본적으로 추상 클래스의 목적은 해당 클래스는 미완성 클래스이며, 이를 상속받은 자식 클래스에서 클래스를 완성시키는 것이다.
+     - 따라서 추상 메서드가 0개라도 할지라도 미완성 상태이기만 하다면 추상클래스일 수 있다.
+  -  인터페이스와의 차이
+     - 인터페이스는 모든 메서드가 추상 메서드인 클래스를 의미한다.
+     - 반면 추상 클래스는 메서드가 전부 추상 메서드이지만 않으면 추상 클래스이다.
+
+  -  추상 클래스 생성하기
+     - `abc` 모듈을 불러와서 사용해야 한다.
+     - abstract base class의 약자이다.
+     - `metaclass=ABCMeta`와 같이 설정함으로써 추상클래스라는 것을 표시한다.
+
+  ```python
+  # abc 모듈을 불러온다.
+  from abc import *
+  
+  
+  # metaclass에 ABCMeta를 입력한다.
+  class AbstractClass(metaclass=ABCMeta):
+      # 데코레이터를 통해 추상 메서드를 생성한다.
+      @abstractmethod
+      def foo():
+          pass
+  ```
+
+  - 자식 클래스에 추상 메서드를 구현하지 않을 경우
+    - 인스턴스를 생성할 때 에러가 발생한다.
+
+  ```python
+  from abc import *
+  
+  
+  class AbstractClass(metaclass=ABCMeta):
+      @abstractmethod
+      def foo():
+          pass
+  
+  
+  class MyClass(AbstractClass):
+      pass
+  
+  my_inst = MyClass()	# TypeError
+  ```
+
+  - 추상 클래스는 두 가지 방법으로 생성이 가능하다.
+    - 두 방식의 기능적인 차이는 존재하지 않으나, 굳이 두 가지 방식을 지원하는 이유는 Python이 다중 상속을 지원하기 때문이다.
+    - 여러 개의 class를 상속 받을 때, metaclass가 충돌될 수 있기 때문이다.
+    - 따라서 명시적으로 metacalss가 `ABCMeta`임을 지정해주는 방식도 지원하는 것이다.
+
+  ```python
+  from abc import ABC, ABCMeta, abstractmethod
+  
+  class Animal(ABC):
+      @abstractmethod
+      def walk(self) -> None:
+          pass
+  
+  class Animal(metaclass=ABCMeta):
+      @abstractmethod
+      def walk(self) -> None:
+          pass
+  ```
+
+  - ABC class는 결국 `ABCMeta`를 metaclass로 받는다.
+    - 아래 코드는 abc 패키지 내에 있는 `ABC` class의 실제 코드이다.
+    - 따라서 `ABC`를 바로 상속 받는 것과 `metaclass=ABCMeta`와 같이 meta class를 `ABCMeta`로 설정하는 것 사이에 실제 기능적 동작에는 차이가 없다.
+
+  ```python
+  class ABC(metaclass=ABCMeta):
+      """Helper class that provides a standard way to create an ABC using
+      inheritance.
+      """
+      __slots__ = ()
+  ```
+
+
+
+
+
+### 다중 상속
+
 - 다중 상속
 
-  - 둘 이상의 부모 클래스로부터 상속을 받을 수 있다.
-    - 상속 받을 클래스들의 이름을 콤마로 구분해서 입력한다.
+  - 둘 이상의 부모 클래스로부터 상속을 받는 것을 말한다.
+    - 다중 상속을 지원하지 않는 언어도 있으나 Python은 다중 상속을 지원한다.
+
+  - 상속 받을 클래스들의 이름을 콤마로 구분해서 입력한다.
 
   ```python
   class Person:
@@ -848,11 +937,14 @@
   programmer.coding()
   ```
 
-  - 다이아몬드 상속
-    - Husband와 Wife는 Person을 상속 받고, Child는 Husband와 Wife를 상속 받는다.
+
+
+
+- 다이아몬드 상속
+  - Husband와 Wife는 Person을 상속 받고, Child는 Husband와 Wife를 상속 받는다.
     - 이를 그림으로 표현하면 트럼프 카드의 다이아 모양이 되는데, 이런 상속 관계를 다이아몬드 상속이라 부른다.
     - 명확하지 않고 애매한 코드가 되므로 죽음의 다이아몬드라고도 불린다.
-    - 예를 들어 아래 코드에서 `greeting` 메서드를 호출했을 때 어떤 `greeting` 메서드가 호출될지가 애매해진다.
+  - 예를 들어 아래 코드에서 `greeting` 메서드를 호출했을 때 어떤 `greeting` 메서드가 호출될지가 애매해진다.
 
   ```python
   class Person:
@@ -877,9 +969,12 @@
   child.greeting()
   ```
 
-  - 메서드 탐색 순서
-    - 위 예시의 경우 `Husband` 클래스의 `greeting` 메서드가 호출되는데 이는 `Child`의 상속 관계를 정의할 때 `Husband`를 먼저 입력했기 때문이다.
-    - `mro` 메서드를 통해 탐색 순서를 확인이 가능하다.
+
+
+- 메서드 결정 순서(MRO)
+
+  - 위 예시의 경우 `Husband` 클래스의 `greeting` 메서드가 호출되는데 이는 `Child`의 상속 관계를 정의할 때 `Husband`를 먼저 입력했기 때문이다.
+  - `mro` 메서드를 통해 탐색 순서를 확인이 가능하다.
 
   ```python
   class Person:
@@ -906,86 +1001,89 @@
 
 
 
-- 추상 클래스
+- 믹스인
 
-  -  0개 이상의 추상 메서드 이상 포함하는 클래스.
-    - 추상 클래스를 상속 받는 클래스에서 메서드 구현을 강제하기 위해 사용한다.
-    - 추상 클래스를 상속 받은 자식 클래스에 추상 클래스에 정의된 추상 메서드가 정의되지 않았다면, 자식 클래스의 객체 생성시 에러가 발생한다. 
-    - 추상 메서드가 아닌 일반 메서드를 포함할 수 있다.
-    - 추상 클래스는 인스턴스를 생성할 수 없다.
-    - 기본적으로 추상 클래스의 목적은 해당 클래스는 미완성 클래스이며, 이를 상속받은 자식 클래스에서 클래스를 완성시키는 것이다.
-    - 따라서 추상 메서드가 0개라도 할지라도 미완성 상태이기만 하다면 추상클래스일 수 있다.
-  - 인터페이스와의 차이
-    - 인터페이스는 모든 메서드가 추상 메서드인 클래스를 의미한다.
-    - 반면 추상 클래스는 메서드가 전부 추상 메서드이지만 않으면 추상 클래스이다.
-  
-  - 추상 클래스 생성하기
-    - `abc` 모듈을 불러와서 사용해야 한다.
-    - abstract base class의 약자이다.
-    - `metaclass=ABCMeta`와 같이 설정함으로써 추상클래스라는 것을 표시한다.
-  
+  - 코드를 재사용하기 위해 일반적인 행동을 캡슐화해 놓은 부모 클래스이다.
+    - 일반적으로 믹스인 클래스 자체만으로는 유용하지 않고, 믹스인 클래스만 확장하는 경우에도 큰 의미가 없다.
+    - 이는 믹스인 클래스는 대부분 다른 클래스의 메서드나 속성과 결합하여 사용되기 때문이다.
+    - 보통은 다른 클래스와 믹스인 클래스를 다중 상속하고, 믹스인 클래스의 메서드와 속성을 다른 클래스에서 활용한다.
+  - 예를 들어 아래와 같이 문자열을 받아서 하이픈으로 구분된 값을 반환하는 파서가 있다.
+
   ```python
-  # abc 모듈을 불러온다.
-  from abc import *
-  
-  
-  # metaclass에 ABCMeta를 입력한다.
-  class AbstractClass(metaclass=ABCMeta):
-      # 데코레이터를 통해 추상 메서드를 생성한다.
-      @abstractmethod
-      def foo():
-          pass
+  class BaseTokenizer:
+      def __init__(self, token: str):
+          self.token = token
+      
+      def __iter__(self):
+          yield from self.token.split("-")
+          
+  tokenizer = BaseTokenizer("5c35031c-2731-11f0-8b39-26ab7cf61821")
+  print(list(tokenizer))		# ['5c35031c', '2731', '11f0', '8b39', '26ab7cf61821']
   ```
-  
-  - 자식 클래스에 추상 메서드를 구현하지 않을 경우
-    - 인스턴스를 생성할 때 에러가 발생한다.
-  
+
+  - 이제 위에서 만든 클래스를 변경하지 않고, 값을 대문자로 반환해야 되는 상황이라고 가정해보자.
+    - 새로운 클래스를 만들 수도 있지만 이미 많은 클래스가 BaseTokenizer를 확장했고, 모든 클래스를 바꾸고 싶지는 않다고 가정해보자.
+    - 이러한 변환 작업을 처리하는 계층 구조에 새로운 클래스를 만들어 mix 할 수 있다.
+
   ```python
-  from abc import *
-  
-  
-  class AbstractClass(metaclass=ABCMeta):
-      @abstractmethod
-      def foo():
-          pass
-  
-  
-  class MyClass(AbstractClass):
-      pass
-  
-  my_inst = MyClass()	# TypeError
+  class UpperIterableMixin:
+      def __iter__(self):
+          return map(str.upper, super().__iter__())
+      
+      
+  class MyTokenizer(UpperIterableMixin, BaseTokenizer):
+      ...
   ```
-  
-  - 추상 클래스는 두 가지 방법으로 생성이 가능하다.
-    - 두 방식의 기능적인 차이는 존재하지 않으나, 굳이 두 가지 방식을 지원하는 이유는 Python이 다중 상속을 지원하기 때문이다.
-    - 여러 개의 class를 상속 받을 때, metaclass가 충돌될 수 있기 때문이다.
-    - 따라서 명시적으로 metacalss가 `ABCMeta`임을 지정해주는 방식도 지원하는 것이다.
-  
+
+  - `BaseTokenizer`를 상속 받는 새로운 tokenizer 클래스를 추가하고, 해당 클래스를 상속 받으면 되는 것 아닌가?
+    - 아래와 같이 구현해도 위에서 믹스인을 사용한 방식과 동일하게 동작한다.
+
   ```python
-  from abc import ABC, ABCMeta, abstractmethod
+  class BaseTokenizer:
+      def __init__(self, token: str):
+          self.token = token
+      
+      def __iter__(self):
+          yield from self.token.split("-")
+          
   
-  class Animal(ABC):
-      @abstractmethod
-      def walk(self) -> None:
-          pass
+  class UpperTokenizer(BaseTokenizer):
+      def __iter__(self):
+          return map(str.upper, super().__iter__())
   
-  class Animal(metaclass=ABCMeta):
-      @abstractmethod
-      def walk(self) -> None:
-          pass
+  
+  class MyTokenizer(UpperTokenizer):
+      ...
   ```
-  
-  - ABC class는 결국 `ABCMeta`를 metaclass로 받는다.
-    - 아래 코드는 abc 패키지 내에 있는 `ABC` class의 실제 코드이다.
-    - 따라서 `ABC`를 바로 상속 받는 것과 `metaclass=ABCMeta`와 같이 meta class를 `ABCMeta`로 설정하는 것 사이에 실제 기능적 동작에는 차이가 없다.
-  
+
+  - 믹스인을 사용했을 때의 이점은 믹스인 클래스를 여러 상속 계층의 클래스와 조합할 수 있다는 것이다.
+    - 예를 들어, 공백을 없애는 tokenizer가 필요해져 아래와 같이 새로운 tokenizer를 만들었다고 가정해보자.
+
   ```python
-  class ABC(metaclass=ABCMeta):
-      """Helper class that provides a standard way to create an ABC using
-      inheritance.
-      """
-      __slots__ = ()
+  class BaseTokenizer:
+      def __init__(self, token: str):
+          self.token = token
+      
+      def __iter__(self):
+          yield from self.token.split("-")
+  
+  class StripTokenizer(BaseTokenizer):
+      def __iter__(self):
+          return map(str.strip, super().__iter__())
   ```
+
+  - 이 때, strip과 upper를 모두 수행하고 싶다면 새로운 클래스를 또 만들어야한다.
+    - 상속은 단일 경로이기 때문에 기능 조합을 할 때마다 클래스를 무한히 만들어야한다.
+
+  ```python
+  class UpperStripTokenizer(BaseTokenizer):
+      def __iter__(self):
+          return map(str.upper, map(str.strip, super().__iter__()))
+  ```
+
+  - 그러나 믹스인을 사용하면, `BaseTokenizer`의 상속 계층 어디에나 자유롭게 기능을 추가할 수 있다.
+
+
 
 
 

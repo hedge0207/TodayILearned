@@ -1228,10 +1228,9 @@
 
 
 
-# Immutable 
+- Immutable
 
-- Python에서 어떤 값이 immutable하다는 것은 해당 값이 변경될 수 없을 뿐만 아니라, 변경사항이 있을 경우 새로운 객체를 생성한다는 의미이다.
-
+  - Python에서 어떤 값이 immutable하다는 것은 해당 값이 변경될 수 없을 뿐만 아니라, 변경사항이 있을 경우 새로운 객체를 생성한다는 의미이다.
   - 예를 들어 integer는 immutable한 type이다.
     - 아래와 같이 immutable한 type인 integer type의 값을 변경하면, 새로운 객체를 생성한다.
   
@@ -1243,13 +1242,12 @@
   num += 1
   print(id(num)==id(num_copy))	# False
   ```
-
-
-
-- Python은 메모리 최적화를 위해서 immutable type을 cache한다.
-
-  - Immutable type의 경우 서로 다른 변수에 할당해도 같은 객체를 가리키게 된다.
-
+  
+  - Python은 메모리 최적화를 위해서 immutable type을 cache한다.
+  
+    - Immutable type의 경우 서로 다른 변수에 할당해도 같은 객체를 가리키게 된다.
+  
+  
   ```python
   a = 42
   b = "hello"
@@ -1261,6 +1259,66 @@
   print(id(c) == id(e[2]))	# True
   print(id(d) == id(e[3]))	# True
   ```
+
+
+
+
+
+- 내장 타입 확장
+
+  - list, dict, str과 같은 내장 타입을 확장하는 올바른 방법은 collections 모듈을 사용하는 것이다.
+    - 예를 들어 dict를 직접 상속 받아서 새로운 클래스를 만들다 보면 예상치 못한 결과를 얻게 될 수 있다.
+    - 이는 CPython 코드가 내부에서 연관된 부분을 모두 찾아서 업데이트 해주지는 않기 때문이다.
+    - 예를 들어 사전의 key를 조회하는 방식을 수정하고 싶어서 dict를 상속 받은 클래스의 `__getitem__` 메서드를 재정의했다고 해보자.
+    - Key를 조회하는 모든 곳에서 재정의한 코드가 잘 반영이 되었을 것이라 예상하겠지만, 막상 for 루프를 사용하여 반복하려고 하면 변경된 `__getitem__` 로직이 적용되지 않는 것을 확인할 수 있다.
+    - 이런 경우 `collections.UserDict`를 사용하면 문제를 해결할 수 있다.
+    - `UserDict`를 상속 받으면 관련된 모든 부분을 스스로 찾아서 업데이트 해준다.
+  - 내장 타입을 직접 상속받을 경우
+    - 아래와 같이 내장 타입 list를 상속 받는 BadList를 생성하고, `__getitem__` 메서드를 오버라이드했다.
+    - Index 기반으로 값을 조회해보면 잘 동작하는 것 처럼 보이지만, 사실은 그렇지 않다.
+    - `str.join()` 메서드는 이터러블한 값이 가진 문자형 원소들을 합치는 함수로, 숫자형 원소가 포함되어 있을 경우 에러가 발생한다.
+    - 그런데, 우리가 아래에서 재정의한 `BadList`는 int가 아닌 str만 반환하는데도 에러가 발생한다.
+
+  ```python
+  class BadList(list):
+      def __getitem__(self, index):
+          value = super().__getitem__(index)
+          if index % 2 == 0:
+              prefix = "even"
+          else:
+              prefix = "odd"
+          return f"{prefix} {value}"
+  
+      
+  bad_list = BadList((0,1,2))
+  print(bad_list[0])			# even 0
+  print(bad_list[1])			# odd 1
+  print("".join(bad_list))	# TypeError: sequence item 0: expected str instance, int found
+  ```
+
+  - `collections.UserList`를 상속 받아 구현하면, 위와 같은 문제는 발생하지 않는다.
+
+  ```python
+  from collections import UserList
+  
+  
+  class BadList(UserList):
+      def __getitem__(self, index):
+          value = super().__getitem__(index)
+          if index % 2 == 0:
+              prefix = "even"
+          else:
+              prefix = "odd"
+          return f"{prefix} {value}"
+  
+      
+  bad_list = BadList((0,1,2,3,4,5))
+  print(bad_list[0])				# even 0
+  print(bad_list[1])				# odd 1
+  print("".join(bad_list))		# even 0odd 1even 2odd 3even 4odd 5
+  ```
+
+  
 
 
 
