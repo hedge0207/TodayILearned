@@ -651,14 +651,15 @@
 
   - 입력값은 매개 변수(인자, parameter) 혹은 인수(arguments)라고 부른다.
     - 넘길 때는 인수(arguments), 받을 때는 매개 변수(인자,parameter)라고 부른다.
-  - 입력값은 있어도 되고 없어도 된다.
+    - 입력값은 있어도 되고 없어도 된다.
   - 결과값도 있어도 되고 없어도 된다.
-  - 결과값을 return하면 return이하의 코드는 실행되지 않는다.
+    - 결과값을 return하면 return이하의 코드는 실행되지 않는다.
 
+  
   ```python
-  def 함수명(입력값):
-      수행할 문장
-      return 결과값
+  def function_name(args):
+      # 실행할 내용
+      return "반환값"
   ```
 
 
@@ -846,6 +847,32 @@
 
 
 
+- 함수 인자의 개수
+
+  - 하나의 함수가 너무 많은 인자를 받는다면 나쁜 코드일 가능성이 높다.
+    - 함수의 인수가 많을수록 호출자와 함수가 강하게 결합될 가능성이 커진다.
+    - 함수의 인수가 많아질수록 호출자는 함수 호출을 위한 모든 정보를 알고 있어야하며, 이는 함수의 내부 구현에 대해서도 알고 있어야 한다는 의미이다.
+  - 함수가 최소한의 인자를 받게 하기 위해서는 아래와 같은 방법을 사용할 수 있다.
+    - 첫 번째 방법은 구체화하는 것이다.
+    - 적절한 추상화를 수행하지 않을 경우 인자의 개수가 많아질 수 있다.
+    - 전달하는 모든 인자를 포함하는 새로운 객체를 만들면 이를 해결할 수 있다.
+    - 두 번째 방법은 가변 인자나 키워드 인자 등의 Python의 기능을 사용하는 것이다.
+    - 이는 Python스러운 방법이긴 하지만 매우 동적이어서 유지보수가 어렵기에 남용하지 않도록 주의해야한다.
+  - 개선 예시
+    - 예를 들어 아래와 같은 코드가 있다고 가정해보자.
+    - 모든 인자가 request라는 인스턴스와 관련이 있다는 것을 알 수 있다.
+    - 그러므로 굳이 request 인스턴스의 인스턴스 변수들을 개별적으로 넘기기 보다는 request 인스턴스 자체를 넘기면 코드를 개선할 수 있다.
+
+  ```python
+  # bad
+  track_request(request.headers, request.id, request.request_id)
+  
+  # good
+  track_request(request)
+  ```
+
+
+
 
 - Python의 default parameter에 mutable object를 줄 경우 주의사항
 
@@ -876,14 +903,43 @@
 
 
 
+- 함수의 인자로 immutable한 타입을 전달했을 때와, mutable한 타입을 전달했을 때 동작 방식이 다르다.
+
+  - Immutable한 타입을 전달할 경우
+    - 인자로 전달한 변수에 아무 변화가 없다.
+
+  ```python
+  def add_hello(chars):
+      chars += "hello"
+  
+  immutable = "John"
+  add_hello(immutable)
+  print(immutable)		# John
+  ```
+
+  - Mutable한 타입을 전달한 경우
+    - 인자로 전달했던 변수의 값이 달라진다.
+    - 이는 함수의 인자로 mutable한 타입의 참조값이 넘어가기 때문이다.
+
+  ```python
+  def add_hello(chars):
+      chars += "hello"
+  
+  mutable = ["J", "o", "h", "n"]
+  add_hello(mutable)
+  print(mutable)			# ['J', 'o', 'h', 'n', 'h', 'e', 'l', 'l', 'o'] 
+  ```
+
+
+
 - 함수가 keyword argument만 받도록 하는 방법
 
   - 가변인수 (일반적으로  `*args`) 뒤에는 keyword arguments만이 와야 한다는 점을 이용한다.
-  - 가변인수 자체를 사용할 것은  아님므로 asterisk를 parameter로 선언한다.
+  - 가변인수 자체를 사용할 것은  아니므로 asterisk를 parameter로 선언한다.
     - asterisk 뒤에 선언된 모든 파라미터는 keyword arguments로 넘겨야 한다.
 
   ```python
-  def foo(a, *qwe, b):
+  def foo(a, *, b):
       print(a, b)
   
   

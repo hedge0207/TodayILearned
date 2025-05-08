@@ -1082,6 +1082,21 @@
   ```
 
   - 그러나 믹스인을 사용하면, `BaseTokenizer`의 상속 계층 어디에나 자유롭게 기능을 추가할 수 있다.
+  
+  ```python
+  class UpperIterableMixin:
+      def __iter__(self):
+          return map(str.upper, super().__iter__())
+  
+  class UpperStripTokenizer(UpperIterableMixin, StripTokenizer):
+      ...
+  
+  
+  tk = UpperStripTokenizer("5c35031c-2731-11f0-8b39-26ab7cf61821")
+  print(list(tk))
+  ```
+  
+  
 
 
 
