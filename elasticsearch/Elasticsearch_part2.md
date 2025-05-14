@@ -38,14 +38,9 @@
 
 
 
+
+
 ## elasticsearch.yml
-
-- elaisticsearch.yml
-  - ES를 구성하기 위해 기본이 되는 환경 설정 파일.
-    - 대부분의 설정이 주석으로 처리되어 있다.
-    - 해당 설정에 대한 간략한 설명이 주석으로 제공된다.
-
-
 
 - Cluster 영역
 
@@ -377,29 +372,6 @@
 
 
 
-- 힙 메모리와 GC 방식 설정
-  - 힙 메모리와 GC 방식에 대한 설정은 성능에 많은 영향을 주기 때문에 정확하게 이해하고 수정해야 한다.
-    - 특히 힙 메모리 설정과 관련해서 ES 공식 문서에서는 가능한 한 32GB를 넘지 않게 설정할 것, 전체 메모리의 절반 정도를 힙 메모리로 설정할 것 등을 권고하고 있다.
-  - 힙 메모리가 가능한 32GB를 넘지 않도록 권고하는 이유
-    - JVM은 연산을 위한 데이터들을 저장하기 위한 공간으로 힙 메모리를 사용한다.
-    - 이 때 힙 메모리에 저장되는 데이터들을 오브젝트라 부르고, 이 오브젝트에 접근하기 위한 메모리상의 주소를 OOP(Ordinaty Object Pointer)라는 구조체에 저장한다.
-    - 각각의 OOP는 시스템 아키텍처에 따라 32 비트 혹은 64 비트의 주소 공간을 가리킬 수 있는데, 32비트라면 최대 4GB까지의 주소 공간을 가리킬 수 있는 반면 64 비트는 이론상 16EB까지의 주소 공간을 가리킬 수 있다.
-    - 하지만 64 비트의 경우 32비트보다 더 넓은 주소 공간을 가리키기 위해 더 많은 연산과 더 많은 메모리 공간을 필요로 하기 때문에 성능 측면에서는 32 비트보다 떨어질 수밖에 없다.
-    - 그래서 JVM은 시스템 아키텍처가 64 비트라고 하더라도 확보해야 할 힙 메모리 영역이 4GB보다 작다면 32 비트 기반의 OOP를 사용해서 성능을 확보한다.
-    - 문제는 힙 메모리 영역이 4GB보다 클 경우에 발생한다. 32비트의 주소 공간을 사용하는 OOP로는 4GB 이상의 메모리 영역을 가리킬 수 없기 때문이다.
-    - 그렇다고 64비트 기반의 OOP를 사용하게 되면 급작스럽게 성능 저하가 발생할 수 있기 때문에 JVM은 Compressed OOP를 통해 32비트 기반의 OOP를 사용하되 4GB 이상의 영역을 가리킬 수 있도록 구현했다.
-    - Compressed OOP는 Native OOP에 비해 8배 더 많은 주소 공간을 표시할 수 있게 되고, 이에 따라 기존 4GB에서 32GB까지 힙 메모리 영역이 증가한다.
-    - 그렇기에 힙 메모리 할당을 32GB 미만으로 하게 되면 32비트 기반의 OOP를 계속 사용할 수 있게 되고 성능 저하를 피할 수 있게 된다.
-  - 전체 메모리의 절반 정로를 힙 메모리로 할당하도록 권고하는 이유
-    - ES는 색인된 데이터를 세그먼트라는 물리적인 파일로 저장한다.
-    - 파일로 저장하기 때문에 I/O가 발생할 수밖에 없는 구조이다.
-    - I/O 작업은 시스템 전체로 봤을 때 가장 느린 작업이기 때문에 빈번한 I/O 작업이 발생한다면 시스템 성능이 떨어진다.
-    - OS에서는 이런 성능 저하를 막기 위해 파일의 모든 내용을 메모리에 저장해 놓는 페이지 캐시 기법을 사용한다.
-    - 하지만 페이지 캐시는 애플리케이션들이 사용하지 않는 미사용 메모리를 활용해서 동작하기 때문에 페이지 캐시를 최대한 활용하기 위해서는 애플리케이션이 사용하는 메모리를 줄이는 것이 좋다.
-    - 특히 ES와 같이 빈번한 I/O 작업이 발생해야 하는 경우 가급적 많은 메모리를 페이지 캐시로 활용해서 I/O 작업이 모두 메모리에서 끝날 수 있도록 하는 것이 성능 확보에 도움이 된다.
-    - 이런 이유로 인해 공식 문서에서는 물리 메모리의 절반 정도를 힙 메모리로 할당할 것을 권고한다.
-    - 굳이 많은 양의 힙 메모리가 필요하지 않다면 절반 이하로 설정해도 된다.
-
 
 
 
@@ -431,7 +403,7 @@
     - 예를 들어 master eligible node가 4개(A, B, C, D)인 상황을 가정해보자.
     - 네트워크게 문제가 생겨 A-B, C-D를 제외한 network가 모두 끊기게 되었다.
     - 이 상황에서 연결이 되는 A-B가 A를 master node로 하는 cluster를 형성하고, C-D가 C를 master node로 하는 cluster를 생성하게 되었다.
-    - 시간이 흐를 수록 두 cluster 사이의 data는 점점 차이가 벌어질 것이고, 나중에 다시 합쳐야 할 때 어느 data를 기준으로 합쳐야 할지 알 수도 없게 된다.
+    - 시간이 흐를 수록 두 cluster가 가진 data에 차이가 생길 것이고, 나중에 다시 합쳐야 할 때 어느 data를 기준으로 합쳐야 할지 알 수도 없게 된다.
     - 즉 데이터 정합성에 문제가 발생한다.
     
   - Elasticsearch에서는 이를 방지하기 위해 master eligible node의 개수를 홀수로 설정하는 것을 권장한다.
@@ -491,7 +463,6 @@
   - 두 번째 노드는 멀티캐스트로 첫 번째 노드를 찾아서 클러스터에 합류하게 된다.
     - 첫 번째 노드는 클러스터의 마스터 노드다.
     - 즉 어떤 노드가 클러스터에 있고 샤드가 어디에 있는지 같은 정보를 유지하는 역할을 하는데, 이 정보를 클러스터 상태라고 부르고 다른 노드에도 복제 된다.
-    - 마스터 노드가 내려가면 다른 노드가 마스터 노드가 된다.
   - 이제 추가한 노드에 레플리카가 할당되어 클러스터가 green으로 변경된 것을 확인 가능하다.
 
 
@@ -509,6 +480,8 @@
 
 
 
+ㄴ
+
 ## 버전 업그레이드
 
 - ES는 새로운 버전이 빠르게 공개된다.
@@ -523,7 +496,7 @@
 
 
 
-- Rolling Restart의 순서
+- Rolling Restart 과정
 
   - 클러스터 내 샤드 할당 기능 비활성화
     - ES 클러스터는 특정 노드가 정상적으로 동작하지 않을 경우 문제 노드의 샤드들을 다른 노드로 재할당한다.
@@ -726,7 +699,7 @@
   | null      | 설정을 초기화하여 Default인 all로 설정           |
 
   - 아무때나 샤드 재배치가 일어나는 것이 아니라 `cluseter.routing.allocation.disk.threshold_enabled` 설정(기본값은 true)에 의해 클러스터 내의 노드 중 한 대 이상의 디스크 사용량이 아래와 같이 설정한 임계치에 도달했을 때 동작하게 된다.
-    - `cluster.routing.allocation.disk.watermark.low`: 특정 노드에서 임계치가 넘어가면 해당 노드에 더 이상 할당하지 않음. 새롭게 생성된 인덱스에 대해서는 적용되지 않음(기본값은 85%)
+    - `cluster.routing.allocation.disk.watermark.low`: 특정 노드에서 임계치가 넘어가면 해당 노드에 더 이상 샤드를 할당하지 않음. 새롭게 생성된 인덱스에 대해서는 적용되지 않음(기본값은 85%)
     - `cluster.routing.allocation.disk.watermark.high`: 임계치를 넘어선 노드를 대상으로 즉시 샤드 재할당 진행. 새로 생성된 인덱스에도 적용됨(기본값은 90%)
     - `cluster.routing.allocation.disk.watermark.flood_stage`: 전체 노드가 임계치를 넘어서면 인덱스를 read only 모드로 변경(기본값은 95%)
     - `cluster.info.update.interval`: 임계치 설정을 체크할 주기(기본값은 30s)
@@ -752,7 +725,7 @@
   ```json
   // PUT _all/_settings?pretty
   {
-  	"index.block.read_only_allow_delete":null
+  	"index.block.read_only_allow_delete": null
   }'
   ```
 
@@ -905,9 +878,19 @@
 
 
 - 위에서는 include를 사용했지만 include 외에 exclude, require를 사용하는 것도 가능하다.
-  - `settings.index.routing.allocation.include.<custom_attribute>:<attr1, attr2>`의 경우 `attr1`이나 `attr2`로 설정된 node 들 중 한 곳에 할당된다.
-  - `settings.index.routing.allocation.require.<custom_attribute>:<attr1, attr2>`의 경우 `attr1`과 `attr2`가 모두 설정된 node에만 할당된다.
-  - `settings.index.routing.allocation.include.<custom_attribute>:<attr1, attr2>`의 경우 `attr1`과 `attr2`가 모두 설정되지 않은 node에만 할당된다.
+  
+  - include
+    - `settings.index.routing.allocation.include.<custom_attribute>:<attr1, attr2>`
+    - 위의 경우  `attr1`이나 `attr2`로 설정된 node 들 중 한 곳에 할당된다.
+  
+  - required
+    - `settings.index.routing.allocation.require.<custom_attribute>:<attr1, attr2>`
+    - 위의 경우 `attr1`과 `attr2`가 모두 설정된 node에만 할당된다.
+  
+  
+  - `exclude`
+    - `settings.index.routing.allocation.exclude.<custom_attribute>:<attr1, attr2>`
+    - 위의 경우 `attr1`과 `attr2`가 모두 설정되지 않은 node에만 할당된다.
 
 
 
@@ -1504,7 +1487,10 @@
   }
   ```
   
-  
+
+
+
+
 
 ## 템플릿 활용하기
 
