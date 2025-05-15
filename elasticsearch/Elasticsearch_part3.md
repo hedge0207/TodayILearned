@@ -67,19 +67,19 @@
   - 집계, 정렬 등은 역인덱스를 통해서는 불가능하다.
     - 역인덱스를 사용하는 검색은 어떤 문서가 특정 키워드를 포함하는지 여부를 보는 것이다.
     - 그러나 집계 정렬 등은 특정 키워드를 포함하는지가 아닌 특정 field의 값이 무엇인지를 알아야 가능하다.
-  - 따라서 Elasticsearch 집계, 정렬등을 위해 fielddata라는 자료 구조를 사용한다.
+  - 따라서 Elasticsearch는 text 타입 필드를 대상으로 집계, 정렬등을 위해 fielddata라는 자료 구조를 사용한다.
     - fielddata는 key를 document로, value를 field와 field value로 하는 자료구조이다.
 
   ```json
   [
       {
-          "some_doc_id1": {
+          "doc_id1": {
               "field1":"foo",
               "field2":"bar"
           }
       },
       {
-          "some_doc_id2": {
+          "doc_id2": {
               "field1":"baz",
               "field2":"qux"
           }
@@ -106,9 +106,10 @@
   - fielddata는 in-memory 구조로 동작하여 많은 heap memory를 소비한다.
     - 아마 이것이 text type의 fielddata의 기본값으로 false로 설정해둔 이유일 듯 하다.
     - text 필드는 token 단위로 저장을 해야하는데, field value가 조금만 길어져도 무수히 많은 token이 생성될 것이기에 훨씬 많은 heap memory를 소비하게 될 것이다.
-    - 기본적으로 특정 field를 대상으로 fielddata를 생성해야하면, elasticsearch는 모든 document의 field value를 memory에 올린다.
-    - 예를 들어 `subject`라는 필드를 대상으로 집계를 해야한다고 하면, elasticsearch는 모든 document의 subject field의 값을 전부 memory에 올린다.
-    - 이는 매번 메모리에 적재하는 것 보다 미리 모두 적재해두고 다음 query에도 사용하는 것이 보다 효율적이기 때문이다. 
+    - Elasticsearch는 집계나 정렬 요청이 처음 들어왔을 때, 해당 필드에 대해 fielddata cache(JVM heap memory 영역에 유지된다)를 생성하고 모든 document의 field value를 정렬/집계에 적합한 구조로 구조화하여 그 곳에 저장한다.
+    - 예를 들어 `subject`라는 필드를 대상으로 집계를 해야한다고 하면, elasticsearch는 모든 document의 subject field의 값을 전부 구조화하여 heap memory에 올린다.
+    - fielddata cache는 더 이상 사용되지 않거나 heap pressure가 높아질 경우 LRU 정책 등에 의해 제거될 수 있다.
+    - 추후에 요청이 들어올 경우 다시 생성한다.
   - `fielddata_frequency_filter`
     - 메모리에서 불러오는 term의 수를 빈도를 기준으로 감소시켜 메모리 사용을 줄일 수 있다.
     - `min`, `max` 값을 지정하며 둘 사이의 빈도를 지닌 term들만 메모리에서 불러온다.
@@ -149,14 +150,14 @@
 
 - doc_values
 
-  - Elasticsearch는 문서별로 field 값을 조회해야 하는 집계 등의 작업을 위해 `doc_values`라는 자료 구조를 사용한다.
+  - Elasticsearch는 문서별로 field 값을 조회해야 하는 집계, 정렬 등의 작업을 위해 `doc_values`라는 자료 구조를 사용한다.
     - `doc_values`는 on-disk 자료구조로, document가 색인될 때 생성된다.
     - ` _source`에 저장되는 것과 같은 값을 저장하지만, `_source`와는 달리 집계나 정렬을 효율적으로 하기 위해서 column 형(column-oriented)으로 저장한다.
     - `doc_values`는 거의 대부분의 field type을 지원하지만, text와 annotated_text type은 지원하지 않는다.
   - fielddata와의 차이
     - query time에 생성되는 fielddata와 달리 doc_value는 index time에 생성된다.
     - memory를 사용하는 fielddata와 달리 doc_value는 disk에 저장된다(따라서 속도는 doc_value가 더 느리다).
-    - 또한 text type에는 사용할 수 없는 doc_values와 달리 fielddata는 text type에도 사용할 수 있다.
+    - 또한 text type에는 사용할 수 없는 doc_values와 달리 fielddata는 text type에만 사용할 수 있다.
   - 구조 예시
     - key-value 기반이 아닌 column 기반임을 명심해야한다.
 
@@ -242,30 +243,34 @@
     ]
   }
   ```
+  
+  - doc_values가 등장한 이후에도 fielddata가 유지되는 이유
+    - doc_values는 text 필드를 대상으로는 설정할 수 없는데 반해 fielddata는 text field에만 설정할 수 있다.
+    - 즉 fielddata는 text field를 대상으로 집계, 정렬을 수행할 수 있게 해주는 유일한 방법이다.
 
 
 
 - Global Ordinals
 
-  - keyword field 등의 term 기반 field type들은 doc_value를 ordinal mapping을 사용하여 저장한다.
+  - keyword field 등의 term 기반 field type들은 doc_values를 내부적으로 ordinal mapping 구조로 저장한다.
 
-    - Mapping은 각 term에 증가하는 integer 혹은 사전순으로 정렬된 순서(ordinal)를 할당하는 방식으로 이루어진다.
-    - Field의 doc value들은 각 document의 순서(ordinal)만을 저장하며, 원래 term들은 저장하지 않는다.
+    - Mapping은 각 term 마다에 증가하는 intetger 혹은 사전순으로 정렬된 순서(ordinal)를 할당하는 방식으로 이루어진다.
+    - 각 document는 ordinal 값만 저장(doc-ordinal mapping)하며, 실제 term은 별도로 term-ordinal mapping에 저장한다.
 
   - 예시
 
-    - 아래와 같이 field value에 순서를 매기고
+    - 아래와 같이 각 term에 순서를 매긴다.
 
-    | Ordinal | field_value |
-    | ------- | ----------- |
-    | 0       | apple       |
-    | 1       | banana      |
-    | 2       | watermelon  |
-    | 3       | kiwi        |
+    | ordinal | term       |
+    | ------- | ---------- |
+    | 0       | apple      |
+    | 1       | banana     |
+    | 2       | watermelon |
+    | 3       | kiwi       |
 
-    - 이를 기반으로 oridinal mapping을 생성한다.
+    - 이를 기반으로 각 문서와 ordinal을 매핑한다.
 
-    | doc_id | field   |
+    | doc_id | ordinal |
     | ------ | ------- |
     | doc_1  | 0, 1    |
     | doc_2  | 1, 3    |
@@ -274,13 +279,28 @@
 
     - 위 표에서 doc_1은 apple, banana라는 문자열을 저장하는 대신, 0, 1이라는 순서만을 저장했는데, 나중에 field_value가 필요하면 해당 순서에 해당하는 문자열을 가져와서 사용하는 방식이다.
 
-  - global ordinal이란
-    - 각 index의 segment들은 각자 자신의 ordinal mapping을 정의한다.
-    - 그러나 aggregation은 전체 shard를 대상으로 이루어져야 하므로, Elasticsearch는 global ordinal이라 부르는 ordinal mapping들의 결합체를 생성한다.
+  - 위 두 개의 mapping(term-ordinal, doc-ordinal)을 ordinal mapping이라 부른다.
+  
+    - Ordinal mapping은 각 shard별로 생성된다.
+  
+    - 따라서 아래와 같은 문제가 발생할 수 있다.
+    
+    - Shard A에서는 apple이 0번에 매핑되어 있는데, Shard B에서는 apple이 1번에 매핑되어 있는 경우가 있을 수 있다.
+    
+    - 이 경우 집계시에 부정확한 결과가 나올 수 있다.
+    
+    - 이를 해결하기 위한 것이 global ordinal이다.
+    
+  - global ordinal
+  
+    - 각 shard는 ordinal mapping을 각자 관리한다.
+    - 그러나 정렬, 집계는 전체 shard를 대상으로 이루어져야 하므로, Elasticsearch는 global ordinal이라 부르는 ordinal mapping들의 결합체를 생성한다.
+  
   - 아래와 같을 때 사용된다.
     - keyword, ip, falttend field를 대상으로 한 특정 bucket aggregation(terms, composite 등).
     - fielddata가 true로 설정된 text field에 대한 aggregation
     - join field를 대상으로 하는 연산(has_child query 혹은 parent aggregation 등)
+    - 정렬
 
 
 
@@ -344,7 +364,7 @@
 
   - idf(d, t)의 계산 방식
 
-    - log로 계산하는 이유는 문서의 개수 n이 커질수록 IDF의 값이 기하급수적으로 커지는 것을 막기 위해서이다.
+    - log로 계산하는 이유는 문서의 개수 D가 커질수록 IDF의 값이 기하급수적으로 커지는 것을 막기 위해서이다.
     - 분모에 1을 더해주는 이유는 특정 단어가 전체 문서에서 아예 등장하지 않을 경우 분모가 0이 되는 것을 방지하기 위해서다.
 
     $$
@@ -375,7 +395,7 @@
 
   - TF 계산(증가빈도로 계산)
     - doc1에 등장하는 모든 단어(식당, 메뉴, 고민)는 각 1번씩만 등장하므로 분모는 1이 된다.
-    - doc1에서 메뉴라는 단어는 문서 내에 1번만 등장하므로 분자는 1이 된다.
+    - doc1에서 "메뉴"라는 단어는 문서 내에 1번만 등장하므로 분자는 1이 된다.
     - 따라서 doc1에서 메뉴의 tf(d, t)의 값은 1이다.
     - 나머지도 위 과정에 따라 계산하면 아래와 같이 나오게 된다(공백은 최소값인 0.5)
     - 아래에서 짧은 문장을 증가빈도로 계산했을 때의 문제를 알 수 있는데, doc3에서 두 번 등장한 치킨과 doc2에서 한 번 등장한 치킨이 동일한 TF 값을 갖게 된다.
@@ -412,7 +432,9 @@
   > https://blog.naver.com/shino1025/222240603533
   >
   > https://inyl.github.io/search_engine/2017/04/18/bm25_2.html
-
+  >
+  > https://www.elastic.co/blog/practical-bm25-part-2-the-bm25-algorithm-and-its-variables
+  
   - TF-IDF의 문제점
     - 한 단어가 반복적으로 등장하면 TF의 값이 지속적으로 증가한다.
     - 문서 길이가 길어질 수록 다양한 단어가 등장할 수 밖에 없으므로, 검색될 확률이 높아진다.
@@ -422,37 +444,37 @@
     - 보정 파리미터들을 추가해서 성능을 개선한 알고리즘이다.
   - 계산식
     - 토큰 q<sub>1</sub>, q<sub>2</sub>, ... q<sub>n</sub>을 포함하는 쿼리 Q가 주어질 때, 단일 문서 D에 대한 BM25 점수는 다음과 같이 구한다.
-
+  
   $$
   score(D, Q) = \sum_{i=1}^nIDF(q_i) * \frac{f(q_i,D)*(k1+1)}{f(q_i,D)+k1*(1-b+b*\frac{|D|}{avgdl})}
   $$
-
+  
   - Elasticsearch의 BM25 계산
-    - BM25를 약간 변형하여 사용한다.
-    - `boost * IDF * TF`로 계산한다.
+    - BM25에 boost를 더한다.
+    - 즉, `boost * IDF * TF`로 계산한다.
   - Elasticsearch의 IDF 계산
     - `N`은 전체 문서의 개수, $n(q_i)$는 $q_i$라는 term을 포함하고 있는 문서의 개수이다.
-
+  
   $$
   IDF(q_i) = ln(1+\frac{N-n(q_i)+0.5}{n(q_i)+0.5})
   $$
-
+  
   - Elasticsearch의 TF 계산
     - f(q<sub>i</sub>, D) 부분은  단일 문서 D에서 토큰 q<sub>i</sub>의 term frequency를 계산하는 것이다.
-    - k1는 쿼리에 똑같은 토큰이 여러 개 등장했을 때, 어느 정도의 패널티를 줄 것인지를 결정하는 파라미터이다.
-    - 어떤 토큰의 TF가 k1보다 작다면, k1으로 인해 점수가 증가하게 되지만, 반대의 경우 k<sub>1</sub>으로 인해 점수가 낮아지게 된다.
-    - b는 TF를 측정할 때, 문서의 길이에 따르는 패널티를 부여할 것인지를 뜻한다.
-    - b가 높으면, 문서의 길이가 길어질수록 점수에 패털티를 준다.
+    - k1은 특정 term이 문서에 여러 번 등장했을 때 점수의 증가율을 제어한다.
+    - k1이 클수록 전체 점수가 TF에 더 민감하게 반응(점수가 더 많이 증가)하며, k1이 작을수록 TF가 커도 전체 점수 증가가 제한된다.
+    - b는 TF를 측정할 때, 문서의 길이에 따른 보정 정도를 조절하는 파리미터이다.
+    - b가 높으면, 문서의 길이(정확히는 필드 값의 길이)가 길어질수록 점수에 패털티를 준다.
     - dl은 단일 문서의 필드 길이를 뜻하고, avgdl은 전체 문서의 필드의 평균 길이를 뜻한다.
-
+  
   $$
-  TF(q_i)=\frac{f(q_i,D)}{f(q_i,D)+k1*(\frac{1-b+b*dl}{avgdl})}
+  TF(q_i)=\frac{f(q_i,D)*(k1+1)}{f(q_i,D)+k1*(1-b+b*\frac{dl}{avgdl})}
   $$
-
+  
   - 요약
     - 특정 단어가 문서에 많이 등장했다면 높은 점수를 준다.
     - 만일 해당 필드가 너무 길다면 점수를 약간 깎는다.
-    - 같은 단어가 단일 문서에 여러 번 등장한다면 점수를 약간 깎는다
+    - 같은 단어가 단일 문서에 여러 번 등장한다면 점수의 증가폭이 작아진다.
     - 만일 해당 단어가 여러 문서에 흔하게 등장한다면 점수를 많이 깎는다.
 
 
@@ -1195,964 +1217,366 @@
 
 
 
-# 클러스터 성능 모니터링과 최적화
+# 데이터 색인
 
-- Elasticsearch는 자체적으로 monitoring 기능을 지원한다.
-  - Kibana에서 monitoring을 사용하면 자동으로 monitoring 데이터가 쌓이는데 이는 ES 내부의 monitoring 기능을 사용하는 것이다.
-  - 아래와 같은 것들을 모니터링 할 수 있다.
-    - cluster
-    - node
-    - index
-  - 기본적으로 `_cat` API로 요청을 보냈을 때 응답으로 오는 데이터들이 포함되어 있다.
-    - 다만, 모두 포함 된 것은 아니다.
-  - 한 클러스터 뿐 아니라 다른 클러스터에서 monitoring 데이터를 가져오는 것도 가능하다.
-  
-  - `_cat` API에 대응되는 API들
-    - `_cat` API는 대부분 사람이 command line이나 Kibana console을 통해 직접 사용하는 것을 의도하고 만들어졌다.
-    - 따라서 application에서 사용하기는 적절하지 않다.
-    - Application에서 사용해야 한다면 `_cat`에 대응되는 API를 사용하는 것을 권장한다.
-  
-  | _cat          | application용 API                                            |
-  | ------------- | ------------------------------------------------------------ |
-  | _cat/health   | [Cluster health API](https://www.elastic.co/guide/en/elasticsearch/reference/current/cluster-health.html) |
-  | _cat/indicise | [Get index API](https://www.elastic.co/guide/en/elasticsearch/reference/current/indices-get-index.html#indices-get-index) |
-  | _cat/nodes    | [Nodes info API](https://www.elastic.co/guide/en/elasticsearch/reference/current/cluster-nodes-info.html) |
-  | _cat/segments | [Index segments API](https://www.elastic.co/guide/en/elasticsearch/reference/current/indices-segments.html) |
+## 색인 처리 과정
+
+- Lucene의 색인 처리 과정
+  -  In-memory buffer에 데이터 적재
+     - 문서의 색인을 요청해도, Lucene은 바로 segment를 생성하지 않는다.
+     - segment 생성이란 곧 데이터를 디스크에 쓰는 것을 의미하는데, 이는 비용이 많이 드는 작업이기 때문이다.
+     - 따라서 Lucene은 먼저 작업 속도가 더 빠른 in-memory buffer에 data를 쌓는다.
+     - 아직 segment를 생성하지는 않았으므로, 검색은 불가능하다.
+  -  Flush
+     - 물리 디스크가 아닌 시스템 캐시에 segment를 생성하고 data를 저장한다.
+     - segment가 생성되었으므로 검색이 가능해진다.
+     - 그러나, cache에 저장한 것이므로 데이터가 유실 될 위험이 있다.
+  -  Commit
+     - 물리 디스크에 segment를 생성하고 data를 저장한다.
+     - 리소스가 많이 필요하지만 물리 디스크에 저장이 되었으므로 data의 유실로부터 보다 안전한 상태가 된다.
 
 
 
-- monitoring data 저장하기
+- Elasticsearch와 Lucene의 차이점
 
-  - 아래와 같이 클러스터 설정만 변경해주면 된다.
+  - 유사한 동작을 두고 서로 지칭하는 용어가 다르다.
 
-  > https://www.elastic.co/guide/en/elasticsearch/reference/current/monitoring-settings.html
-  >
-  > https://www.elastic.co/guide/en/elasticsearch/reference/current/collecting-monitoring-data.html
+  | Lucene | Elasticsearch |
+  | ------ | ------------- |
+  | flush  | refresh       |
+  | commit | flush         |
 
-  ```bash
-  PUT _cluster/settings
+  - Lucene에는 존재하지 않는 translog(transactional log)를 사용한다.
+
+
+
+- Translog(Transactional log)
+  - Lucene의 변경사항은 commit이 발생해야만 disk에 저장되면서 영구적으로 반영된다.
+    - 이는 상대적으로 비용이 많이 드는 작업이므로 모든 색인, 삭제 작업이 발생할 때마다 실행할 수는 없다.
+    - Commit과 다음 commit 사이에 발생한 작업들은 process가 종료되거나 hardware에 문제가 생기면 유실될 수 있다.
+  - Commit이 비용이 많이 드는 작업이므로 각 shard는 translog라 불리는 transaction log에 작업들을 저장해둔다.
+    - 모든 shard들은 translog를 하나씩 가지고있다.
+    - 색인되고 삭제되는 모든 작업은 translog에 기록된다.
+    - Commit과 commit 사이에 문제가 생겨서 시스템이 내려가더라도, translog를 보고 복구가 가능하다.
+
+
+
+- Elasticsearch의 색인 처리 과정
+  - Elasticsearch는 Lucene 기반으로 만들어져 색인 방식도 유사하다.
+  - In-memory buffer와 translog에 data를 적재한다.
+    - translog는 memory가 아닌 disk에 저장된다.
+    - Lucene의 경우 flush와 commit 사이에 뭔가 문제가 생겨 memory에서 disk로 data를 옮기지 못하면, 해당 data는 유실되게 된다.
+    - Elasticsearch는 이러한 문제를 해결하기 위해 요청 정보와 data가 담긴 translog를 작성하고, 문제가 생겼을 경우 이를 복구에 사용한다.
+  - Refresh
+    - Lucene의 Flush와 마찬가지로 memory에 segment를 생성하고, data를 저장한다.
+    - segment에 저장되었으므로 검색이 가능해진다.
+  - Flush
+    - in-memory로 저장된 segment를 disk에 쓰는 작업을 한다.
+    - 메모리에 저장된 여러 개의 segment들을 하나로 병합하여 disk에 저장한다.
+    - 동시에 translog의 작성을 멈추고, 새로운 blank translog를 생성한다.
+    - Flush가 발생하는 주기가 따로 있는 것은 아니다.
+    - 아직 flush 되지 않은 translog와 각 flush를 수행하는 비용의 trade off를 고려하는 heuristic으로 flush 실행 여부를 결정한다.
+    - 이러한 결정에는 translog에 얼마나 많은 transaction log가 적재되었는지, data의 크기, 마지막 flush 시점 등이 영향을 미친다.
+
+
+
+- Lucene index
+  - Lucene index는 IndexWriter와 IndexSearcher를 가지고 색인과 검색을 동시에 제공하는 Lucene instance이다.
+    - 하나의 Lucene index는 자체적으로 데이터를 색인하고 검색할 수 있는 가장 작은 크기의 단일 검색엔진이라고도 할 수 있다.
+
+  - 하나의 Elasticsearch shard는 하나의 Lucene index이다.
+    - 그러나 shard에는 Elasticsearch에서 추가한 다양한 기능이 포함되어 있기는 하다.
+    - 그러나 shard의 본질이 Lucene index라는 사실에는 변함이 없다.
+    - Lucene index가 자기 자신이 가지고 있는 세그먼트 내에서만 검색이 가능한 것과 달리 샤드는 모든 샤드가 가지고 있는 세그먼트들을 논리적으로 통합해서 검색할 수 있다.
+    - Lucene의 세그먼트는 확장이 불가능하다는 문제가 있었는데, Elasticsearch는 shard를 사용하여 여러 segment를 통합하여 검색할 수 있게 함으로써 이러한 한계를 극복하고 확장 가능한 시스템을 만들었다.
+
+
+
+- Lucene의 flush
+  - Lucene은 효율적인 색인 작업을 위해 내부적으로 일정 크기의 버퍼를 가지고 있다.
+    - 이러한 내부 버퍼를 In-memory buffer라 부른다.
+    - 색인 작업이 요청되면 전달된 데이터는 일단 in-memory buffer에 순서대로 쌓인다.
+    - 그 후 정책에 따라 내부 버퍼에 일정 크기 이상의 데이터가 쌓이거나 일정 시간이 흐를 경우 버퍼에 쌓은 데이터를 모아 한꺼번에 처리한다.
+    - 버퍼를 일종의 큐로 사용하는 것이다.
+  - 버퍼에 모여 한 번에 처리된 데이터는 segment 형태로 생성되고 이후에 디스크에 동기화된다.
+    - 새로운 segment가 생성되고 디스크에 동기화하는 과정까지 거쳐야만 검색이 가능해진다.
+  - Lucene은 무거운 fsync 방식을 이용해 디스크를 동기화하는 대신 상대적으로 가벼운 write 방식을 이용해 쓰기 과정을 수행한다.
+    - 디스크에 물리적으로 동기화하는 과정은 OS 입장에서는 매우 비용이 큰 연산이기 때문에 segment가 생성될 때 마다 동기화를 할 경우 성능이 급격히 나빠질 수 있다.
+    - 따라서 Lucene은 무거운 `fsync()` 함수가 아니라 상대적으로 가벼운 `write()` 함수를 사용한다.
+    - `write()` 함수는 일단 캐시에만 기록되고 리턴되며, 실제 데이터는 특정한 주기에 따라 물리적인 디스크로 기록된다.
+    - 물리적인 디스크 쓰기 작업을 수행하지 않기에 빠른 처리가 가능한 반면, 시스템이 비정상 종료될 경우 데이터 유실이 일어날 수도 있다.
+    - 이를 통해 쓰기 성능을 높이고 이후 일정한 주기에 따라 물리적인 디스크 동기화 작업을 수행한다.
+  - 이처럼 in-memory buffer 기반의 처리 과정을 Lucene에서는 flush라고 부른다.
+    - 일단 flush 처리에 의해 segment가 생성되면 커널 시스템 캐시에 segment가 캐시되어 읽기가 가능해진다.
+    - 컨널 시스템 캐시에 캐시가 생성되면 Lucene의 `openIfChanged()`함수를 이용하여 `IndexSearcher`도 읽을 수 있는 상태가 된다.
+    - 즉 flush 이후부터 검색이 가능해진다.
+  - `openIfChanged()` 함수
+    - Lucene의 `IndexSearcher`는 일단 생성되고 나면 이후 변경된 사항들을 인지하지 못한다.
+    - 이를 가능하게 해주는 것이 `openIfChanged()` 함수로 일정 주기마다 실행되어 변경 사항을 반영할 수 있게 해준다.
+
+
+
+- Lucene의 commit
+  - Lucene이 디스크 동기화를 위해 `write()` 함수를 이용하기 때문에 물리적으로 기록되는 것이 100% 보장되지는 않는다.
+    - 디스크에 물리적으로 동기화되기 위해서는 결과적으로 커널 레벨에서 제공하는 `fsync()` 함수가 언젠가는 반드시 실행되어야 한다.
+    - 일반적인 쓰기 함수인 `write()` 함수는 커널에 쓰기 작업을 위임하기 때문에 최악의 경우 시스템에 문제가 생기면 데이터가 유실될 수 있다.
+  - Lucene에서는 물리적으로 디스크에 기록을 수행하는 `fsync()` 함수를 호출하는 작업을 commit이라 한다.
+    - 매번 commit을 수행할 필요는 없지만 일정 주기로 commit을 통해 물리적인 디스크로 기록 작업을 수행해야한다.
+
+
+
+- Lucene의 merge
+  - Merge는 여러 개의 segment를 하나로 합치는 작업이다.
+    - Segment 불변성에 따라 시간이 지날수록 segment의 개수는 증가할 수 밖에 없다.
+    - 따라서 늘어난 segment를 하나로 합치는 작업이 필요해진다.
+    - Lucene은 특정 주기 마다 자동으로 merge를 수행한다.
+  - Merge의 장점
+    - 검색 요청이 들어오면 모든 segment를 검색해야 하는데 segment의 개수가 줄어들면 검색 횟수도 줄어들어 검색 성능이 좋아진다.
+    - 삭제된 문서가 merge와 함께 디스크에서 삭제되므로 디스크 용량을 확보할 수 있다.
+  - Merge 작업은 반드시 commit 작업을 동반해야 한다.
+    - Commit 작업은 매우 비용이 많이 드는 연산으로 실행하는 데 많은 리소스가 필요하다/
+    - 따라서 적절한 주기를 설정해서 진행해야 한다.
+
+
+
+- Elasticsearch의 refresh, flush, optimize API
+  - Lucene의 flush는 Elasticsesarch의 refresh에 해당한다.
+    - Elasticsearch는 refresh 주기를 수동으로 조절할 수 있는 API를 제공한다.
+    - 특별한 경우가 아니면 refresh 주기를 임의로 변경하지 않는 것이 좋다.
+  - Lucene의 commit은 Elasticsearch의 flush에 해당한다.
+    - Elasticsearch의 flush는 Lucene의 commit 작업을 수행하고 새로운 translog를 시작한다는 의미이다.
+    - Translog는 Elasticsearch에만 존재하는 개념으로 고가용성과 매우 밀접한 관련이 있다.
+    - Translog는 샤드의 장애 복구를 위해 제공되는 특수한 파일로, 샤드는 자신에게 일어나는 모든 변경사항을 translog에 먼저 기록한 후 내부에 존재하는 Lucene을 호출한다.
+    - 시간이 흐를수록 translog의 크기는 계속 증가하고 shard는 1초마다 refresh 작업을 수행해서 실시간에 가까운 검색을 제공한다.
+    - 지속적인 refresh 작업에 의해 검색은 가능해지지만 아직은 디스크에 물리적인 동기화가 되지 않은 상태이기 때문에 주기적으로 Lucene commit을 수행해야 한다.
+    - 정책에 의해 lucene commit이 정상적으로 수행되면 변경사항이 디스크에 물리적으로 기록되고 translog 파일에서 commit이 정상적으로 일어난 시점까지의 내역이 삭제된다.
+  - Elasticsearch에서는 강제로 Lucene의 merge를 실행할 수 있는 API를 제공한다.
+    - 세그먼트를 병합하여 검색 성능을 올리는 것이 가능하다.
+
+
+
+- Translog
+  - Elasticsearch는 고가용성을 제공하기 위해 내부적으로 translog라는 파일을 유지하고 관리한다.
+    - 장애 복구를 위한 백업 데이터 및 데이터 유실 방지를 위한 저장소로 사용한다.
+  - Translog의 동작 순서
+    - 샤드에 어떤 변경사항이 생길 경우 Translog 파일에 먼저 해당 내역을 기록한 후 내부에 존재하는 Lucene index로 데이터를 전달한다.
+    - Lucene에 전달된 데이터는 인메모리 버퍼로 저장되고 주기적으로 처리되어 결과적으로 segment가 된다.
+    - Elasticsearch는 기본적으로 1초에 한번씩 refresh 작업이 수행되는데, 이를 통해 추가된 세그먼트의 내용을 읽을 수 있게 되고 검색이 가능해진다.
+    - 그러나 refresh 이후에도 translog에 기록된 내용은 삭제되지 않고 계속 유지된다.
+    - Elasticsearch의 flush가 실행되어 내부적으로 `fsync` 함수를 통해 실제 물리적인 디스크에 변경 내용이 성공적으로 기록돼야 translog 파일의 내용이 비로소 삭제된다.
+  - Translog가 필요한 이유
+    - Refresh가 실행되면 검색은 가능해지지만 아직은 불안정한 상태라고 볼 수 있다.
+    - 장애 발생시 완벽한 복구를 위해서는 물리적인 디스크로 동기화하는 flush가 언젠가는 이뤄져야한다.
+    - 만약 refresh와 flush 사이에 장애가 발생할 경우 flush를 통해 물리적인 디스크에 기록되지 못 한 데이터는 유실되게 된다.
+    - 그러나 translog가 있다면, refresh와 flush 사이에 장애가 발생하더라도 translog를 통해 복구가 가능하다.
+    - 또한 Elasticsearch는 shard crash가 발생할 경우에도 translog를 사용한다.
+    - Translog에 기록된 내용을 사용하면 shard를 완벽하게 복구할 수 있다.
+
+
+
+- 운영 중에 샤드의 개수를 변경할 수 없는 이유
+  - Elasticsearch의 shard는 Lucene index의 확장이다.
+    - 각 shard 내부에는 독립적인 Lucene library를 가지고 있으며 Lucene은 단일 머신 위에서 동작(stand alone)하는 검색 엔진이다.
+    - 이러한 특성 때문에 shard 내부의 Lucene 입장에서는 함께 index를 구성하는 다른 shard의 존재를 전혀 눈치채지 못한다.
+    - Lucene 입장에서 Elasticsearch index를 구성하는 전체 데이터가 별도로 존재하고 자신은 그 중 일부만 가지고 있다는 사실을 알 수가 없다.
+  - Primary shard의 개수를 변경한다는 말의 의미는 각각의 독립적인 Lucene이 가지고 있는 data들을 모두 재조정한다는 의미와 같다.
+    - 만약 Lucene의 개수가 5개에서 10개로 늘어난다면 Lucene 내부에 가지고 있는 segment가 잘게 쪼개져 일부 segment들은 새롭게 추가된 Lucene 쪽으로 전송되어야 할 것이다.
+    - 그리고 새로 추가된 Lucene에서는 여기저기에서 전송된 segment 조각들을 다시 합치는 작업을 수행해야 할 것이다.
+    - 그러나 segment는 segment 불변성에 의해 변경이 불가능하다.
+    - 따라서 primary shard의 개수를 변경하는 것은 불가능하다.
+
+
+
+
+
+## Reindex
+
+- `_reindex`
+
+  - 한 index로 부터 다른 index로 문서들을 복제할 때 사용하는 API이다.
+    - Reindex가 실행되는 순간의 source index의 snapshot을 생성하여 이 snapshot의 문서들을 복제하는 방식이다.
+    - 오직 document만 복사하며, mapping, setting은 복제되지 않는다.
+
+  - 기본적인 예시
+
+  ```json
+  // POST _reindex
   {
-    "persistent": {
-      "xpack.monitoring.collection.enabled": true
+    "source": {
+      "index": "my-index"
+    },
+    "dest": {
+      "index": "my-new-index"
+    }
+  }
+  ```
+
+  - 여러 source에서 reindexing하는 것도 가능하다.
+
+  ```json
+  // POST _reindex
+  {
+    "source": {
+      "index": ["my-index-1", "my-index-2"]
+    },
+    "dest": {
+      "index": "my-new-index"
     }
   }
   ```
 
 
 
-- 자체적으로 지원하는 모니터링 기능 외에도 metricbeat, filebeat 등을 사용 가능하다.
+- `source`의 옵션들
+  - `_source`
+    - 복사할 field들을 입력한다.
+  - `query`
+    - Source index에서 query에 matching되는 document들만 복사할 수 있다.
+
+
+
+- `dest`의 옵션들
+
+  - `op_type`
+    - `index`와 `create` 중 하나를 받는다.
+    - `index`: dest index에 동일한 id를 가진 문서가 있을 경우 덮어쓴다.
+    - `create`: dest index에 동일한 id를 가진 문서가 있을 경우 덮어쓰지 않는다. 
+    - data stream의 경우 append-only이기 때문에 data stream에 reindexing 할 경우 반드시 `create`로 줘야한다.
+
+  - `version_type`
+    - `internal`, `external`, `external_gt`, `external_gte` 중 하나의 값을 받는다.
+    - `internal`: 문서의 version과 무관하게 무조건 덮어쓴다.
+    - `external`, `external_gt`: source index의 document version이 dest index의 document version보다 클 경우에만 기존 dest index의 document를 덮어쓰며, dest index의 document의 version이 source index에 있는 document의 version으로 변경된다.
+    - `external_gte`: source index의 document version이 dest index의 document version보다 크거나 같을 경우에만 기존 dest index의 document를 덮어쓰며, dest index의 document의 version이 source index에 있는 document의 version으로 변경된다.
+  - `pipeline`
+    - Pipeline의 이름을 설정한다.
+
+
+
+- 다른 cluster로부터 reindexing하기
+
+  - 다른 cluster로부터 reindexing하기 위해선 dest cluster의 `elasticsearch.yml`에 `reindex.remote.whitelist` 설정이 되어 있어야한다.
+    - Source cluster의 host:port를 입력하면 된다.
+
+  ```yaml
+  reindex.remote.whitelist: "otherhost:9200, another:9200, 127.0.10.*:9200, localhost:*"
+  ```
+
+  - Reindex 예시
+    - 만약 source cluster의 secuirty가 disable 되어 있다면 username, password는 입력하지 않아도 된다.
+
+  ```json
+  POST _reindex
+  {
+    "source": {
+      "remote": {
+        "host": "http://otherhost:9200",
+        "username": "user",
+        "password": "pass"
+      },
+      "index": "my-index",
+    },
+    "dest": {
+      "index": "my-new-index"
+    }
+  }
+  ```
 
 
 
 
 
-## 클러스터의 상태 확인하기
+## Split index
 
-- `_cat/health`
+- 이미 존재하는 index를 shard를 증가시켜 새로운 index로 생성한다.
 
-  - 클러스터의 상태를 확인하는 API
+  - Index의 primary shard를 늘리기 위해 사용한다.
+    - `num_of_shards`는 static한 setting으로 index를 생성한 이후에는 변경할 수 없다.
+    - 따라서 primary shard를 늘리기 위해서는 primary shard를 늘린 index를 생성 후 해당 index에 재색인 해야 하는데, split index API를 사용하여 상대적으로 간편하게 실행이 가능하다.
+  - 기본 예시
+
+  ```json
+  // POST my-index/_split/split-my-index
+  {
+    "settings": {
+      "index.number_of_shards": 2
+    }
+  }
+  ```
+
+
+
+- 기존 index의 shard를 split하여 새로운 index의 shard를 생성한다.
+  - Index가 분할될 수 있는 횟수와 원본 shard가 분할 될 수 있는 회수는 `index.number_of_routing_shards`에 의해 결정된다.
+    - 이 값은 documents들을 여러 shard에 고정된 hashing을 가지고 분배하기 위해 사용하는 hashing space를 설정한다.
+    - 예를 들어 `number_of_routing_shard`가 30이고, index의 shard가 5이라고 할 때, 30은 `5*2*3`이므로, 5개의 shard를 가진 shard는 2 또는 3을 기준으로 분할 될 수 있다.
+    - 즉 `5 → 10 → 30`(2로 분할 후 3으로 분할) 또는 `5 → 15 → 30`(3으로 분할 후 2로 분할) 또는 `5 → 30`(6으로 분할)와 같이 분할될 수 있다.
+  - 아래 과정을 거쳐 split이 일어난다.
+    - 먼저 source index와 동일한 definition을 가진 dest index를 생성한다.
+    - Source index의 segment를 target index에 hard-link시킨다(만약 file system이 hard link를 지원하지 않을 경우, segment를 복제는데, 이 경우 시간이 더 오래 걸린다).
+    - 모든 문서를 hashing하여 다른 shard에 속한 문서들을 삭제한다.
+    - Target index를 recorver한다(close 상태의 index를 open 상태로 전환).
+
+
+
+- Elasticsearch가 primary shard를 동적으로 증가시키지 못하게 막아놓은 이유.
+  - 많은 key-value 저장소들은 incremental resharding을 지원한다.
+    - 즉 shard의 개수를 동적으로 늘리는 기능을 지원한다.
+  - shard의 크기가 일정 이상이 되면 새로운 shard를 생성하고, 새로운 shard에 새로운 data를 추가하는 방식은 좋지 않을 수 있다.
+    - 하나의 shard에만 색인이 이루어지게 되므로 병목이 발생하기 쉽다.
+    - Document들이 아무 기준 없이 색인되는 순서대로 shard에 들어가게 되므로 찾는데 시간이 오래 걸린다.
+    - 따라서 이 방식을 사용했을 경우 일정한 hashing scheme에 따라 document들을 각 shard에 재배치하는 작업이 필요하다.
+  - 다른 key-value 저장소들은 incremental sharding을 위해 일반적으로 consistent hashing을 사용한다.
+    - 이 방식은 shard의 개수가 N에서 N+1로 증가했을 때 오직 1/N 번째 key만 재배치하면 된다. 
+  - Elasticsearch의 저장 단위는 검색에 적합한 data 구조를 가진 Lucene index를 기반으로 만들어졌다.
+    - 따라서 다른 key-value 저장소에 비해 매우 많은 비용이 든다.
+
+
+
+# 데이터 삭제
+
+- delete api를 사용하여 삭제가 가능하다.
+
   - 기본형
 
-  ```http
-  GET _cat/health
-  ```
-
-  - `v` 옵션을 추가
-    - 결과 값에 header를 추가해서 보여준다.
-
-  ```http
-  GET _cat/health?v
-  ```
-
-  - format 옵션을 추가
-    - 지정한 format으로 보여준다.
-
-  ```http
-  GET _cat/health?format=json
-  ```
-
-
-
-- 클러스터 상태 정보
-
-  - `format=json` 옵션을 줬을 때의 응답
-
-  ```json
-  [
-    {
-      "epoch" : "1620718739",		// API를 호출한 시간을 UNIX 시간 형태로 표현한 숫자
-      "timestamp" : "07:38:59",	// API를 호출한 시간
-      "cluster" : "es-docker-cluster",	// 클러스터 이름
-      "status" : "green",		// 클러스터 상태
-      "node.total" : "4",		// 전체 노드의 개수
-      "node.data" : "3",		// 데이터 노드의 개수
-      "shards" : "6",			// 샤드의 개수
-      "pri" : "3",			// 프라이머리 샤드의 개수
-      "relo" : "0",			// 클러스터에서 재배치되고 있는 샤드의 개수
-      "init" : "0",			// 초기화되고 있는 샤드의 개수
-      "unassign" : "0",		// 배치되지 않은 샤드의 개수
-      "pending_tasks" : "0",	// 클러스터의 유지, 보수를 위한 작업 중 실행되지 못하고 큐에 쌓여 있는 작업의 개수
-      "max_task_wait_time" : "-",	// pending_tasks에서 확인한 작업이 실행되기까지 소요된 최대 시간
-      "active_shards_percent" : "100.0%"	// 정상적으로 동작하는 샤드의 비율
-    }
-  ]
-  ```
-
-  - `relo`
-    - 0이 아니라면 샤드들이 재배치 되고 있다는 의미이다.
-    - 지나치게 많은 샤드들이 재배치 되고 있을 경우 색인이나 검색 성능에 악영향을 줄 수 있기 때문에 재배치 되는 원인을 확인해 봐야 한다.
-
-  - `init`
-    - 0이 아니라면 그만큼의 프라이머리 혹은 레플리카 샤드가 새롭게 배치되고 있다는 의미이다.
-
-  - `pending_tasks`
-    - 0이 아니라면 클러스터가 부하 상황이거나 특정 노드가 서비스 불능 상태일 가능성이 있다.
-  - `max_task_wait_time`
-    - 이 값이 클수록 작업이 실행되지 못하고 오랫동안 큐에 있었다는 뜻이다.
-    - 클러스터의 부하 상황을 나타내는 지표로 활용된다.
-  - `active_shards_percent`
-    - 100%가 아니라면 초기화중이거나 배치되지 않은 샤드가 존재한다는 의미이다.
-
-
-
-- 클러스터의 상탯값
-
-  | 값                                       | 의미                                                         |
-  | ---------------------------------------- | ------------------------------------------------------------ |
-  | <span style="color:green">green</span>   | 모든 샤드가 정상적으로 동작하고 있는 상태                    |
-  | <span style="color:orange">yellow</span> | 모든 프라이머리 샤드는 정상적으로 동작하고 있지만, 일부 혹은 모든 레플리카 샤드가 정상적으로 동작하고 있지 않은 상태 |
-  | <span style="color:red">red</span>       | 일부 혹은 모든 프라이머리/레플리카 샤드가 정상적으로 동작하고 있지 않은 상태, 데이터 유실이 발생할 수 있다. |
-
-
-
-- 미할당 샤드 수동으로 재할당하기
-
-  ```http
-  POST _cluster/reroute?retry_failed=true
-  ```
-
-
-
-
-
-## 노드의 상태와 정보 확인하기
-
-- `_cat/nodes`
-
-  - 노드의 상태를 확인하는 API
-  - `v`, `format`등의 옵션을 사용 가능하다.
-  - `h` 옵션을 사용 가능하다.
-
   ```bash
-  # 아래 명령을 사용하면 h 옵션에서 사용 가능한 값들을 확인 가능하다.
-  $ curl -XGET 'http://localhost:9200/_cat/nodes?help'
-  
-  # h 옵션은 아래와 같이 주면 된다.
-  $ curl -XGET 'http://localhost:9200/_cat/nodes?h=id,name,disk.used_percent'
+  DELETE /<index>/_doc/<document_id>
   ```
 
 
 
-- 노드 상태 정보
+- ES에서 문서가 삭제되는 과정
+  - delete api를 통해 삭제 요청을 보낸다.
+  - 삭제 요청이 들어온 문서에 삭제 했다는 표시를 하고 검색시에 검색하지 않는다.
+  - 세그먼트 병합이 일어날 때 삭제 표시가 되어 있는 문서를 실제로 삭제한다.
+
+
+
+- query parameter
+  - `if_seq_no`: document가 이 파라미터에 설정해준 sequence number를 가지고 있을 때만 삭제가 수행된다.
+  - `if_primary_term`: document가 이 파라미터에 설정해준 primary term을 가지고 있을 때만 삭제가 수행된다.
+  - `refresh`
+    - `true`로 설정할 경우 delete의 변경사항을 즉각 반영(검색이 가능하게)한다. 
+    - `wait_for`로 설정할 경우 refresh를 기다리다 refresh가 발생하면 변경 사항이 반영(검색이 가능하게)된다.
+    - `false`로 설정하면 
+
+
+
+- `delete_by_query`를 통해 특정 쿼리와 일치하는 문서를 삭제하는 것도 가능하다.
+
+  - 삭제할 문서들을 지정해줄 query를 작성한다.
 
   ```json
-  [
-    {
-      "ip" : "123.123.456.4",	// 노드의 IP 주소
-      "heap.percent" : "15",	// 힙 메모리의 사용률
-      "ram.percent" : "49",	// 메모리 사용률
-      "cpu" : "4",			// 노드의 CPU 사용률
-      "load_1m" : "2.11",		// 각각 1,5,15분의 평균 Load Average를 의미한다.
-      "load_5m" : "2.21",
-      "load_15m" : "2.20",
-      "node.role" : "dilm",	// 노드의 역할
-      "master" : "-",			// 마스터 여부, 마스터 노드는 *로 표시된다.
-      "name" : "node2"		// 노드의 이름
-    }
-  ]
-  ```
-
-  - `heap.percent`
-    - 이 값이 크면 클수록 사용 중인 힙 메모리의 양이 많다는 뜻이다.
-    - 일정 수준 이상 커지면  old GC에 의해서 힙 메모리의 사용률이 다시 내려간다.
-    - 만약 이 값이 낮아지지 않고 85% 이상을 계속 유지하면 OOM(Out Of Memory)이 발생할 가능성이 크기 때문에 힙 메모리가 올라가는 이유를 확인해 봐야 한다.
-  - `ram.percent`
-    - `heap.percent`가 JVM이 할당받은 힙 메모리 내에서의 사용률이라면 `ram.percent`는 노드가 사용할 수 있는 전체 메모리에서 사용 중인 메모리의 사용률이다.
-    - 이 값은 대부분 90% 이상의 높은 값을 나타내는데, JVM에 할당된 힙 메모리 외의 영역은 OS에서 I/O 부하를 줄이기 위한 페이지 캐시로 사용하기 때문이다.
-
-  - `cpu`
-    - 이 값이 크면 CPU를 많이 사용하고 있다는 뜻이며, 경우에 따라서는 클러스터에 응답 지연 현상이 발생할 수 있다.
-
-  - `load_nm`
-    - 이 값이 크면 노드에 부하가 많이 발생하고 있다는 뜻이며 클러스터의 응답 지연이 발생할 수 있다.
-    - Load Average는 노드에 장착된 CPU 코어의 개수에 따라 같은 값이라도 그 의미가 다를 수 있기 때문에 CPU Usage와 함께 살펴보는 것이 좋다.
-    - CPU Usage와 Load Average가 모두 높다면 부하를 받고 있는 상황이다.
-  - `node.role`
-    - d는 데이터, m은 마스터, i는 인제스트, l은 머신러닝을 의미한다.
-
-
-
-## 인덱스의 상태와 정보 확인하기
-
-- `_cat/indices`
-
-  - 인덱스의 상태도 green, yellow, red로 표현된다.
-    - 인덱스들 중 하나라도 yellow면 클러스터도 yellow, 하나라도 red면 클러스터도 red가 된다.
-  - `v`, `h`, `format` 옵션을 모두 사용 가능하다.
-  - 확인
-  
-  ```http
-  GET _cat/indices
-  ```
-  
-  - `s`로 정렬이 가능하다.
-  
-  ```http
-  GET _cat/indices?s=<정렬 할 내용>
-  
-  #e.g.
-  GET _cat/indices?s=docs.count:desc
-  ```
-  
-  - size를 표시할 때 어떤 단위로 보여줄지 설정이 가능하다.
-    - `bytes=<단위>`를 입력하면 된다.
-  
-  
-  ```http
-  GET _cat/indices?h=i,p,r,dc,ss,cds&bytes=kb
-  ```
-  
-  - `expand_wildcards` 옵션을 통해 open 상태인 인덱스만 보는 것도 가능하다.
-  
-  ```http
-  GET _cat/indices?h=i,status,p,r,dc,ss,cds&s=cds:desc&expand_wildcards=open
-  ```
-
-
-
-- 인덱스 상태 정보
-
-  ```json
-  // GET _cat/indices?format=json
-  [
-      {
-          "health" : "green",	// 인덱스 상탯값
-          "status" : "open",	// 사용 가능 여부
-          "index" : "test",	// 인덱스명
-          "uuid" : "cs4-Xw3WRM2FpT4bpocqFw",
-          "pri" : "1",		// 프라이머리 샤드의 개수
-          "rep" : "1",		// 레플리카 샤드의 개수
-          "docs.count" : "0",		// 저장된 문서의 개수
-          "docs.deleted" : "0",	// 삭제된 문서의 개수
-          "store.size" : "566b",		// 인덱스가 차지하고 있는 전체 용량(프라이머리+레플리카)
-          "pri.store.size" : "283b"	// 프라이머리 샤드가 차지하고 있는 전체 용량
-        }
-  ]
-  ```
-
-
-
-
-
-## 샤드의 상태 확인하기
-
-- `_cat/shards`
-
-  - 마찬가지로 `v`, `h`, `format` 모두 사용 가능하다.
-
-  ```http
-  GET _cat/shards
-  ```
-
-  - `grep`을 사용 가능하다.
-    - 아래와 같이 입력하면 state가 `UNASSIGNED`인 샤드만을 반환한다.
-    - kibana console에서는 사용 불가
-  
-  ```bash
-  $ curl -XGET 'http://localhost:9200/_cat/shards | grep UNASSIGNED'
-  ```
-  
-  - 미할당 샤드가 있을 경우, `h` 옵션을 통해 미할당 된 원인을 확인할 수 있다.
-    - `클러스터 운영하기`에서 살펴본  `explain`을 통해서도 확인이 가능하다.
-    - 각 원인에 대한 설명은 [공식 가이드](https://www.elastic.co/guide/en/elasticsearch/reference/current/cat-shards.html#cat-shards-query-params) 참고
-  
-  ```bash
-  # 어떤 인덱스의 어떤 샤드가 왜 미할당 상태인지 확인하는 명령어
-  GET 'http://localhost:9200/_cat/shards?h=index,shard,prirep,unassigned.reason | grep -i UNASSIGNED'
-  ```
-  
-  - 보다 정확한 원인을 알려주는 API
-  
-  ```http
-  GET _cluster/allocation/explain
-  ```
-
-
-
-- 응답
-
-  ```json
-  [
-  	{
-          "index" : "test",		// 샤드가 속한 인덱스명
-          "shard" : "0",			// 샤드 번호
-          "prirep" : "p",			// 프라이머리인지 레플리카인지(레플리카는 r)
-          "state" : "STARTED",	// 샤드의 상태
-          "docs" : "0",			// 샤드에 저장된 문서의 수
-          "store" : "283b",		// 샤드의 크기
-          "ip" : "123.456.789.1",	// 샤드가 배치된 노드의 IP
-          "node" : "node2"		// 샤드가 배치된 데이터 노드의 노드 이름
-    	}
-  ]
-  ```
-
-  - state
-
-  | 값           | 의미                                                         |
-  | ------------ | ------------------------------------------------------------ |
-  | STARTED      | 정상적인 상태                                                |
-  | INITIALIZING | 샤드를 초기화하는 상태. 최초 배치 시, 혹은 샤드에 문제가 발생하여 새롭게 배치할 때의 상태 |
-  | RELOCATING   | 샤드가 현재의 노드에서 다른 노드로 이동하고 있는 상태. 새로운 데이터 노드가 추가되거나, 기존 데이터 노드에 문제가 생겨서 샤드가 새로운 노드에 배치되어야 할 때의 상태 |
-  | UNASSIGNED   | 샤드가 어느 노드에도 배치되지 않은 상태. 해당 샤드가 배치된 노드에 문제가 생기거나 클러스터의 라우팅 정책에 의해 배치되지 않은 상태. |
-
-
-
-- segment 상태 확인
-
-  - `_cat` API
-    - `v`, `h`, `format` 옵션을 모두 사용 가능하다.
-  
-  
-  ```http
-  GET _cat/segments[/<target>]
-  ```
-  
-  - Index segments API
-    - 특정 index에 속한 segments들만 확인할 수 있다.
-    - Application에서 사용할 때는 이 API를 사용하는 것이 권장된다.
-  
-  ```http
-  GET <index_name>/_segments
-  ```
-  
-  - Index segments API의 response
-    - Segment의 이름은 실제 file이름이다(`<data_dir>/indices/<index_uuid>/<shard>/index`에서 확인할 수 있다).
-    - `num_docs`은 삭제된 문서는 포함하지 않으며, nested documents들도 별개의 문서로 집계한다.
-    - `committed`가 true면 disk와 segment가 sync되었다는 것을 의미하며, false면 disk와 sync되어 있지 않다는 의미이다.
-    - Disk와 sync되어 있다면(committed가 true면) ES가 reboot 되더라도 segment data에 유실이 없다.
-    - `committed`가 false라고 하더라도, commit되지 않은 segment의 data들은 trans log에 기록되어 ES가 reboot될 때 trans log에서 data를 읽어올 수 있으므르로 유실이 발생할 일은 거의 없다.
-    - `search`가 true면 검색이 가능하다는 의미이고, false이면 refresh를 통해 검색이 가능하게 해줘야한다는 의미이다.
-    - `version`은 Lucene version을 의미한다.
-    - `attributes`: 압축과 관련된 정보를 보여준다.
-  
-  ```json
-  "shards": {
-      "0": [
-          {
-              "routing": {
-                  "state": "STARTED",
-                  "primary": false,
-                  "node": "5g4483g4g34gg5123T123"
-              },
-              "num_committed_segments": 1,
-              "num_search_segments": 1,
-              "segments": {
-                  // segment의 이름
-                  "_1v": {
-                      "generation": 67,			// 새로운 segment가 생성될 때 마다 증가하는 숫자, segment name을 결정할 때 사용한다.
-                      "num_docs": 1000000,		// segment에 저장된 문서의 수
-                      "deleted_docs": 0,			// 삭제된 문서의 수(실제 삭제된 문서의 개수와 다를 수 있다)
-                      "size_in_bytes": 1598215025,// segment의 크기
-                      "committed": true,
-                      "search": true,
-                      "version": "9.4.2",
-                      "compound": false,
-                      "attributes": {
-                          "Lucene90StoredFieldsFormat.mode": "BEST_SPEED"
-                      }
-                  }
-              }
-          }
-      ]
-  }
-  ```
-  
-  - `compound`
-    -  true면 Lucene이 file descriptor를 아끼기 위해 segment의 모든 파일들을 하나의 파일에 저장했다는 의미이다.
-    - Lucene에서 segment는 compound 방식과 multifile 방식이라는 두 가지 방식 중 하나로 저장된다.
-    - Multifile 방식은 segment를 여러 개의 file을 사용해서 저장하는 방식으로, term vector, inverted index, stored field 등을 모두 개별 file에 작성한다.
-    - Multifile의 단점은 너무 많은 file을 관리해야 한다는 점이다. OS에서는 open file의 개수가 제한되어 있는데(linux의 경우 `ulimit -n <숫자>` 옵션으로 변경 가능), 너무 많은 segment file이 열려 있을 경우 `Too many open files` error가 발생할 수 있다.
-    - Compound 방식은 segment의 여러 file들(term vector, inverted index, stored field 등)을 하나의 file에 저장하는 방식으로 file descriptor를 multifile 방식에 비해 덜 필요로 한다는 장점이 있다.
-
-
-
-
-## stats API로 지표 확인하기
-
-- GC(Garbage Collector)
-
-  - 정의
-
-    - Java로 만든 애플리케이션은 기본적으로 JVM이라는 가상 머신 위에서 동작하는데 OS는 JVM이 사용할 수 있도록 일정 크기의 메모리를 할당해준다.
-    - 이 메모리 영역을 힙 메모리라고 부른다.
-    - JVM은 힙 메모리 영역을 데이터를 저장하는 용도로 사용한다.
-    - 시간이 갈수록 사용 중인 영역이 점점 증가하다가 어느 순간 사용할 수 있는 공간이 부족해지면 사용 중인 영역에서 더 이상 사용하지 않는 데이터들을 지워서 공간을 확보하는데 이런 일련의 과정을 가비지 컬렉션이라 부른다.
-
-    - 사용 중인 영역은 young 영역과  old 영역 두 가지로 나뉜다.
-
-  - Stop-The-World
-
-    - GC 작업을 할 때, 즉 메모리에서 데이터를 지우는 동안에는 다른 스레드들이 메모리에 데이터를 쓰지 못하도록 막는다.
-    - GC가 진행되는 동안에너는 다른 스레드들이 동작하지 못하기 때문에 애플리케이션이 응답 불가 현상을 일으키고 이를 Stop-The-World 현상이라 한다.
-    - 특히 old GC는 비워야 할 메모리의 양이 매우 많기 때문에 경우에 따라서는 초 단위의 GC 수행 시간이 소요되기도 한다.
-    - 이럴 경우 ES 클러스터가 초 단위의 응답 불가 현상을 겪게 된다.
-
-  - Out Of Memory
-
-    - GC를 통해 더 이상 메모리를 확보할 수 없는 상황에서 애플리케이션이 계속해서 메모리를 사용하고자 하면 가용할 메모리가 없다는 OOM 에러를 발생시킨다.
-    - OOM  에러는 애플리케이션을 비정상 종료시키기 때문에 클러스터에서 노드가 아예 제외되는 현상이 발생한다.
-
-
-
-- 클러스터 성능 지표 확인하기
-
-  - 명령어
-
-  ```bash
-  $ curl -XGET 'http://localhost:9200/_cluster/stats?pretty
-  ```
-
-  - 성능 지표
-
-  ```json
+  POST /test-index/_delete_by_query
   {
-    "_nodes" : {
-      "total" : 4,
-      "successful" : 4,
-      "failed" : 0
-    },
-    "cluster_name" : "es-docker-cluster",
-    "cluster_uuid" : "bOfgi147StyhjT2sOzdPYw",
-    "timestamp" : 1620780055464,
-    "status" : "green",
-    "indices" : {
-      // (...)
-      "docs" : {
-        "count" : 9,		// 색인된 전체 문서의 수
-        "deleted" : 1		// 삭제된 전체 문서의 수
-      },
-      "store" : {
-        "size_in_bytes" : 140628	// 저장 중인 데이터의 전체 크기를 bytes 단위로 표시
-      },
-      "fielddata" : {
-        "memory_size_in_bytes" : 0,	// 필드 데이터 캐시의 크기
-        "evictions" : 0
-      },
-      "query_cache" : {
-        "memory_size_in_bytes" : 0,	// 쿼리 캐시의 크기
-        // (...)
-      },
-      "completion" : {
-        "size_in_bytes" : 0
-      },
-      "segments" : {
-        "count" : 17,		// 세그먼트의 수
-        "memory_in_bytes" : 28061,	// 세그먼트가 차지하고 있는 메모리의 크기
-        // (...)
-      }
-    },
-    // (...)
-      "versions" : [	// 클러스터를 구성하고 있는 노드들의 버전
-        "7.5.2"
-      ],
-      // (...)
-      "jvm" : {
-        "max_uptime_in_millis" : 69843238,
-        "versions" : [	// 클러스터를 구성하고 있는 노드들의 JVM 버전
-          {
-            "version" : "13.0.1",
-            "vm_name" : "OpenJDK 64-Bit Server VM",
-            "vm_version" : "13.0.1+9",
-            "vm_vendor" : "AdoptOpenJDK",
-            "bundled_jdk" : true,
-            "using_bundled_jdk" : true,
-            "count" : 4
-          }
-        ],
-     // (...)
-  }
-  ```
-
-  - `fielddata.memory_size_in_bytes`
-    - 필드 데이터는 문자열 필드에 대한 통계 작업을 할 때 필요한 데이터이다.
-    - 필드 데이터의 양이 많으면 각 노드의 힙 메모리 공간을 많이 차지하기 때문에 이 값이 어느 정도인지 모니터링해야 한다.
-    - 노드들의 힙 메모리 사용률이 높다면 우선적으로 필드 데이터의 유무를 확인하는 것이 좋다.
-
-  - `query_cache.memory_size_in_bytes`
-    - 모든 노드들은 쿼리의 결과를 캐싱하고 있다.
-    - 이 값이 커지면 힙 메모리를 많이 차지하기에 이 값이 어느정도인지 모니터링해야 한다.
-
-  - `segments.memory_in_bytes`
-    - 세그먼트도 힙 메모리 공간을 차지하기 때문에 힙 메모리의 사용률이 높을 경우 세그먼트의 메모리가 어느 정도를 차지하고 있는지 살펴봐야 한다.
-    - forcemerge API를 사용하여 세그먼트를 강제 병합하면 세그먼트의 메모리 사용량도 줄일 수 있다.
-
-
-
-- 노드의 성능 지표
-
-  - 명령어
-
-  ```bash
-  $ curl -XGET 'http://localhost:9200/_nodes/stats?pretty
-  ```
-
-  - 성능 지표
-
-  ```json
-  {
-    "_nodes" : {
-      "total" : 4,
-      "successful" : 4,
-      "failed" : 0
-    },
-    "cluster_name" : "es-docker-cluster",
-    "nodes" : {
-      "rrqnQp2mRUmPh8OGqTj0_w" : {	// 노드의 ID, 클러스터 내부에서 임의의 값을 부여한다.
-        "timestamp" : 1620781452291,
-        "name" : "node2",				// 노드의 이름
-        "transport_address" : "192.168.240.5:9300",
-        "host" : "192.168.240.5",
-        "ip" : "192.168.240.5:9300",
-        "roles" : [		// 노드가 수행할 수 있는 역할
-          "ingest",
-          "master",
-          "data",
-          "ml"
-        ],
-        "attributes" : {
-          "ml.machine_memory" : "134840213504",
-          "ml.max_open_jobs" : "20",
-          "xpack.installed" : "true"
-        },
-        "indices" : {
-          "docs" : {
-            "count" : 9,		// 노드가 지니고 있는 문서의 수
-            "deleted" : 1
-          },
-          "store" : {
-            "size_in_bytes" : 70928	// 노드가 저장하고 있는 문서의 크기를 byte 단위로 표시
-          },
-          "indexing" : {
-            "index_total" : 23,		// 지금까지 색인한 문서의 수
-            "index_time_in_millis" : 192,	// 색인에 소요된 시간
-            // (...)
-          },
-          "get" : {			// REST API의 GET 요청으로 문서를 가져오는 성능에 대한 지표(검색 성능보다는 문서를 가져오는 성능을 의미한다)
-            // (...)
-          },
-          "search" : {		// 검색 성능과 관련된 지표
-            // (...)
-          },
-          "merges" : {		// 세그먼트 병합과 관련된 성능 지표
-            // (...)
-          },
-          // (...)
-          "query_cache" : {		// 쿼리 캐시와 관련된 지표
-            // (...)
-          },
-          "fielddata" : {			// 필드 데이터 캐시와 관련된 지표
-            "memory_size_in_bytes" : 0,
-            "evictions" : 0
-          },
-          "completion" : {
-            "size_in_bytes" : 0
-          },
-          "segments" : {			// 노드에서 사용중인 세그먼트와 관련된 지표
-            // (...)
-          },
-          // (...)
-        },
-        "os" : {
-          "timestamp" : 1620781452298,
-          "cpu" : {
-            "percent" : 3,	// 노드의 CPU 사용률
-            "load_average" : {	// 노드의 Load Average 사용률(각 1,5,15분 평균을 의미)
-              "1m" : 1.99,
-              "5m" : 1.9,
-              "15m" : 1.9
-            }
-          },
-          // (...)
-          "gc" : {		// GC와 관련된 성능 지표
-            "collectors" : {
-              "young" : {
-                "collection_count" : 317,
-                "collection_time_in_millis" : 1595
-              },
-              "old" : {
-                "collection_count" : 3,
-                "collection_time_in_millis" : 53
-              }
-            }
-          },
-          // (...)
-        },
-        "thread_pool" : {		// 노드의 스레드 풀 상태
-          // (...)
-          "search" : {
-            "threads" : 73,
-            "queue" : 0,
-            "active" : 0,
-            "rejected" : 0,
-            "largest" : 73,
-            "completed" : 10917
-          },
-          // (...)
-          "write" : {
-            "threads" : 32,
-            "queue" : 0,
-            "active" : 0,
-            "rejected" : 0,
-            "largest" : 32,
-            "completed" : 32
-          }
-        },
-        "fs" : {
-          "timestamp" : 1620781452302,
-          "total" : {		// 디스크의 사용량을 의미한다.
-            "total_in_bytes" : 1753355112448,
-            "free_in_bytes" : 1117627813888,
-            "available_in_bytes" : 1028490833920	// 현재 남아 있는 용량
-          },
-          // (...)
-      }
-    }
-  }
-  ```
-
-  - `indexing.index_total`
-    - 카운터 형식의 값으로 0부터 계속해서 값이 증가한다.
-    - 지금 호출한 값과 1분 후에 호출한 값이 차이가 나며 이 값의 차이가 1분 동안 색인된 문서의 개수를 나타낸다.
-    - 색인 성능을 나타내는 매우 중요한 지표 중 하나이다.
-
-  - `thread_pool`
-    - 검색에 사용하는 search 스레드, 색인에 사용하는 write 스레드 등  스레드들의 개수와 큐의 크기를 보여준다.
-    - rejected가 매우 중요한데, 현재 노드가 처리할 수 있는 양보다 많은 요청이 들어오고 있기 때문에 더 이상 처리할 수 없어서 처리를 거절한다는 의미이기 때문이다.
-
- 
-
-- 인덱스 성능 지표
-
-  > https://www.elastic.co/guide/en/elasticsearch/reference/current/indices-stats.html
-
-  - 위 링크를 확인해보면 각종 parameter들이 있는데 확인을 원하는 파라미터를 입력하면 된다.
-  - 쿼리 수, 쿼리 평균 시간 등도 확인 가능하다.
-
-  ```bash
-  $ curl -XGET 'http://localhost:9200/<인덱스명>/_stats'
-  ```
-
-
-
-## tasks API로 task 확인하기
-
-- 진행중인 task 확인
-
-  ```bash
-  # 특정 task 조회
-  $ curl -XGET 'http://localhost:9200/_tasks/<task_id>'
-  
-  # 전체 task 조회
-  $ curl -XGET 'http://localhost:9200/_tasks'
-  ```
-
-
-
-- 파라미터
-
-  - actions
-    - 콤마로 구분 된 task명이나, 와일드카드 표현식을 사용해서 task를 필터링 할 때 사용한다.
-
-  ```bash
-  # 예시
-  $ curl -XGET 'http://localhost:9200/_tasks?actions=*bulk'
-  ```
-
-  - detalied
-    - Boolean 값을 주며, true를 줄 경우 shard recoveries에 대한상세 정보를 함께 반환한다.
-    - 기본값은 false이다.
-
-  ```bash
-  $ curl -XGET 'http://localhost:9200/_tasks?actions=*bulk&detailed=true'
-  ```
-
-  - group_by
-    - task들을 grouping하기 위해 사용한다.
-    - nodes(기본값): Node ID로 그룹핑한다.
-    - parents: parent task ID로 그룹핑한다.
-    - none: 그룹핑하지 않는다.
-
-  ```bash
-  $ curl -XGET 'http://localhost:9200/_tasks?group_by=parents'
-  ```
-
-  - node_id
-    - 콤마로 구분 된 노드 ID 또는 노드 이름을 인자로 받는다.
-    - 리스트에 포함된 노드의 task만 반환한다.
-  - parent_task_id
-    - 입력한 Parent task ID에 해당하는 task들만 반환한다.
-    - 이 파라미터를 넘기지 않거나 -1을 값으로 주면 모든 task를 반환한다.
-  - master_timeout
-    - 마스터 노드에 연결되기까지의 기간(기본값은 30s)을 설정한다.
-    - 기간 내에 응답이 오지 않으면 errror를 반환한다.
-  - wait_for_completion
-    - Boolean값을 받으며, true로 줄 경우 operation이 완료될 때 까지 요청이 중단된다.
-    - 기본값은 false이다.
-
-
-
-
-
-## 성능 확인과 문제 해결
-
-- 주요 성능
-  - 색인 성능
-    - 초당 몇 개의 문서를 색인할 수 있는지, 그리고 각 문서를 색인하는 데 소요되는 시간이 어느 정도인지
-    - 클러스터 전체 성능과 노드의 개별 성능으로 나누어 측정한다.
-  - 검색 성능
-    - 초당 몇 개의 쿼리를 처리할 수 있는지, 그리고 각 쿼리를 처리하는 데 소요되는 시간이 어느 정도인지
-    - 클러스터 전체 성능과 노드의 개별 성능으로 나누어 측정한다.
-  - GC 성능
-    - GC가 너무 자주, 오래 발생하면 Stop-The-World 같은 응답 불가 현상이 발생한다.
-    - Stop-The-World가 얼마나 자주, 오래 발생하는지를 나타낸다.
-  - rejected
-    - 클러스터가 처리할 수 없는 수준의 요청이 들어오면 클러스터는 요청을 거절하게 되는데 그 횟수를 나타낸다.
-
-
-
-- 색인 성능
-
-  - `_stats` 를 통해 확인 가능하다.
-
-  ```bash
-  $ curl -XGET 'http://localhost:9200/_stats?pretty
-  ```
-
-  - 성능 지표
-
-  ```json
-  {
-    "_shards" : {
-      "total" : 14,
-      "successful" : 14,
-      "failed" : 0
-    },
-    "_all" : {
-      "primaries" : {		// 프라이머리 샤드에 대한 색인 성능
-        "docs" : {
-          "count" : 10,
-          "deleted" : 1
-        },
-        "store" : {
-          "size_in_bytes" : 92866
-        },
-        "indexing" : {
-          "index_total" : 24,
-          "index_time_in_millis" : 209,
-          // (...)
-        },
-        // (...)
-      "total" : {		// 전체 샤드에 대한 색인 성능
-       // 내용은 primaries와 동일하다.
-       //(...)
-      }
-    }
-  }
-  ```
-
-  - 성능 측정
-    - 위 요청을 10초 간격으로 보냈을 때, 첫 번째 호출시 색인된 문서의 수는 0개, 두 번째 호출시 색인된 문서의 수는 200개 라고 가정
-    - 10 초 동안 200개의 문서가 색인됐다고 할 수 있다.
-    - 또한 첫 번째 호출시 색인 소요 시간이 0초, 두 번째 호출 시 색인 소요 시간이 100ms라고 가정
-    - 즉 10초 동안 200개의 문서를 색인했고, 색인하는데 10ms가 걸렸기 때문에 각각의 문서를 색인하는데 에는 200/100=2ms의 시간이 소요되었음을 알 수 있다.
-    - 즉, 이 클러스터의 프라이머리 샤드에 대한 색인 성능은 2ms이다.
-    - 색인하는 양이 많으면 많을수록 색인에 소요되는 시간도 늘어나기 때문에 두 값의 절대적인 값보다는 하나의 문서를 색인하는 데 시간이 얼마나 소요되는지를 더 중요한 성능 지표로 삼아야 한다.
-
-
-
-- 검색 성능
-
-  - query와 fetch
-    - A, B, C 노드가 있을 때 사용자가 search API를 통해 A 노드에 검색 요청을 입력했다고 가정한다.
-    - 그럼 노드 A는 자신이 받은 검색 쿼리를 B, C 노드에 전달한다.
-    - 각각의 노드는 자신이 가지고 있는 샤드 내에서 검색 쿼리에 해당하는 문서가 있는지 찾는 과정을 진행한다.
-    - 이 과정이 query이다.
-    - 그리고 이렇게 찾은 문서들을 리스트 형태로 만들어서 정리하는 과정이 fetch이다.
-    - 검색은 이렇게 query와 fetch의 과정이 모두 끝나야 만들어지기 때문에 검색 성능을 측정할 때 두 과정을 모두 포함하는 것이 좋다.
-  - `_stats`을 통해 확인 가능하다.
-
-  ```bash
-  $ curl -XGET 'http://localhost:9200/_stats?pretty
-  ```
-
-  - 성능 지표
-
-  ```json
-  {
-    "_shards" : {
-      "total" : 14,
-      "successful" : 14,
-      "failed" : 0
-    },
-    "_all" : {
-      // (...)
-        "search" : {
-          "open_contexts" : 0,
-          "query_total" : 10916,	// 호출하는 시점까지 처리된 모든 query의 총합
-          "query_time_in_millis" : 5496,
-          "query_current" : 0,
-          "fetch_total" : 10915,	// 호출하는 시점까지 처리된 모든 fetch의 총합
-          "fetch_time_in_millis" : 476,
-          "fetch_current" : 0,
-          "scroll_total" : 9741,
-          "scroll_time_in_millis" : 18944,
-          "scroll_current" : 0,
-          "suggest_total" : 0,
-          "suggest_time_in_millis" : 0,
-          "suggest_current" : 0
-        },
-      // (...)
-      }
-    }
-  }
-  ```
-
-  - 성능 측정
-    - 색인 성능 측정과 동일한 방식으로 진행하면 된다.
-    - query와 fetch를 나눠서 진행한다.
-
-
-
-- GC 성능 측정
-
-  - 각 노드에서 발생하기 때문에 `_nodes/stats`를 통해 확인한다.
-
-  ```bash
-  $ curl -XGET 'http://localhost:9200/_nodes/stats?pretty
-  ```
-
-  - 성능 지표
-
-  ```json
-  // (...)
-  "jvm" : {
-      // (...)
-    "gc" : {
-      "collectors" : {
-          "young" : {
-              "collection_count" : 333,
-              "collection_time_in_millis" : 1697
-          },
-          "old" : {
-              "collection_count" : 3,
-              "collection_time_in_millis" : 53
+      "query":{
+          "match":{
+              "name":"test"
           }
       }
   }
-  // (...)
   ```
 
-  - 성능 측정
-    - 색인과 동일한 방법으로 측정한다.
-    - old, young을 각각 측정한다.
-    - 상황에 따라 다르지만 보통 수십에서 수백 ms 정도의 성능을 내는 것이 안정적이다.
+  
 
-
-
-- rejected 성능 측정
-
-  - rejected 에러
-    - ES는 현재 처리할 수 있는 양보다 많은 양의 요청이 들어올 경우 큐에 요청을 쌓아놓는다.
-    - 하지만 큐도 꽉 차서 더 이상 요청을 쌓아놓을 수 없으면 rejected 에러를 발생시키며 요청을 처리하지 않는다.
-    - 보통 요청이 점차 늘어나서 초기에 구성한 클러스터의 처리량이 부족한 경우나, 평상시에는 부족하지 않지만 요청이 순간적으로 늘어나서 순간 요청을 처리하지 못하는 경우에 발생한다.
-  - node별로 측정이 가능하다.
-
-  ```bash
-  $ curl -XGET 'http://localhost:9200/_nodes/stats?pretty
-  ```
-
-  - 성능 지표
-    - 각 스레드 별로 확인할 수 있다.
-
-  ```json
-  // (...)
-  "thread_pool" : {		// 노드의 스레드 풀 상태
-      // (...)
-      "search" : {
-        "threads" : 73,
-        "queue" : 0,
-        "active" : 0,
-        "rejected" : 0,
-        "largest" : 73,
-        "completed" : 10917
-      },
-      // (...)
-      "write" : {
-        "threads" : 32,
-        "queue" : 0,
-        "active" : 0,
-        "rejected" : 0,
-        "largest" : 32,
-        "completed" : 32
-      }
-  },
-  // (...)
-  ```
-
-  - rejected 문제 해결
-    - 만일 초기에 구성한 클러스터의 처리량이 부족하다면 데이터 노드를 증설하는 방법 외에는 특별한 방법이 없다.
-    - 그러나 순간적으로 밀려들어오는 요청을 처리하지 못한다면 큐를 늘리는 것이 도움이 될 수 있다.
-    - ` elasticsearch.yml` 파일에 아래와 같이 설정하면 된다.
-
-  | 스레드 이름         | 스레드 풀 타입        | 설정 방법                                | 예시                                    |
-  | ------------------- | --------------------- | ---------------------------------------- | --------------------------------------- |
-  | get, write, analyze | fixed                 | thread_pool.[스레드 이름].queue_size     | thread_pool.write.queue_size=10000      |
-  | search              | fixed_auto_queue_size | thread_pool.[스레드 이름].max_queue_size | thread_pool.search.max_queue_size=10000 |
-
-
-
-
-
-# 분석 엔진으로 활용하기
-
-- Elastic Stack이란
-  - Elastic Stack은 로그를 수집, 가공하고 이를 바탕으로 분석하는 데 사용되는 플랫폼을 의미한다.
-    - 이전에는 Elastic Stack을 ELK Stack이라고 불렀다.
-    - Elastic Stack은 가급적 모든 구성 요소의 버전을 통일시키는 것이 좋다.
-  - Elastic Stack은 아래와 같다.
-    - 로그를 전송하는 Filebeat
-    - 전송된 로그를 JSON 형태의 문서로 파싱하는 Logstash
-    - 파싱된 문서를 저장하는 Elasticsearch
-    - 데이터를 시각화 할 수 있는 kibana
-  - Filebeat
-    - 지정된 위치에 있는 로그 파일을 읽어서 Logstash 서버로 보내주는 역할을 한다.
-    - Filebeat은 로그 파일을 읽기만 하고 별도로 가공하지 않기 때문에, 로그 파일의 포맷이 달라지더라도 별도의 작업이 필요치 않다.
-    - 로그 파일의 포맷이 달라지면 로그 파일을 실제로 파싱하는 Logstash의 설정을 바꿔주면 되기 때문에 Filebeat과 Logstash의 역할을 분명하게 나눠서 사용하는 것이 확장성이나 효율성 면에서 좋다.
-  - Logstash
-    - Filebeat으로부터 받은 로그 파일들을 룰에 맞게 파싱해서 JSON 형태의 문서로 만드는 역할을 한다.
-    - 하나의 로그에 포함된 정보를 모두 파싱할 수도 있고, 일부 필드만 파싱해서 JSON 문서로 만들 수도 있다.
-    - 파싱할 때는 다양한 패턴을 사용할 수 있으며 대부분 **grok 패턴**을 이용해서 파싱 룰을 정의한다.
-    - grok: 비정형 데이터를 정형 데이터로 변경해 주는 라이브러리
-  - Elasticsearch
-    - Logstash가 파싱한 JSON 형태의 문서를 인덱스에 저장한다.
-    - 이 때의 ES는 데이터 저장소 역할을 한다.
-    - 대부분의 경우 날짜가 뒤에 붙는 형태로 인덱스가 생성되며 해당 날짜의 데이터를 해당 날짜의 인덱스에 저장한다.
-  - Kibana
-    - ES에 저장된 데이터를 조회하거나 시각화할 때 사용한다.
-    - 데이터를 기반으로 그래프를 그리거나 데이터를 조회할 수 있다.
-    - Elastic Stack에서 사용자의 인입점을 맡게 된다.
-
-
-
-
-
+  
