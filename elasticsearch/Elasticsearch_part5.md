@@ -15,11 +15,11 @@
   - Query Phase
     - Coordinator는 확정된 shard들에게 query를 전송한다.
     - Coordinator로부터 query를 받은 shard들은 query와 일치하는 document들을 찾고, scoring을 실행한다.
-    - 이 때, 각 shard 당 하나의 thread만 실행되기에, primary shard의 개수가 많아질수록 검색 속도가 빨라질 수 있다.
+    - 이 때, 각 shard 당 하나의 thread만 실행되기에, primary shard의 개수(고유한 shard의 개수)가 많아질수록 검색 속도가 빨라질 수 있다.
     - Query를 받은 각 shard들은 query 대상이 되는 field와 Lucene의 data fields를 mapping하고, query에 포함된 검색어를 analyzing하고, Lucene에서 실행할 수 있는 형태로 query를 재구성한다.
     - 이렇게 재구성된 정보들을 바탕으로 segment 수준에서 실제 검색이 실행된다.
     - 그 결과로 query와 일치하는 document들의 ID들이 저장된 우선순위 큐가 생성된다.
-    - 이 배열 내의 document들은 추후에 점수가 매겨지고, 점수에 따라 혹은 `sort`에  담긴 기준에 따라 정렬이 실행된다.
+    - 이 우선순위 큐 내의 document들은 추후에 점수가 매겨지고, 점수에 따라 혹은 `sort`에  담긴 기준에 따라 정렬이 실행된다.
     - 만약 document의 특정 field를 대상으로 정렬해야 한다면, doc values를 사용한다.
     - 만약 query에 `aggs`도 포함되어 있다면, 이 역시 마찬가지로 doc values를 통해 실행된다.
     - 각 shard는 일치하는 document ID들 중 `size` 만큼의 ID들만 coordinator에게 반환한다.
@@ -33,9 +33,9 @@
 
 - Search API
 
-  - 모든 search API 검색 요청은 _search REST end point를 사용하고 GET이나 POST 요청 중 하나가 된다.
+  - 모든 search API 검색 요청은 `_search` REST endpoint를 사용하고 GET이나 POST 요청 중 하나가 된다.
     - end point는 path라고도 불리며 URL에서 호스트와 포트 이후의 주소를 말한다.
-  - 간단한 형태의 URI Search 형태를 제공한다.
+  - Query parameter를 사용한 검색도 가능하다.
   
   ```http
   GET <index_name>/_search?q=<query>
@@ -55,7 +55,8 @@
   ```
   
     - 인덱스명에 한 개 이상의 인덱스를 지정해서 다수의 인덱스에 동시에 쿼리를 날릴 수 있다.
-    - 아래와 같이 인덱스명이 올 자리에 `_all`을 입력하면 모든 인덱스에 쿼리를 날린다.
+      - 아래와 같이 인덱스명이 올 자리에 `_all`을 입력하면 모든 인덱스에 쿼리를 날린다.
+  
   
   ```http
   GET _all/_search?q=<query>
@@ -109,7 +110,7 @@
   - 구성 요소는 반환할 도큐먼트 개수를 제어하고, 최적의 도큐먼트를 선택하기 하며, 원치 않는 도큐먼트는 결과에서 걸러내도록 한다.
   - q(query)
     - 검색 요청에 있어 가장 중요한 구성 요소.
-    - 점수 기반으로 최적의 도큐먼트를 반환하거나 원치 않는 도큐먼트를 걸러내도록 설정한다.
+    - 점수 기반으로 최적의 document를 반환하거나 원치 않는 document를 걸러내도록 설정한다.
     - 이 구성 요소는 쿼리와 DSL 필터를 사용해서 구성한다.
   - size
     - 반환할 도큐먼트 개수를 의미한다.
@@ -127,13 +128,13 @@
     - 기본 정렬은 도큐먼트 점수에 따른다.
     - 점수 계산이 필요 없거나 동일 점수의 다수 도큐먼트가 예상된다면, sort를 추가해서 원하는 대로 순서를 제어할 수 있다.
   - fields
-    - 검색 결과로 반환할 filed들을 입력한다.
-    - 응답 값으로 오는 `_source` filed와 별개로 `fields`라는 filed에 지정한 filed들이 응답에 담겨서 온다.
-    - `_source`와 마찬가지로 꼭 검색 대상 filed가 포함될 필요는 없다.
+    - 검색 결과로 반환할 field들을 입력한다.
+    - 응답 값으로 오는 `_source` field와 별개로 `fields`라는 field에 지정한 field들이 응답에 담겨서 온다.
+    - `_source`와 마찬가지로 꼭 검색 대상 field가 포함될 필요는 없다.
     - `_source`와는 달리 date type을 포함한 특정 field들의 format을 지정하는 것도 가능하다.
   
   ```json
-  PUT test_index/_doc/1
+  // PUT test_index/_doc/1
   {
       "foo":"foo",
       "bar":"bar",
@@ -141,14 +142,14 @@
       "user_email":"hello@world.com"
   }
   
-  GET test_index/_search
+  // GET test_index/_search
   {
       "query": {
           "match": {
               "foo": "foo"
           }
       },
-      "fields": [		// filed만 줘도 되고, format등을 지정해줄 수도 있다.
+      "fields": [		// field만 설정해도 되고, format등을 지정해줄 수도 있다.
           "bar",
           "user_*",
           {
@@ -158,41 +159,43 @@
       ]
   }
   
-  // 응답
-  "hits": [
-      {
-          "_index": "test_index",
-          "_id": "1",
-          "_score": 0.2876821,
-          "_source": {
-              "foo": "foo",
-              "bar": "bar",
-              "user_name": "John Doe",
-              "user_email": "hello@world.com",
-              "last_login": "2023-08-01"
-          },
-          "fields": {
-              "user_name.keyword": [
-                  "John Doe"
-              ],
-              "bar": [
-                  "bar"
-              ],
-              "user_email": [
-                  "hello@world.com"
-              ],
-              "user_email.keyword": [
-                  "hello@world.com"
-              ],
-              "user_name": [
-                  "John Doe"
-              ],
-              "last_login": [
-                  "1690848000000"
-              ]
+  // response
+  {
+      "hits": [
+          {
+              "_index": "test_index",
+              "_id": "1",
+              "_score": 0.2876821,
+              "_source": {
+                  "foo": "foo",
+                  "bar": "bar",
+                  "user_name": "John Doe",
+                  "user_email": "hello@world.com",
+                  "last_login": "2023-08-01"
+              },
+              "fields": {
+                  "user_name.keyword": [
+                      "John Doe"
+                  ],
+                  "bar": [
+                      "bar"
+                  ],
+                  "user_email": [
+                      "hello@world.com"
+                  ],
+                  "user_email.keyword": [
+                      "hello@world.com"
+                  ],
+                  "user_name": [
+                      "John Doe"
+                  ],
+                  "last_login": [
+                      "1690848000000"
+                  ]
+              }
           }
-      }
-  ]
+      ]
+  }
   ```
   
   - explain
@@ -395,7 +398,7 @@
     - analyzer를 활용하여 검색한다.
   - Filter Context
     - Term Level Query라고도 부른다.
-    - 검색어가 문서에 존재하는지 여부를 Yes나 No 형태의 검색 결과로 보여준다. 
+    - 검색어가 문서에 존재하는지 여부를 Yes or No 형태의 결과로 보여준다. 
     - score 값을 가지지 않는다.
     - analyzer를 활용하지 않는다.
 
@@ -414,14 +417,15 @@
   - match 쿼리는 어떤 토큰이 먼저 있는지에 대한 순서는 고려하지 않는다.
     - 즉 python guide가 들어오든 guide python이 들어오든 같은 결과를 보여준다.
 
-  ```bash
-  $ curl 'localhost:9200/인덱스명/_doc/_search' -d '{
-  "query": {
-    "match": {
-      "title": "hadoop"
-    }
+  ```json
+  // GET <index_name>/_search
+  {
+      "query": {
+        "match": {
+          "title": "hadoop"
+        }
+      }
   }
-  }'
   ```
 
 
@@ -431,14 +435,15 @@
   - match_phrase는 match 쿼리와 달리 검색어의 순서도 고려한다.
     - 즉 아래의 경우 title에 guide가 python보다 먼저 나오는 문서는 검색 되지 않는다.
 
-  ```bash
-  $ curl 'localhost:9200/인덱스명/_doc/_search' -d '{
-  "query": {
-    "match_phrase": {
-      "title": "python guide"
-    }
+  ```json
+  // GET <index_name>/_search
+  {
+      "query": {
+        "match_phrase": {
+          "title": "python guide"
+        }
+      }
   }
-  }'
   ```
 
 
@@ -456,56 +461,16 @@
       "query": {
         	"match_all":{}
       }
-  }'
-  ```
-
-
-
-- mutli_match 쿼리
-
-  - match와 동일하지만 두 개 이상의 필드에 match 쿼리를 날릴 수 있다.
-
-  ```json
-  // GET <index_name>/_doc/_search
-  {
-      "query": {
-            "multi_match":{
-                  "query": "term1 term2",
-                  "fields": ["field1", "field2"] 
-        }
   }
   ```
-  
-  - `operator`
-    - 옵션으로 `operator`를 줄 수 있다.
-    - 주의할 점은 `operator`가 각 filed 사이에 적용되는 것이 아니라, 각 term마다 적용된다는 것이다.
-    - 예를 들어 위 예시에서 `operator`를 `and`로 주는 것은 `field1`에도 term1, term2가 포함되고, `filed2`에도 term1, term2가 포함된 문서를 찾는 것이 아니라, `field1`에 term1, term2가 모두 포함된 문서나 `field2`에 term1, term2가 모두 포함된 문서를 찾는것이다.
-    - 만약, field 사이에 and를 적용시키고자 한다면 `type`을 `cross_field`로 주면 된다.
-  - `minimum_shoud_match`
-    - `operator`와 마찬가지로 동작한다.
-  
-  - `^` field명 뒤에 `^n`과 같이 특정 필드에 가중치를 줄 수 있다.
-  
-  ```json
-  // GET <index_name>/_doc/_search
-  {
-      "query": {
-            "multi_match":{
-                  "query": "term1 term2",
-                  "fields": ["field1^3", "field2"] 
-        }
-  }
-  ```
-  
 
 
 
 - match_phrase_prefix
 
-  - 검색어가 주어진 순서대로 존재하는 문서를 검색한다.
-  - 마지막 검색어는 prefix로 취급된다.
+  - 검색어가 주어진 순서대로 존재하는 문서를 검색하며, 마지막 검색어는 prefix로 취급된다.
   - 예시 데이터 색인
-
+  
   ```json
   // PUT test/_bulk
   {"index":{"_id":"1"}}
@@ -515,12 +480,12 @@
   {"index":{"_id":"3"}}
   {"title":"the fox is quick and brown."}
   ```
-
+  
   - 검색
     - 1번, 2번 문서는 hit되지만, 3번 문서는 순서가 맞지 않기에 hit되지 않는다.
-
+  
   ```json
-  GET test/_search
+  // GET test/_search
   {
     "query":{
       "match_phrase_prefix": {
@@ -531,7 +496,7 @@
     }
   }
   ```
-
+  
   - 옵션
     - `query`: 검색어를 입력한다.
     - `analyzer`: 검색어를 분석할 analyzer를 입력한다.
@@ -548,9 +513,9 @@
     - 찾은 토큰들을 match_phrase 쿼리에 추가한다.
     - 즉 이 때 찾은 토큰의 개수만큼 쿼리가 생성된다.
   - 예시
-
+  
   ```json
-  GET test/_search
+  // GET test/_search
   {
     "query":{
       "match_phrase_prefix": {
@@ -560,11 +525,12 @@
       }
     }
   }
+  
   // 위 쿼리는 내부적으로 아래와 같이 동작한다.
   // 1. 맨 마지막 어절을 제외한 나머지 어절들로 match_phrase query를 생성한다.
   // 2. f로 시작하는 token을 사전순으로 찾는다(ferrets, fox)
   // 3. 해당 token들을 match_phrase query에 추가하여 검색한다.
-  GET test/_search
+  // GET test/_search
   {
     "query":{
       "bool":{
@@ -595,7 +561,7 @@
 
   ```json
   // 예시 데이터 bulk
-  PUT test/_bulk
+  // PUT test/_bulk
   {"index":{"_id":"1"}}
   {"title":"the word abuse"}
   {"index":{"_id":"2"}}
@@ -606,7 +572,7 @@
   {"title":"the word aerialist"}
   
   // 검색
-  GET test/_search
+  // GET test/_search
   {
     "query":{
       "match_phrase_prefix": {
@@ -618,7 +584,7 @@
     }
   }
   
-  // 응답
+  // response
   // 위에서 max_expansions를 1로 줬으므로 a로 시작하는 토큰 중 사전순으로 가장 먼저 있는 abuse로만 query가 생성된다.
   // 따라서 the word abuse만 검색되게 된다.
   {
@@ -647,38 +613,38 @@
     - 그러나 query_string은 굳이 모든 필드에 `copy_to` 속성을 주지 않아도 모든 필드를 검색하는 것이 가능하다.
   - and나 or 같은 검색어 간 연산이 필요한 경우에 사용한다.
   - 경우에 따라서 match 쿼리나 multi_match와 동일하게 동작할 수도 있고 정규표현식 기반의 쿼리가 될 수도 있다.
-    - 와일드카드 검색도 가능하다.
-    - 그러나 query_string을 통한 와일드 카드 검색은 스코어링을 하지 않을 뿐더러(모든 score가 1로 계산), 성능도 좋지 않기에 사용을 자제해야 한다. 
+    - term에 와일드카드를 넣어서 검색이 가능하다.
+    - 그러나 query_string에서 term에 와일드 카드를 넣어서 검색할 경우 스코어링을 하지 않을 뿐더러(모든 score가 1로 계산), 성능도 좋지 않기에 사용을 자제해야 한다. 
   - 요청 URL을 사용하여 검색
 
-  ```bash
-  $ curl 'localhost:9200/인덱스명/_search?q=텀'
+  ```http
+  GET <index_name>/_search?q=<term>
   ```
 
   - 본문 기반 검색
 
   ```bash
-  $ curl 'localhost:9200/인덱스명/_search' -H 'Content-Type: application/json' -d '{
-  "query":{
-    "query_string":{
-    	"query":"텀"
-    }
-  }'
+  // GET <index_name>/_search
+  {
+      "query":{
+            "query_string":{
+              	"query":"<term>"
+        }
+  }
   ```
-
+  
   - 기본적으로 query_string 필드는 _all 필드를 검색한다.
     - 특정 필드를 지정하는 것이 가능하다.
-
-  ```bash
-  $ curl 'localhost:9200/인덱스명/_search?q=필드명:텀'
   
-  $ curl 'localhost:9200/인덱스명/_search' -H 'Content-Type: application/json' -d '{
+  ```bash
+  # GET <index_name>
+  {
   	"query":{
   		"query_string":{
-  			"fields":"필드",
-  			"query":"텀"
+  			"fields":"<field>",
+  			"query":"<term>"
   	}
-  }'
+  }
   ```
 
   - 이 밖에 다양한 쿼리 스트링 문법이 존재하는데 자세한 내용은 아래 링크 참조
@@ -695,7 +661,7 @@
 
   | type                           | example               | description                                                  |
   | ------------------------------ | --------------------- | ------------------------------------------------------------ |
-  | 기본형                         | `color:red`           | `:` 왼쪽에 쓰고, 오른쪽에 term을 쓴다.                       |
+  | 기본형                         | `color:red`           | `:` 왼쪽에 field, 오른쪽에 term을 입력한다.                  |
   | 여러 term 검색                 | `color:(red or blue)` | color field의 값이 red나 blue인 문서를 찾는다.               |
   | 정확한 순서로 검색             | `name:"John Doe"`     | name filed에서 정확히 John Doe 순서로 등장하는 값만 찾는다.  |
   | field 명에 space가 들어갈 경우 | `first\ name:John`    | `\`를 사용하여 space를 표현한다.                             |
@@ -753,6 +719,8 @@
 
 
 
+
+
 ## Filter context
 
 - Filter Context
@@ -781,15 +749,15 @@
   - 예제
     - 특정 term이 특정 필드에 있으면 해당 도큐먼트의 name과 tags를 반환한다.
 
-  ```bash
-  $ curl 'localhost:9200/인덱스명/_doc/_search' -H 'Content-Type: application/json' -d '{
-  "query":{
-    "term":{
-      "필드": "텀"
-    }
-  },
-  "_source":["name","tags"]
-  }'
+  ```json
+  // GET <index_name>/_search
+  {
+      "query":{
+        "term":{
+          "<field>": "<term>"
+        }
+      }
+  }
   ```
 
 
@@ -802,14 +770,14 @@
   - 예제
 
   ```bash
-  $ curl 'localhost:9200/인덱스명/_doc/_search' -H 'Content-Type: application/json' -d '{
-  "query":{
-    "terms":{
-      "필드": ["텀1","텀2"]
-    }
-  },
-  "_source":["name","tags"]
-  }'
+  // GET <index_name>/_search
+  {
+      "query":{
+        "terms":{
+          "<field>": ["<term1>","<term2>"]
+        }
+      }
+  }
   ```
 
   - 만열 하나 이상의 term이 일치할 경우에만 검색되게 하려면 `terms_set` query를 사용해야 한다.
@@ -865,14 +833,12 @@
 
 
 
-
-
 - Elasticsearch는 mapping되어 있는 field에 값을 넣지 않는 것이 가능하다.
 
-  - Elasticsearch를 사용하다 보면 특정 필드에 값이 있는 문서의 개수가 몇 개인지 알아야 할 때가 있음에도 불구하고, 이러한 특성 때문에 특정 필드의 값을 가진 문서의 개수를 정확히 알 수 업는 경우가 많다.
+  - Elasticsearch를 사용하다 보면 특정 필드에 값이 있는 문서의 개수가 몇 개인지 알아야 할 때가 있음에도 불구하고, 이러한 특성 때문에 특정 필드의 값을 가진 문서의 개수를 정확히 알 수 없는 경우가 많다.
 
   ```json
-  PUT test-index
+  // PUT test-index
   {
       "mappings":{
           "properties":{
@@ -889,19 +855,19 @@
       }
   }
   
-  PUT test-index/_doc/1
+  // PUT test-index/_doc/1
   {
-    "foo":"hello world!"
+    "foo": "hello world!"
   }
   
-  PUT test-index/_doc/2
+  // PUT test-index/_doc/2
   {
-    "bar":"goodbye world!"
+    "bar": "goodbye world!"
   }
   
-  PUT test-index/_doc/3
+  // PUT test-index/_doc/3
   {
-    "baz":0
+    "baz": 0
   }
   ```
 
@@ -909,7 +875,7 @@
     - query string syntax 중 `_exists_`를 사용한다.
 
   ```json
-  GET test-index/_search
+  // GET test-index/_search
   {
     "query": {
       "query_string": {
@@ -975,9 +941,9 @@
     - 1시간 전 데이터 검색
   
   
-  ```bash
+  ```json
   # 예시 데이터 bulk
-  PUT time-test/_bulk
+  // PUT time-test/_bulk
   {"index":{"_id":"1"}}
   {"test_time":"2021-01-01T00:00:00"}
   {"index":{"_id":"2"}}
@@ -1001,8 +967,8 @@
   {"index":{"_id":"11"}}
   {"test_time":"2021-01-01T02:00:00"}
   
-  # 1시간 전 데이터 검색
-  GET time-test/_search
+  // 1시간 전 데이터 검색
+  // GET time-test/_search
   {
     "query": {
       "range":{
@@ -1045,42 +1011,47 @@
     - keyword 타입에 사용해야 하므로 아래 예시에서도 text 타입인 pushlisher 필드가 아닌 publisher.keyword 필드를 사용하여 키워드 타입에 사용했다.
     - text 필드에도 사용은 가능하다. 그러나 이 경우 역색인을 기준으로 결과를 검색한다.
   
-  ```bash
-  $ curl "localhost:9200/_search?pretty" -H 'Content-type:application/json' -d '{
-  "query":{
-    "wildcard":{
-      "publisher.keyword":"*Media*"
-    }
+  ```json
+  // GET <index_name>/_search
+  {
+      "query":{
+        "wildcard":{
+          "publisher.keyword":"*Media*"
+        }
+      }
   }
-  }'
   ```
 
 
 
-### bool query
+
+
+## bool query
 
 - bool query
 
   - Query Context와 Filter Context만 가지고는 검색 조건을 맞추기가 불가능하다.
-  - 따라서 두 가지 이상의 쿼리를 조합해서 사용해야 하는 경우가 있다.
-  - 이를 가능하게 하는 방법 중에서도 가장 대중적이고 많이 사용되는 방법이 bool query이다.
+    - 따라서 두 가지 이상의 쿼리를 조합해서 사용해야 하는 경우가 있다.
+    - 이를 가능하게 하는 방법 중에서도 가장 대중적이고 많이 사용되는 방법이 bool query이다.
+  
   - bool query에서 사용할 수 있는 항목들
     - 아래 특성들을 기준으로 어디서 실행될지가 결정된다.
     - 스코어링을 하는 must, should는 Query Context에서 실행된다.
     - 스코어링을 하지 않는 filter, must_not은 Filter Context에서 실행된다.
-
+  
   | 항목     | 항목 내 쿼리에 일치하는 문서를 검색하는가?  | 스코어링 | 캐싱 |
   | -------- | ------------------------------------------- | -------- | ---- |
   | must     | O                                           | O        | X    |
   | should   | O                                           | O        | X    |
   | filter   | O                                           | X        | O    |
   | must_not | X(항목 내 쿼리에 일치하지 않는 문서를 검색) | X        | O    |
-
+  
   - 예시
     - match 쿼리와 range 쿼리 두 개를 조합.
-
-  ```bash
-  $ curl "localhost:9200/_search?pretty" -H 'Content-type:application/json' -d '{
+  
+  ```json
+  // GET <index_name>/_search
+  {
   "query":{
     "bool": {
       "must":[
@@ -1115,8 +1086,9 @@
 
   - 아래 예시 코드 보다 위 예시 코드가 더 빠르다.
 
-  ```bash
-  $ curl "localhost:9200/_search?pretty" -H 'Content-type:application/json' -d '{
+  ```json
+  // GET <index_name>/_search
+  {
   "query":{
     "bool": {
       "must":[
@@ -1133,15 +1105,15 @@
             }
           }
         }
-      ],
+      ]
     }
   }
   ```
-
+  
   - 이유
-    - must 절에 포함된 Filter Context들은 score를 계산하는 데 활용되기 때문에 불필요한 연산이 들어가지만, filter절에 포함되면 Filter Context에 맞게 score 계산이 되지 않기 때문이다.
+    - must 절에 포함된 Filter Context들은 score를 계산하는 데 활용(점수는 1로 고정)되기 때문에 불필요한 연산이 들어가지만, filter절에 포함되면 Filter Context에 맞게 score 계산이 되지 않기 때문이다.
     - 또한 filter절에서 실행된 range 쿼리는 캐싱의 대상이 되기 때문에 결과를 빠르게 응답 받을 가능성이 높다.
-
+  
   - 결론
     - 검색 조건이 yes/no 만을 포함하는 경우라면 filter절에 넣어 Filter Context에서 실행되게 한다.
     - 매칭의 정도가 중요한 조건이라면 must 혹은 should 절에 포함시켜서 Query Context에서 실행되도록 해야 한다.
@@ -1155,8 +1127,9 @@
     - filter 절과 마찬가지로 Filter Context에서 실행되어 score 계산을 하지 않는다.
     - 문서 캐싱의 대상이 된다.
 
-  ```bash
-  $ curl "localhost:9200/_search?pretty" -H 'Content-type:application/json' -d '{
+  ```json
+  // GET <index_name>/_search?pretty
+  {
   "query":{
     "bool": {
       "must":[
@@ -1192,8 +1165,9 @@
   - 검색된 결과 중 should절 내에 있는 term과 일치하는 부분이 있는 문서는 스코어가 올라가게 된다.
     - 아래 결과를 should를 사용하지 않은 일반적인 쿼리문과 비교해 보면 같은 문서임에도 score가 다른 것을 확인 가능하다.
   
-  ```bash
-  $ curl "localhost:9200/_search?pretty" -H 'Content-type:application/json' -d '{
+  ```json
+  // GET <index_name>/_search?pretty
+  {
   "query":{
     "bool": {
       "must":[
@@ -1234,7 +1208,7 @@
     - should절을 사용할 때 꼭 써야만 하는 옵션은 아니다.
     - 양수일 경우 그 이상의 쿼리가, 음수일 경우 총 쿼리 개수에서 음수를 뺀 만큼의 쿼리가 일치해야 한다.
     - 퍼센트로 설정하는 것도 가능하다.
-    - 설정해 주지 않으면 `must` 혹은 `must_not`, `filter`등 다른 bool query와 함께 사용할 경우에는 0, should만 사용할 경우에는 1이 default 값이다.
+    - `must` 혹은 `must_not`, `filter`등 다른 bool query와 함께 사용할 경우에는 0, should만 사용할 경우에는 1이 default 값이다.
   
   ```json
   // 예를 들어 아래와 같은 경우 should절의 query들 중 match되는 것이 아무 것도 없어도 must절에만 match된다면 검색이 된다.
@@ -1328,8 +1302,8 @@
   ```
 
   - `tie_breaker`
-    - 기본적으로, `best_fields`는 가장 검색어가 matching이 많이 된 하나의 field의 점수를 사용한다.
-    - 그러나 `tie_breaker`를 줄 경우, 다른 모든 matching filed의 점수에 `tie_breaker`의 값을 곱한 값을 가장 검색어가 matching이 많이 된 하나의 field의 점수에 더해 결과를 계산한다.
+    - 기본적으로, `best_fields`는 가장 검색어가 많이 matching된 field의 점수를 사용한다.
+    - 그러나 `tie_breaker`를 줄 경우, 다른 모든 matching field의 점수에 `tie_breaker`의 값을 곱한 값을 가장 검색어가 matching이 많이 된 하나의 field의 점수에 더해 결과를 계산한다.
 
   - 점수 계산 방식 확인을 위한 data 색인
 
@@ -1342,10 +1316,10 @@
   }
   ```
 
-  - Test data를 대상으로 type이 `best_fields`인 `multi_match` query를 실행한다.
+  - 위 데이터를 대상으로 type이 `best_fields`인 `multi_match` query를 실행한다.
 
   ```json
-  GET score-test/_search
+  // GET score-test/_search
   {
       "explain": true, 
       "query": {
@@ -1364,7 +1338,7 @@
 
   - 응답
     - 검색어 "foo"와 "bar"가 모두 포함되어 있는 `field1`의 점수가 최고 점수(0.5753642)가 되며, `tie_breaker`를 주지 않았을 경우 이 점수가 최종 점수가 된다.
-    - 그러나 위 query에서는 `tie_breaker`를 줬으므로 다른 matching된 다른 field들의 점수에 `tie_breaker` 값을 곱한 값을 더해야한다.
+    - 그러나 위 query에서는 `tie_breaker`를 줬으므로 matching된 다른 field들의 점수에 `tie_breaker` 값을 곱한 값을 더해야한다.
     - "foo"가 matching된 `field2`의 점수 0.2876821에 `tie_breaker` 값을 곱한 0.14384105과 "bar"가 matching된 `field1`의 점수 0.2876821에 `tie_breaker` 값을 곱한 0.14384105를 더해준다.
     - 결국 최종 점수는 `0.5753642 + 0.14384105 + 0.14384105=0.8630463`가 된다.
 
@@ -1464,13 +1438,14 @@
   - 그냥 `most_fields`를 쓰면 되는 것 아닌가?
     - `cross_fields` 대신 `most_fields`를 쓰기에는 두 가지 문제가 있다.
     - 첫 번째 문제는 `most_fields`의 경우  `operator`와 `minium_should_match`는 각 field마다 적용된다는 점이다.
-    - 두 번째 문제는 각 field의 서로 다른 term frequency가 예상치 못한 결과를 반환할 수 있다는 점이다.
+    - 두 번째 문제는 각 field의 서로 다른 IDF값이 예상치 못한 결과를 반환할 수 있다는 점이다.
     - 예를 들어 각기 "George Washington"과 "Washington Irving"에 대한 문서가 있다고 가정해보자. 
-    - "Washington"은 매우 흔한 last name이므로, `last_name`에 "Washington"이 들어가는 경우 term frequency가 높아 높은 점수를 받지 못할 것이다.
-    - 반면에, first name으로 쓰이는 "Washington"은 그리 흔하지 않으므로, `first_name`에 "Washington"이 들어가는 경우 term frequency가 낮아 높은 점수를 받게 될 것이다.
+    - "Washington"은 매우 흔한 last name이므로, `last_name`에 "Washington"이 들어가는 경우 IDF가 낮아져 높은 점수를 받지 못할 것이다.
+    - 반면에, first name으로 쓰이는 "Washington"은 그리 흔하지 않으므로, `first_name`에 "Washington"이 들어가는 경우 IDF가 높아 높은 점수를 받게 될 것이다.
     - 따라서 "George Washington"을 검색할 경우 `last_name`에 "Washington"이 들어간 문서보다 `first_name`에 "Washington"이 들어간 문서가 더 높은 점수를 받을 것이다.
     - 즉, `first_name:George last_name:Washington`이라는 보다 더 많은 term이 matching되는 문서가 있음에도, `first_name:Washington`인 문서가 더 높은 점수로 검색 결과의 상단에 올라올 위험이 있다.
-  
+    - cross_fields를 사용하면 이러한 문제를 해결할 수 있다.
+    
   - best_fields와 most_fields는 field-centric한 접근법을 취한다.
     - 각 field마다 `match` query를 생성한다.
   
@@ -1506,7 +1481,6 @@
   - 위와 같이 query를 생성함으로써 `cross_fields`는 term frequency가 달라지는 문제를 해결한다.
     - 모든 field들의 term frequency를 혼합한다.
     - 위 예시에서 `first_name:washington`는  `last_name:washington`와 동일한 frequency를 갖는 것 처럼 처리된다.
-    - 물론 이 경우에도 `last_name:washington`이 약간 더 점수를 높이긴 한다.
     - 다만, 이처럼 `cross_fields`를 사용하여 term frequency를 조정하는 방식은 `boost`가 1인 짧은 string field에만 유효하다는 점을 기억해야한다.
     - `boost`나 length normalization은 모든 field들의 term frequency를 혼합하여 term frequency를 조정하는 방식을 의미 없게 만든다.
   - `cross_fields`는 같은 analyzer를 사용한 field들 끼리만 하나의 field로 취급한다.

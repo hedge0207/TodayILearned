@@ -174,7 +174,7 @@
     - 따라서 거의 검색되지 않는 필드를 대상으로는 아래와 같이 index는 false로 주고 doc value만 활성화(아무 옵션을 주지 않으면 기본적으로 활성화 된다)하여 사용하는 것도 좋은 선택이다.
 
   ```json
-  PUT my-index-000001
+  // PUT my-index-000001
   {
     "mappings": {
       "properties": {
@@ -192,7 +192,7 @@
     - 만일 비활성화 시키고자 한다면 아래와 같이 하면 된다.
 
   ```json
-  PUT my-index-000001
+  // PUT my-index-000001
   {
     "mappings": {
       "properties": {
@@ -318,7 +318,9 @@
     - reindexing, update, update_by_query 등을 사용하기 위해서(당연하게도 원본 데이터가 없다면 reindexing, update 등이 불가능하다).
     - highlight 기능을 사용하기 위해서.
   - Mapping 설정시에 `store`를 true로 준 field는 Lucene의 stored fields형태로 저장된다.
+    - 기본값은 false이다.
     - `_id`와 `_source` field의 경우 stored field이다.
+    
   - Stored fields는 모든 stored field를 연속적으로 포함한 row 형태로 저장된다.
     - 가장 앞에 있는 field가 `_id` field이며, `_source`가 가장 마지막 field이다.
     - Row 형태로 저장되기에 column 형태로 저장되는 doc_values에 비해 retrieve 속도가 느리다.
@@ -330,6 +332,10 @@
   
   - Elasticsearch에서 stored fields는 압축된다.
     - 따라서 당연하게도, `_id` field와 `_source` field도 압축된다.
+  - 용도
+    - _source가 저장되는 것을 비활성화 한 상태에서 일부 필드만 저장되도록 하고 싶을 때 사용할 수 있다.
+    - 예를 들어 title, content 필드가 있을 때, 검색 결과에는 title만 반환해도 된 다고 하면 굳이 content를 _source에 저장할 필요는 없다.
+    - 이 경우 _source를 비활성화하고, title만 store를 true로 줘서 저장되도록 할 수 있다.
 
 
 
@@ -461,9 +467,9 @@
   
   - Elasticsearch의 TF 계산
     - f(q<sub>i</sub>, D) 부분은  단일 문서 D에서 토큰 q<sub>i</sub>의 term frequency를 계산하는 것이다.
-    - k1은 특정 term이 문서에 여러 번 등장했을 때 점수의 증가율을 제어한다.
+    - k1은 특정 term이 문서에 여러 번 등장했을 때 점수의 증가율을 제어한다(기본값은 1.2).
     - k1이 클수록 전체 점수가 TF에 더 민감하게 반응(점수가 더 많이 증가)하며, k1이 작을수록 TF가 커도 전체 점수 증가가 제한된다.
-    - b는 TF를 측정할 때, 문서의 길이에 따른 보정 정도를 조절하는 파리미터이다.
+    - b는 TF를 측정할 때, 문서의 길이에 따른 보정 정도를 조절하는 파리미터이다(기본값은 0.7).
     - b가 높으면, 문서의 길이(정확히는 필드 값의 길이)가 길어질수록 점수에 패털티를 준다.
     - dl은 단일 문서의 필드 길이를 뜻하고, avgdl은 전체 문서의 필드의 평균 길이를 뜻한다.
   
@@ -472,10 +478,10 @@
   $$
   
   - 요약
-    - 특정 단어가 문서에 많이 등장했다면 높은 점수를 준다.
-    - 만일 해당 필드가 너무 길다면 점수를 약간 깎는다.
-    - 같은 단어가 단일 문서에 여러 번 등장한다면 점수의 증가폭이 작아진다.
-    - 만일 해당 단어가 여러 문서에 흔하게 등장한다면 점수를 많이 깎는다.
+    - 특정 단어가 문서에 많이 등장했다면 높은 점수를 준다(TF).
+    - 만일 해당 필드가 너무 길다면 점수를 약간 깎는다(b).
+    - 같은 단어가 단일 문서에 여러 번 등장한다면 점수의 증가폭이 작아진다(k1).
+    - 만일 해당 단어가 여러 문서에 흔하게 등장한다면 점수를 많이 깎는다(IDF).
 
 
 

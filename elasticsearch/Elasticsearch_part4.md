@@ -25,16 +25,16 @@
 
   - `properties` 아래에 정의하고자 하는 필드들을 정의한다.
 
-  ```bash
-  $ curl -XPUT 'localhost:9200/인덱스명' -H 'Content-Type: application/json' -d '{
+  ```json
+  {
       "mappings":{
           "properties":{
-              "필드명":{
-                  "type":"필드 타입"
+              "<field_name>": {
+                  "type":"<type>"
               }
           }
       }
-  }'
+  }
   ```
 
 
@@ -47,39 +47,40 @@
     - `dynamic_date_formats`의 기본 값은 [ [`"strict_date_optional_time"`](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-date-format.html#strict-date-time),`"yyyy/MM/dd HH:mm:ss Z||yyyy/MM/dd Z"`]이다.
   - `properties`와 동일한 수준에 정의한다.
 
-  ```bash
-  $ curl -XPUT 'localhost:9200/인덱스명' -H 'Content-Type: application/json' -d '{
+  ```json
+  // PUT index_name
+  {
       "mappings":{
-      	"date_detection":true
-          "properties":{
-              ...
+      	"date_detection": true,
+          "properties": {
+              // ...
           }
       }
-  }'
+  }
   ```
-
+  
   - 예시
-
-  ```bash
-  PUT date_detection
+  
+  ```json
+  // PUT date_detection
   {
     "mappings": {
       "date_detection": true
     }
   }
   
-  PUT date_detection/_doc/1
+  // PUT date_detection/_doc/1
   {
     "today":"2015/09/02"
   }
   ```
-
-  - 결과
-
-  ```bash
-  GET date_detection/_mappings
   
-  # 응답
+  - 결과
+  
+  ```json
+  // GET date_detection/_mappings
+  
+  // response
   {
     "date_detection" : {
       "mappings" : {
@@ -187,8 +188,8 @@
 
   - 예시
 
-  ```bash
-  PUT numeric_detection
+  ```json
+  // PUT numeric_detection
   {
     "mappings": {
       "numeric_detection": true
@@ -196,7 +197,7 @@
   }
   
   
-  PUT numeric_detection/_doc/1
+  // PUT numeric_detection/_doc/1
   {
     "my_float":   "1.0", 
     "my_integer": "1" 
@@ -206,10 +207,10 @@
   - 결과
     - 가장 적합한 숫자형 타입으로 매핑된다.
 
-  ```bash
-  GET numeric_detection/_mapping
+  ```json
+  // GET numeric_detection/_mapping
   
-  # 응답
+  # response
   {
     "numeric_detection" : {
       "mappings" : {
@@ -247,7 +248,7 @@
   | true/false                                  | boolean                                              | boolean                                              |
   | double                                      | float                                                | double                                               |
   | integer                                     | long                                                 | long                                                 |
-  | object                                      | object                                               | No filed added                                       |
+  | object                                      | object                                               | No field added                                       |
   | array                                       | array 내부의 null이 아닌 첫 번째 값에 따라 달라진다. | array 내부의 null이 아닌 첫 번째 값에 따라 달라진다. |
   | date detection에 걸린 string                | date                                                 | date                                                 |
   | numeric detection에 걸린 string             | float 또는 long                                      | double 또는 long                                     |
@@ -256,9 +257,9 @@
   - `false`
     - `false`는 정적으로 정의되지 않은 필드가 들어올 경우 이를 무시한다.
 
-  ```bash
-  # false로 줄 경우
-  PUT test_false
+  ```json
+  // false로 줄 경우
+  // PUT test_false
   {
     "mappings": {
       "dynamic":"false",
@@ -270,15 +271,15 @@
     }
   }
   
-  PUT test_false/_doc/1
+  // PUT test_false/_doc/1
   {
     "name":"theo",
     "age": 28
   }
   
-  GET test_false/_mapping
-  # return
-  # 위에서 입력한 age필드가 동적으로 매핑되지 않은 것을 확인 가능하다.
+  // GET test_false/_mapping
+  // response
+  // 위에서 입력한 age필드가 동적으로 매핑되지 않은 것을 확인 가능하다.
   {
     "test_false" : {
       "mappings" : {
@@ -296,9 +297,9 @@
 
   - `strict`
 
-  ```bash
-  # strict로 줄 경우
-  PUT test_strict
+  ```json
+  // strict로 줄 경우
+  // PUT test_strict
   {
     "mappings": {
       "dynamic":"strict",
@@ -310,14 +311,14 @@
     }
   }
   
-  # 아래와 같이 미리 정의하지 않은 age 필드를 입력하면 error가 발생한다.
-  PUT test_strict/_doc/1
+  // 아래와 같이 미리 정의하지 않은 age 필드를 입력하면 error가 발생한다.
+  // PUT test_strict/_doc/1
   {
     "name":"theo",
     "age": 28
   }
   
-  # erroor
+  // response
   {
     "error" : {
       "root_cause" : [
@@ -380,7 +381,7 @@
 
   - `_source` 필드에 original data를 저장할지 저장하지 않을지 설정이 가능하다.
     - 아래와 같이 `_source.enabled`를 false로 주면 `_source` 필드를 저장하지 않는다.
-    - 저장은 되지 않지만 색인은 진행되므로 검색은 가능하다.
+    - 저장은 되지 않지만 색인은 되므로 검색은 가능하다.
     - 그러나 get이나 search를 했을 때 response에 `_source`필드, 즉 original data는 반환되지 않는다.
   
   ```json
@@ -466,7 +467,7 @@
   - `store` option을 true로 주면 개별 field가 저장되게 해준다.
 
   ```json
-  PUT test_index
+  // PUT test_index
   {
       "mappings":{
           "properties":{
@@ -485,17 +486,18 @@
   - 용도
     - 예를 들어 `foo`와 `bar`라는 두 개의 field가 있다고 가정해보자.
     - `foo`는 짧은 text가 주로 저장되고, `bar`에는 매우 긴 text가 주로 저장되는데, 검색 결과에는 `foo`만 포함시켜도 된다.
-    - 그렇다면 굳이 긴 `bar` field의 값을 반환할 필요는 없으므로, `foo` filed만 반환받도록 하는 것이 효율적이다.
-    - 이를 위해  `foo` field를 저장해두고 검색시에 `stored_fields` 에 `foo` field만 입력하여 `foo` filed만 반환받는다.
-
+    - 그렇다면 굳이 긴 `bar` field의 값을 반환할 필요는 없으므로, `foo` field만 반환받도록 하는 것이 효율적이다.
+    - 따라서 `_source.exclude`를 통해 `bar` field는 저장하지 않도록 하고, `store`를 통해 foo만 저장하도록 한다..
+    - 이를 위해  `foo` field를 저장해두고 검색시에 `stored_fields` 에 `foo` field만 입력하여 `foo` field만 반환받는다.
+  
   ```json
-  PUT test_index/_doc/1
+  // PUT test_index/_doc/1
   {
       "foo":"foo",
       "bar":"looooooooooooooooooooooooooooooong text"
   }
   
-  GET test_index/_search
+  // GET test_index/_search
   {
       "stored_fields": ["foo"], 
       "query": {
@@ -505,24 +507,27 @@
       }
   }
   
-  // 응답
-  "hits": [
-      {
-          "_index": "test_index",
-          "_id": "1",
-          "_score": 0.18232156,
-          "fields": {
-              "foo": [
-                  "foo"
-              ]
+  // response
+  {
+      "hits": [
+          {
+              "_index": "test_index",
+              "_id": "1",
+              "_score": 0.18232156,
+              "fields": {
+                  "foo": [
+                      "foo"
+                  ]
+              }
           }
-      }
-  ]
+      ]
+  }
   ```
-
+  
   - `_source`나 `fields`를 사용하는 것과 무엇이 다른가?
     - `_source`와 `fields`와는 달리, 해당 필드가 저장되었다는 것을 명시적으로 표현할 수 있다.
   - `store` 옵션은 Elasticsearch에서 권장하는 방식은 아니다.
+    - 현재는 거의 사용하지 않는다.
     - 공식 문서에서는 `stored_fields`보다는 `_source`나 `fields`를 사용하는 것을 권한다.
 
 
@@ -546,7 +551,7 @@
     - `with_positions_offsets_payloads`: Term, postion, offset, payload를 저장한다.
 
   ```json
-  PUT my-index-000001
+  // PUT my-index-000001
   {
     "mappings": {
       "properties": {
@@ -671,7 +676,7 @@
   - 예시
 
   ```json
-  PUT my-index-000001
+  // PUT my-index-000001
   {
     "mappings": {
       "properties": {
@@ -683,16 +688,18 @@
     }
   }
   
-  PUT my-index-000001/_doc/1 
+  // PUT my-index-000001/_doc/1 
   {
     "message": "Syntax error"		// 색인된다.
   }
   
-  PUT my-index-000001/_doc/2 
+  // PUT my-index-000001/_doc/2 
   {
     "message": "Syntax error with some long stacktrace"	// message field는 색인되지 않는다.
   }
   ```
+
+
 
 
 
@@ -726,7 +733,7 @@
     - text 타입에 keyword 애널라이저를 적용한 것과 동일하다
   - 보통은 집계 또는 정렬에 사용할 문자열 필드를 keyword 타입으로 지정한다.
   - keyword 필드에는 다음과 같은 옵션들을 설정할 수 있다.
-    - `index`,`boost` 옵션은 text와 동일하다.
+    - `index`, `boost` 옵션은 text와 동일하다.
     - `"doc_values" : <true | false>`: 디폴트는 true이며, keyword 값들은 기본적으로 집계나 정렬에 메모리를 소모하지 않기 위해 값들을 doc_values라고 하는 별도의 열 기반 저장소를 만들어 저장하는데, 이 값을 false로 하면 doc_values에 값을 저장하지 않아 집계나 정렬이 불가능해진다.
     - `"ignore_above" : 자연수`: 디폴트는 2,147,483,647이며 다이나믹 매핑으로 생성되면 256으로 설정된다. 설정된 길이 이상의 문자열은 색인을 하지 않아 검색이나 집계가 불가능하다. `_source`에는 남아있기 때문에 다른 필드 값을 쿼리해서 나온 결과로 가져오는 것은 가능하다.
     - `"normalizer" : 노멀라이저명`: keyword 필드는 애널라이저를 사용하지 않는 대신 노멀라이저의 적용이 가능하다. 노멀라이저는 애널라이저와 유사하게 settings에서 정의하며 토크나이저는 적용할 수 없고 캐릭터 필드와 토큰 필터만 적용해서 사용이 가능하다.
@@ -736,16 +743,17 @@
     - 상기했듯 text 필드는 문자열을 텀 단위로 쪼개기에 watching, movie 어느 것을 입력하든 watcing movie라는 문자열을 검색이 가능하다. 
     - 그러나 keyword 필드는 문자열을 하나의 토큰으로 저장하기에 watcing movie로 입력해야만 watcing movie라는 문자열을 검색이 가능하다.
 
-  ```bash
-  # 데이터 넣기
-  $ curl -XPOST "localhost:9200/test/_doc" -H 'Content-type: application/json' -d '
+  ```json
+  // 데이터 삽입
+  // POST test/_doc
   {
     "hobby":"watching movie"
-  }'
+  }
   
   
-  # 매핑 정보 확인
-  $ curl -XGET "localhost:9200/nation3/_mapping"
+  // 매핑 확인
+  // GET test/_mapping
+  // response
   {
     "nation3" : {
       "mappings" : {
@@ -765,16 +773,16 @@
   }
   
   
-  # text 필드 검색
-  $ curl -XGET "localhost:9200/test/_search" -H 'Content-type: application/json' -d '
+  // text 필드 검색
+  // GET test/_search
   {
     "query":{
       "match": {
         "hobby": "watching"
       }
     }
-  }'
-  # 응답(검색 결과가 나온다)
+  }
+  // response
   {
     ...
     "hits" : {
@@ -798,46 +806,42 @@
   }
   
   
-  # keyword 필드 검색
-  $ curl -XGET "localhost:9200/test/_search" -H 'Content-type: application/json' -d '
+  // keyword 필드 검색
+  // GET "localhost:9200/test/_search
   {
     "query":{
       "match": {
         "hobby.keyword": "watching"
       }
     }
-  }'
-  # 검색 결과가 나오지 않는다.
+  }
+  // 검색 결과가 나오지 않는다.
   
   
-  # 아래와 같이 검색해야 결과가 나온다.
-  $ curl -XGET "localhost:9200/test/_search" -H 'Content-type: application/json' -d '
+  // 아래와 같이 검색해야 결과가 나온다.
+  // GET test/_search
   {
     "query":{
       "match": {
         "hobby.keyword": "watching movie"
       }
     }
-  }'
+  }
   ```
 
 
 
 - 숫자
 
-  - ES는 JAVA에서 사용되는 숫자 타입들을 지원한다.
-  - 또한 half_float, scaled_float과 같이 ES에서만 사용되는 타입들도 존재한다.
-  - 종류
+  - ES는 JAVA의 숫자 타입들을 지원한다.
     - JAVA에서 사용되는 숫자 타입들: long, integer, short, byte, double, float
     - ES에서만 지원하는 숫자 타입들: half_float, scaled_float
-
   - 사용 가능한 옵션들
     - `"index"`, `"doc_values"`, `"boost"` 등의 옵션들은 text, keyword 필드의 옵션들과 동일하다.
     - `"cource": <true | false>`: 디폴트는 true이며, 숫자 필드들은 기본적으로 숫자로 이해될 수 잇는 값들은 숫자로 변경해서 저장한다. 이를 false로 설정하면 정확한 타입으로 입력되지 않으면 오류가 발생한다. 
     - `"null_value": 숫자값`: 필드값이 입력되지 않거나 null인 경우 해당 필드의 디폴트 값을 지정한다. 
     - `"ignore_malformed": <true | false>`: 디폴트는 false로, 기본적으로 숫자 필드에 숫자가 아닌 불린 값이 들어오면 ES는 오류를 반환하는데, true로 설정하면 숫자가 아닌 값이 들어와도 도큐먼트를 정상적으로 저장한다. 해당 필드의 값은 `_source`에만 저장되고 겁색이나 집계에는 무시된다.
     - `"scaling_fator": 10의 배수`: scaled_float을 사용하려면 필수로 지정해야 하는 옵션으로 소수점 몇 자리까지 저장할지를 지정한다. 12.345라는 값을 저장하는 경우 `scaling_fator:10`과 같이 설정하면 실제로는 12.3이 저장되고, `scaling_fator:100`과 같이 설정했으면 12.34가 저장된다.
-
   - 전처리된 데이터가 아니면 항상 `_source`의 값은 변경되지 않는다.
     - `"cource": true`로 "4.5"라는 숫자가 integer 필드에 정상적으로 저장 되어도 `_source`의 값은 그대로 "4.5"이다.
     - `"null_value"`를 설정해도 역시 마찬가지로 `_source`에는 여전히 null로 표시된다.
@@ -954,9 +958,9 @@
     - 즉 object 필드 내부의 값이 각기 따로 따로 역색인 구조를 갖는 것이 아니라 하나의 역색인 구조를 갖게 된다.
     - 아래와 같이 데이터를 입력하고, 검색을 하면 `characters.name`이 Loki 이면서 `characters.side`가 villain인 1번 문서만 검색 될 것 같지만 막상 검색을 해보면 둘 다 검색된다.
 
-  ```bash
-  # 아래와 같이 2개의 문서를 삽입
-  curl -XPUT 'localhost:9200/movies/_doc/1?pretty' -H 'Content-Type: application/json' -d '
+  ```json
+  // 아래와 같이 2개의 문서를 삽입
+  // PUT movies/_doc/1
   {
     "title": "The Avengers",
     "characters": [
@@ -971,7 +975,7 @@
     ]
   }
   
-  curl -XPUT 'localhost:9200/movies/_doc/2?pretty' -H 'Content-Type: application/json' -d '
+  // PUT movies/_doc/2
   {
     "title": "Avengers: Infinity War",
     "characters": [
@@ -984,10 +988,10 @@
         "side": "villain"
       }
     ]
-  }'
+  }
   
-  # 위에서 삽입한 문서를 검색
-  $ curl "http://localhost:9200/movie/_search" -H 'Content-Type: application/json' -d'
+  // 위에서 삽입한 문서를 검색한다.
+  // GET movie/_search
   {
     "query": {
       "bool": {
@@ -1005,7 +1009,7 @@
         ]
       }
     }
-  }'
+  }
   ```
 
 
@@ -1050,8 +1054,8 @@
       - 따라서 아래와 같은 검색 쿼리를 보내면 `characters.name`이 Loki 이면서 `characters.side`가 villain인 1번 문서만 검색되게 된다.
   
   ```json
-  # 인덱스 생성
-  curl -XPUT 'localhost:9200/movies' -H 'Content-Type: application/json' -d '
+  // 인덱스 생성
+  // PUT movies
   {
     "mappings": {
       "properties": {
@@ -1068,10 +1072,10 @@
         }
       }
     }
-  }'
+  }
   
-  # 데이터 삽입
-  curl -XPUT 'localhost:9200/movies/_doc/1?pretty' -H 'Content-Type: application/json' -d '
+  //데이터 삽입
+  // PUT movies/_doc/1
   {
     "title": "The Avengers",
     "characters": [
@@ -1086,7 +1090,7 @@
     ]
   }
   
-  curl -XPUT 'localhost:9200/movies/_doc/2?pretty' -H 'Content-Type: application/json' -d '
+  // PUT movies/_doc/2
   {
     "title": "Avengers: Infinity War",
     "characters": [
@@ -1101,8 +1105,8 @@
     ]
   }'
   
-  # nested query를 사용하여 검색
-  $ curl -XGET "http://localhost:9200/movie/_search" -H 'Content-Type: application/json' -d'
+  // nested query를 사용하여 검색
+  // GET movie/_search
   {
     "query": {
       "nested": {
@@ -1125,10 +1129,8 @@
         }
       }
     }
-  }'
+  }
   ```
-
-
 
 
 
@@ -1141,8 +1143,8 @@
     - `['hello', 'world']`는 가능하지만 `['hello', 28]`은 불가능하다.
   - 예시
 
-  ```bash
-  PUT my-index-000002
+  ```json
+  // PUT my-index-000002
   {
     "mappings":{
       "properties":{
@@ -1153,12 +1155,12 @@
     }
   }
   
-  PUT my-index-000002/_doc/1
+  // PUT my-index-000002/_doc/1
   {
     "name":["theo","oeht"]
   }
   
-  GET my-index-000002/_search
+  // GET my-index-000002/_search
   {
     "query": {
       "match_all": {}
@@ -1169,7 +1171,7 @@
   - 응답
 
   ```json
-  // (...)
+  // ...
   {
       "_index" : "my-index-000002",
       "_type" : "_doc",
@@ -1182,8 +1184,10 @@
           ]
       }
   }
-  // (...)
+  // ...
   ```
+
+
 
 
 
@@ -1304,7 +1308,7 @@
     - 복수의 관계를 설정하는 것도 가능하다.
 
   ```json
-  PUT my-index-000001
+  // PUT my-index-000001
   {
     "mappings": {
       "properties": {
@@ -1326,14 +1330,14 @@
     - 아래 두 가지 방식은 모두 사용이 가능하지만, 
 
   ```json
-  PUT my-index-000001/_doc/1?refresh
+  // PUT my-index-000001/_doc/1?refresh
   {
     "my_join_field": {
       "name": "question" 
     }
   }
   
-  PUT my-index-000001/_doc/2?refresh
+  // PUT my-index-000001/_doc/2?refresh
   {
     "my_join_field": "question"
   }
@@ -1373,10 +1377,10 @@
     - 부모 문서와 달리 `parent`라는 값을 추가로 줘야 하는데, 여기에는 부모 문서의 `_id` 값을 주면 된다. 
     - 자식 문서는 부모 문서와 반드시 같은 shard에 색인되어야 하므로 `routing` 값을 줘야 하며, 부모 document의 `_id`값을 사용한다.
     - `routing`을 주지 않을 경우 기본적으로 document의 `_id` 값을 기반으로 routing하는데, 위에서 부모 document를 생성할 때 `routing` 값을 주지 않았으므로, 부모 document는 routing value로 자신의 `_id` 값을 사용했다.
-    - 따라서 자식 문서 생성시에 부모 document의 `_id` 값을 주면 같은 shard에 색인되도록 할 수 있다.
+    - 따라서 자식 문서 생성시 `routing` 값으로 부모 document의 `_id` 값을 주면 같은 shard에 색인되도록 할 수 있다.
 
   ```json
-  PUT my-index-000001/_doc/3?routing=1&refresh 
+  // PUT my-index-000001/_doc/3?routing=1&refresh 
   {
     "my_join_field": {
       "name": "answer", 
@@ -1387,9 +1391,9 @@
 
   - Depth를 더 줄 수도 있다.
 
-  ```bash
-  # 하나의 부모와 하나의 자식
-  $ curl -XPUT "http://localhost:9200/my-index" -H 'Content-Type: application/json' -d'
+  ```json
+  // 하나의 부모와 하나의 자식
+  // PUT my-index
   {
     "mappings": {
       "properties": {
@@ -1404,10 +1408,10 @@
         }
       }
     }
-  }'
+  }
   
-  # 하나의 부모와 복수의 자식
-  $ curl -XPUT "http://localhost:9200/my-index" -H 'Content-Type: application/json' -d'
+  // 하나의 부모와 복수의 자식
+  // PUT my-index
   {
     "mappings": {
       "properties": {
@@ -1422,10 +1426,10 @@
         }
       }
     }
-  }'
+  }
   
-  # 더 높은 레벨의 부모와 자식 관계 설정
-  $ curl -XPUT "http://localhost:9200/my-index" -H 'Content-Type: application/json' -d'
+  // 더 높은 레벨의 부모와 자식 관계 설정
+  // PUT my-index
   {
     "mappings": {
       "properties": {
@@ -1440,9 +1444,9 @@
     }
   }'
   
-  # 위의 경우 아래와 같은 관계가 설정 된 것이다.
-  # question → answer → vote
-  #          ↘ comment
+  // 위의 경우 아래와 같은 관계가 설정 된 것이다.
+  // question → answer → vote
+  //          ↘ comment
   ```
 
 
@@ -1494,8 +1498,12 @@
 
   - global ordinals의 heap 사용량을 체크
   
-  ```bash
-  # Per-indexGET _stats/fielddata?human&fields=my_join_field#question# Per-nodeGET _nodes/stats/indices/fielddata?human&fields=my_join_field#question
+  ```json
+  // Per-index
+  // GET _stats/fielddata?human&fields=my_join_field#question
+  
+  // Per-node
+  // GET _nodes/stats/indices/fielddata?human&fields=my_join_field#question
   ```
 
 
@@ -1649,7 +1657,7 @@
     ```
 
       - 아래와 같이 document를 색인한다.
-        - 완전히 동일한 내용을 색인한다.
+        - 두 개의 필드에 완전히 동일한 내용을 색인한다.
         - 다만 `foo` field는 mapping에 설정한대로 `my_analyzer`를 통해 분석될 것이고, `bar` field는 `dynamic_templates`에 설정된대로 `default_analyzer`를 사용하여 분석된다.
 
     ```json
