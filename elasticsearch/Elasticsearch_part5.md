@@ -416,7 +416,11 @@
     - score를 계산하여 score 순으로 문서를 반환한다.
   - match 쿼리는 어떤 토큰이 먼저 있는지에 대한 순서는 고려하지 않는다.
     - 즉 python guide가 들어오든 guide python이 들어오든 같은 결과를 보여준다.
-
+  - `operator`
+    - 기본값은 `or`이며 token들 중 하나라도 일치하면 matching된다.
+    - `and`로 설정할 경우 모든 token들이 일치해야 matching된다.
+  
+  
   ```json
   // GET <index_name>/_search
   {
@@ -1611,7 +1615,7 @@
 
   - 기본형
 
-  ```bash
+  ```http
   GET /<target>/_count
   ```
 
@@ -1662,7 +1666,7 @@
     - parent/child의 경우 쿼리와 일치하는 parent documents를 기반으로 child document를 검색할 수 있고, 쿼리와 일치하는 child document를 기반으로 parent documents를 검색할 수 있다.
     - nested 필드의 경우, nested 내부의 쿼리와 일치하는 objects를 기반으로 문서를 검색할 수 있다.
   - 두 경우 모두 검색의 기반이 되는 문서들이 감춰지게 된다.
-    - 예를 들어  parent documents를 기반으로 child document를 검색할 경우 parent documents는 감춰지게 된다.
+    - 예를 들어 parent documents를 기반으로 child document를 검색할 경우 parent documents는 감춰지게 된다.
   - inner hists는 이와 같이 감춰진 문서들을 보는 데 사용하는 기능이다.
     - 각각의 search hit가 도출되게 한 기반이 되는 문서들을 함께 반환한다.
     - `inner_hits`는 `nested`, `has_child`, `has_parent` 쿼리 혹은 필터에 정의하여 사용한다.
@@ -1698,8 +1702,8 @@
   - nested 필드의 inner hits를 확인할 때 사용한다.
   - 테스트 인덱스 생성
 
-  ```bash
-  PUT test
+  ```json
+  // PUT test
   {
     "mappings": {
       "properties": {
@@ -1713,8 +1717,8 @@
 
   - 테스트 데이터 색인
 
-  ```bash
-  PUT test/_doc/1?refresh
+  ```json
+  // PUT test/_doc/1?refresh
   {
     "title": "Test title",
     "comments": [
@@ -1732,8 +1736,8 @@
 
   - 검색
 
-  ```bash
-  POST test/_search
+  ```json
+  // POST test/_search
   {
     "query": {
       "nested": {
@@ -1748,7 +1752,7 @@
   ```
 
   - 응답
-    - 정렬과 scoring으로 인해, inner_hits내부에 있는 hit object의 위치는 일반적으로 nested 필드에 정의 된 object의 위치와 달라지게 된다.
+    - 정렬과 scoring으로 인해, inner_hits 내부에 있는 hit object의 위치는 일반적으로 nested 필드에 정의 된 object의 위치와 달라지게 된다.
     - 기본값으로 inner_hits 내부의 hit objects에 대한 `_source`도 반환되지만, `_source` 필터링 기능을 통해 source를 변경하거나 비활성화 할 수 있다.
     - `fields`를 설정하여 nested 내부에 정의된 필드도 반환 할 수 있다.
     - `inner_hits` 내부의 hits들의 `_source`는 기본적으로  `_nested`의 metadata만을 반환한다. 아래 예시에서도 comment가 포함 된 문서의 전체 source가 이닌, comments 부분만 반환된 것을 확인 가능하다.
@@ -1809,9 +1813,9 @@
     - 특히 `size`와 inner hits의 `size`가 기본값보다 높게 설정되어 있를 때 더 큰 영향을 미치게 된다.
   - nested inner hits에서 `source`를 추출하는데 상대적으로 많은 비용이 들어가는 것을 피하기 위해서 source를 포함시키지 않고, 오직 doc value 필드에만 의존하게 할 수 있다.
 
-  ```bash
-  # 인덱스 생성
-  PUT test
+  ```json
+  // 인덱스 생성
+  // PUT test
   {
     "mappings": {
       "properties": {
@@ -1822,8 +1826,8 @@
     }
   }
   
-  # 문서 색인
-  PUT test/_doc/1?refresh
+  // 문서 색인
+  // PUT test/_doc/1?refresh
   {
     "title": "Test title",
     "comments": [
@@ -1838,8 +1842,8 @@
     ]
   }
   
-  # 데이터 검색
-  GET test/_search
+  // 데이터 검색
+  // GET test/_search
   {
     "query": {
       "nested": {
@@ -1866,9 +1870,9 @@
   - 만일 nested 필드 내부의 특정 계층을 바로 반환받고 싶다면 아래와 같이 하면 된다.
     - 쿼리에 inner hits를 넣어주면 상위 doucment가 검색되게 한 계층이 검색 결과와 함께 나오게 된다.
 
-  ```bash
-  # 인덱스 생성
-  PUT test
+  ```json
+  // 인덱스 생성
+  // PUT test
   {
     "mappings": {
       "properties": {
@@ -1884,8 +1888,8 @@
     }
   }
   
-  # 데이터 색인
-  PUT test/_doc/1?refresh
+  // 데이터 색인
+  // PUT test/_doc/1?refresh
   {
     "title": "Test title",
     "comments": [
@@ -1905,8 +1909,8 @@
     ]
   }
   
-  # 검색
-  GET test/_search
+  // 검색
+  // GET test/_search
   {
     "query": {
       "nested": {
@@ -1931,8 +1935,8 @@
     - `has_child` 쿼리는 쿼리와 일치하는 child documents의 parent doucment를 반환한다.
     - `inner_hits`를 사용하면 어떤 child documents가 일치하여 해당 parent document가 반환 된 것인지 알 수 있다.
 
-  ```bash
-  PUT test
+  ```json
+  // PUT test
   {
     "mappings": {
       "properties": {
@@ -1946,13 +1950,13 @@
     }
   }
   
-  PUT test/_doc/1?refresh
+  // PUT test/_doc/1?refresh
   {
     "number": 1,
     "my_join_field": "my_parent"
   }
   
-  PUT test/_doc/2?routing=1&refresh
+  // PUT test/_doc/2?routing=1&refresh
   {
     "number": 1,
     "my_join_field": {
@@ -1961,7 +1965,7 @@
     }
   }
   
-  GET test/_search
+  // GET test/_search
   {
     "query": {
       "has_child": {
@@ -1976,6 +1980,8 @@
     }
   }
   ```
+
+
 
 
 
@@ -2011,7 +2017,7 @@
     - `_pit` api를 통해 생성한다.
     - PIT를 생성할 인덱스명과  `keep_alive` 쿼리 파라미터가 필요하다.
 
-  ```bash
+  ```http
   POST /my-index-000001/_pit?keep_alive=1m
   ```
 
@@ -2029,7 +2035,7 @@
     - `keep_alive`를 주면 해당 시간만큼 `keep_alive` 시간이 연장된다.
 
   ```json
-  POST /_search 
+  // POST /_search 
   {
       "size": 100,
       "query": {
@@ -2047,14 +2053,14 @@
   - 아래 요청을 통해 얼마나 많은 pit가 생성되어 있는지 확인 가능하다.
     - `indices.search.open_contexts`에서 볼 수 있다.
 
-  ```bash
+  ```http
   GET /_nodes/stats/indices/search
   ```
 
   - 삭제하기
 
-  ```bash
-  DELETE /_pit
+  ```json
+  // DELETE /_pit
   {
       "id" : "u5mzAwELc2FtcGxlLWRhdGEWd1BSSXdMa2VReTJyMWt3dUxSakRVZwAWUk9CSkRNY3FTT1M3NFdIdFNhak1aUQAAAAAAABPZLhZHYnNneFNwZVFUbXNsVmZLU2ZpQmx3AAEWd1BSSXdMa2VReTJyMWt3dUxSakRVZwAA"
   }
@@ -2066,7 +2072,7 @@
 
   - PIT 생성
 
-  ```bash
+  ```http
   POST /my-index-000001/_pit?keep_alive=1m
   ```
 
@@ -2078,7 +2084,7 @@
       정렬 대상 field가 date 타입일 경우  format을 추가 가능하다. foramt은 아래와 같이 직접 패턴을 넣어도 되고, ES에서 [미리 정의한 format](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-date-format.html)을 사용해도 된다.
   
   ```json
-  GET /_search
+  // GET /_search
   {
     "size": 10000,
     "query": {
@@ -2131,7 +2137,7 @@
     - 응답의 `sort`에 왔던 값들을 `search_after` 부분에 추가해준다.
   
   ```json
-  GET /_search
+  // GET /_search
   {
     "size": 10000,
     "query": {
@@ -2152,6 +2158,8 @@
     ]                 
   }
   ```
+
+
 
 
 
@@ -2540,7 +2548,7 @@
   - 아래와 같은 데이터가 있다고 할 때
 
   ```json
-  PUT my-index
+  // PUT my-index
   {
     "mappings": {
       "properties": {
@@ -2551,7 +2559,7 @@
     }
   }
   
-  PUT my-index/_doc/1?refresh
+  // PUT my-index/_doc/1?refresh
   {
     "comments": [
       {
@@ -2560,7 +2568,7 @@
     ]
   }
   
-  PUT my-index/_doc/2?refresh
+  // PUT my-index/_doc/2?refresh
   {
     "comments": [
       {
@@ -2572,7 +2580,7 @@
     ]
   }
   
-  PUT my-index/_doc/3?refresh
+  // PUT my-index/_doc/3?refresh
   {
     "comments": [
       {
@@ -2587,7 +2595,7 @@
     - 즉, `"author": "nik9000"`는 match되지 않았지만, `"author": "kimchy"`가 match 되었기에 root parent document가 반환된 것이다.
 
   ```json
-  POST my-index/_search
+  // POST my-index/_search
   {
     "query": {
       "nested": {
@@ -2611,137 +2619,6 @@
 
 
 
-
-### inner hits
-
-- `nested` query, `has_child` query, `has_parent` 쿼리 등 중첩된 검색할 때 활용할 수 있는 옵션이다.
-
-  - 기본적으로 `nested` query는 match된 nested document를 반환하는 것이 아니라, 해당 document의 root parent document를 반환한다.
-  - 따라서 어떤 nested document가 match된 것인지는 확인할 수 있는 방법이 없는데, `inner_hits`를 사용하면 어떤 nested document들이 match된 것인지 확인이 가능하다.
-  - 예를 들어 위에서 살펴본 [must_not query를 사용할 때 주의할 점]의 query에 `inner_hits`를 추가하여 아래와 같이 검색이 가능하다.
-    - `inner_hits`를 통해 어떤 nested document가 match된 것인지를 확인할 수 있다.
-
-  ```json
-  POST my-index/_search
-  {
-    "query": {
-      "nested": {
-        "inner_hits": {}
-        "path": "comments",
-        "query": {
-          "bool": {
-            "must_not": [
-              {
-                "term": {
-                  "comments.author": "nik9000"
-                }
-              }
-            ]
-          }
-        }
-      }
-    }
-  }
-  ```
-
-  - 그 결과는 다음과 같다.
-
-  ```json
-  // ...
-  "hits" : {
-      // ...
-      "hits" : [
-        {
-          "_index" : "my-index",
-          "_type" : "_doc",
-          "_id" : "1",
-          "_score" : 0.0,
-          "_source" : {
-            "comments" : [
-              {
-                "author" : "kimchy"
-              }
-            ]
-          },
-          "inner_hits" : {
-            "comments" : {
-              "hits" : {
-                "total" : {
-                  "value" : 1,
-                  "relation" : "eq"
-                },
-                "max_score" : 0.0,
-                "hits" : [
-                  {
-                    "_index" : "my-index",
-                    "_type" : "_doc",
-                    "_id" : "1",
-                    "_nested" : {
-                      "field" : "comments",
-                      "offset" : 0
-                    },
-                    "_score" : 0.0,
-                    "_source" : {
-                      "author" : "kimchy"
-                    }
-                  }
-                ]
-              }
-            }
-          }
-        },
-        {
-          "_index" : "my-index",
-          "_type" : "_doc",
-          "_id" : "2",
-          "_score" : 0.0,
-          "_source" : {
-            "comments" : [
-              {
-                "author" : "kimchy"
-              },
-              {
-                "author" : "nik9000"
-              }
-            ]
-          },
-          "inner_hits" : {
-            "comments" : {
-              "hits" : {
-                "total" : {
-                  "value" : 1,
-                  "relation" : "eq"
-                },
-                "max_score" : 0.0,
-                "hits" : [
-                  {
-                    "_index" : "my-index",
-                    "_type" : "_doc",
-                    "_id" : "2",
-                    "_nested" : {
-                      "field" : "comments",
-                      "offset" : 0
-                    },
-                    "_score" : 0.0,
-                    "_source" : {
-                      "author" : "kimchy"
-                    }
-                  }
-                ]
-              }
-            }
-          }
-        }
-      ]
-    }
-  ```
-
-
-
-- Options
-  - `from`, `size`, `sort` 등의 옵션을 사용 가능하다.
-  - `name` 옵션으로 반환 받을 `inner_hits`의 이름을 설정 가능하다.
-  - 그 밖의 옵션은 [링크](https://www.elastic.co/guide/en/elasticsearch/reference/current/inner-hits.html#inner-hits-options)참조
 
 
 
@@ -2824,6 +2701,8 @@
     }
   }
   ```
+
+
 
 
 

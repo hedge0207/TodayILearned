@@ -65,7 +65,7 @@
     - 아래 query는 imdb index의 문서 중에서 genre가 horror인 문서나 전체 인덱스 중에서 title이나 description의 값이 input으로 주어진 text("and potentially some more text here as well")와 유사한 문서를 찾는다.
 
   ```json
-  GET /_search
+  // GET /_search
   {
       "query": {
           "more_like_this": {
@@ -148,8 +148,6 @@
 
 
 
-
-
 # minimum_should_match
 
 - mininum_should_match는 반드시 matching되어야 하는 should 절의 개수를 변경하는 것이다.
@@ -227,7 +225,7 @@
     - 만약 `minimum_should_match`가 must절까지 고려한다면 foo가 포함된 두 문서 모두 검색이 되어야 할 것이다.
 
   ```json
-  GET test/_search
+  // GET test/_search
   {
     "profile": true,
     "query": {
@@ -295,7 +293,7 @@
 
 
 
-- multi_match의 type이 `best_field`거나 `most_field`일 경우 `operator`와 `minimum_should_match` 옵션이 각 filed마다 개별적으로 적용된다.
+- multi_match의 type이 `best_field`거나 `most_field`일 경우 `operator`와 `minimum_should_match` 옵션이 각 field마다 개별적으로 적용된다.
 
   - 예를 들어 아래와 같은 문서가 있다고 가정한다.
 
@@ -530,6 +528,8 @@
 
 
 
+
+
 # Profile API
 
 - 검색 요청이 row level에서 어떻게 처리되는지를 보여준다.
@@ -538,7 +538,7 @@
     - 검색 API를 보낼 때 `profile` 옵션을 true로 주면 된다.
 
   ```json
-  GET /my-index-000001/_search
+  // GET /my-index-000001/_search
   {
     "profile": true,
     "query" : {
@@ -601,6 +601,8 @@
 
 
 
+
+
 # kNN search
 
 - query로 들어온 vector값과 가장 가까운 k개의 문서를 찾아준다.
@@ -628,7 +630,7 @@
     - 만일 approximate kNN을 사용할 것이 아니라면 `index` 옵션을 false로 주거나 아예 빼버리면 된다(text type과 달리 dense_vector의 index 옵션의 기본값은 false이다).
 
   ```json
-  PUT product-index
+  // PUT product-index
   {
     "mappings": {
       "properties": {
@@ -648,7 +650,7 @@
   - vector 값을 색인한다.
 
   ```json
-  POST product-index/_bulk?refresh=true
+  // POST product-index/_bulk?refresh=true
   { "index": { "_id": "1" } }
   { "product-vector": [230.0, 300.33, -34.8988, 15.555, -200.0], "price": 1599 }
   { "index": { "_id": "2" } }
@@ -702,6 +704,8 @@
 
 
 
+
+
 # Highlight
 
 - 검색시에 어떤 query가 match되었는지를 확인할 수 있게 해주는 기능이다.
@@ -740,7 +744,7 @@
 
 - fvh(fast vector highlighter)
   - Lucene Fast Vector highlighter를 사용하는 highlighter이다.
-  - `term_vector`가 `with_positions_offsets`으로 설정된 filed에 사용할 수 있다.
+  - `term_vector`가 `with_positions_offsets`으로 설정된 field에 사용할 수 있다.
     - 이렇게 설정할 경우 index의 크기가 증가하게 된다.
   - span query를 지원하지 않는다.
 
@@ -791,9 +795,10 @@
     - 검색 query 이외에 검색 결과를 highlight하는데 사용할 query를 추가로 정의한다.
     - Elasticsearch는 `highlight_query`에 search query가 들어가 있는지 검사하지 않기에, search query를 `highlight_query`에 포함시키지 않으면 search query의 내용은 highlight되지 않는다.
     - 입력하지 않을 경우 search query가 적용된다.
-  - `number_of_fragments`(`fvh` highlighter에서만 사용 가능)
+  - `number_of_fragments`
     - 반환될 fragment들의 최대 개수를 설정한다.
-    - 기본 값은 0으로, 아무 fragment도 반환하지 않고, 전체 문서를 반환한다.
+    - 기본값은 5이다.
+    - 0으로 설정할 경우, 아무 fragment도 반환하지 않고, 전체 문서를 반환한다.
 
 
 
@@ -1260,7 +1265,7 @@
   - 테스트 데이터 생성
 
   ```json
-  PUT highlight-test
+  // PUT highlight-test
   {
     "mappings": {
       "properties": {
@@ -1278,7 +1283,7 @@
     }
   }
   
-  PUT highlight-test/_doc/1
+  // PUT highlight-test/_doc/1
   {
     "foo":"An apple is a round, edible fruit produced by an apple tree (Malus domestica).",
     "bar":"An apple is a round, edible fruit produced by an apple tree (Malus domestica)."
@@ -1374,6 +1379,109 @@
 
 
 
+- Fragement의 정렬 방식
+
+  - 기본적으로 fragment는 문서에 등장하는 순서로 반환된다.
+
+  - 예를 들어 아래와 같이 문서를 색인하고
+
+  ```json
+  // PUT highlight_test/_doc/1
+  {
+    "content" : "An apple is a round, edible fruit produced by an apple tree (Malus domestica)."
+  }
+  ```
+
+  - 검색을 실행하면
+
+  ```json
+  // GET highlight_test/_search
+  {
+    "query": {
+      "match": {
+        "content": "apple tree"
+      }
+    },
+    "highlight": {
+      "fields": {
+        "content":{
+          "fragment_size": 10
+        }
+      }
+    }
+  }
+  ```
+
+  - 아래와 같이 문서에서 등장하는 순서대로 반환된다.
+
+  ```json
+  {
+    "hits": {
+      // ...
+      "hits": [
+        {
+          // ...
+          "highlight": {
+            "content": [
+              "An <em>apple</em> is",
+              "produced by an <em>apple</em>",
+              "<em>tree</em> (Malus"
+            ]
+          }
+        }
+      ]
+    }
+  }
+  ```
+
+  - `order` 옵션을 사용하여 점수순으로 반환되도록 변경할 수 있다.
+
+  ```json
+  // GET highlight_test/_search
+  {
+    "query": {
+      "match": {
+        "content": "apple tree"
+      }
+    },
+    "highlight": {
+      "fields": {
+        "content":{
+          "order":"score",
+          "fragment_size": 10
+        }
+      }
+    }
+  }
+  ```
+
+  - 아래와 같이 점수순으로 반환된다.
+    - 각 highlight type별 점수를 매기는 방식은 [Highlighter의 동작 방식] - [최적의 fragment는 어떻게 찾을 것인가] 참조
+
+  ```json
+  {
+    "hits": {
+      // ...
+      "hits": [
+        {
+          // ...
+          "highlight": {
+            "content": [
+              "An <em>apple</em> is",
+              "<em>tree</em> (Malus",
+              "produced by an <em>apple</em>"
+            ]
+          }
+        }
+      ]
+    }
+  }
+  ```
+
+
+
+
+
 - Highlighter 동작 방식 예시
 
   - Data 색인하기
@@ -1431,7 +1539,7 @@
   ```
 
   - 위에서 작성한 match_phrase query는 `spanNear([text:apple, text:tree], 0, true)` 형태의 span qeury로 전환된다.
-    - 이는 apple과 term이 0 distance 이내에 있으면서, 주어진 순서대로 나와야 함을 의미한다.
+    - 이는 apple과 tree가 0 distance 이내에 있으면서, 주어진 순서대로 나와야 함을 의미한다.
     - 이전에 생성한 in-memory index에 위 span query를 실행하면, 아래와 같은 match를 얻을 수 있다.
 
   ```json

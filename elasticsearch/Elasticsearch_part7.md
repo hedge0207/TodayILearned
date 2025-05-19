@@ -11,7 +11,7 @@
     - 색인 된 필드에서 반환 받은 값을 query time에 덮어쓸 수 있다.
     - schema 수정 없이 필드를 정의할 수 있다.
   - 사용시 이점
-    - 런타임 필드는 인덱싱하지 않기에, index 크기를 증가시키지 안흔다.
+    - 런타임 필드는 인덱싱하지 않기에, index 크기를 증가시키지 않는다.
     - Elasticsearch는 런타임 필드와 색인된 일반적인 필드를 구분하지 않기 때문에 런타임 필드를 색인시킨다고 하더라도 기존에 런타임 필드를 참조했던 쿼리를 수정 할 필요가 없다.
     - data를 모두 색인시킨 이후에도 런타임 필드를 추가할 수 있기 때문에, 데이터의 구조를 몰라도 일단 데이터를 색인시키고, 이후에 놓친 부분이 있다면 런타임 필드를 활용하면 된다. 
 
@@ -135,8 +135,8 @@
   - Painless에서 기본적으로 제공하는 문법.
   - 아래와 같은 script가 있을 때
 
-  ```bash
-  $ curl -XGET "localhost:9200/script_test/_search" -H "Content-type:application/json" -d '
+  ```json
+  // GET script_test/_search
   {
     "script_fields": {
       "my_doubled_field": {
@@ -158,8 +158,8 @@
     - Map 타입에 한해서 `.get()` 메서드를 생략 가능하다.
     - `source`의 마지막에 세미콜론을 붙이지 않아도 된다.
 
-  ```bash
-  $ curl -XGET "localhost:9200/script_test/_search" -H "Content-type:application/json" -d '
+  ```json
+  // GET script_test/_search
   {
     "script_fields": {
       "my_doubled_field": {
@@ -171,7 +171,7 @@
         }
       }
     }
-  }'
+  }
   ```
 
 
@@ -182,26 +182,26 @@
   - script를 저장하면 스크립트를 컴파일 하는 시간이 감소되므로 검색이 보다 빨라진다.
   - script 저장하기
 
-  ```bash
-  $ curl -XPOST "localhost:9200/_scripts/<스크립트명>" -H "Content-type:application/json" -d '
+  ```json
+  // POST _scripts/<스크립트명>
   {
   	"script": {
   		<저장할 스크립트>
   		}
   	}
-  }'
+  }
   ```
 
   - 스크립트 불러오기
 
-  ```bash
-  $ curl -XGET "localhost:9200/_scripts/<불러올 스크립트명>"
+  ```http
+  GET _scripts/<불러올 스크립트명>
   ```
 
   - 저장된 script를 query에 사용하기
 
-  ```bash
-  $ curl -XGET "localhost:9200/script_test/_doc/1" -H "Content-type:application/json" -d '
+  ```json
+  // GET script_test/_doc/1
   {
     "query": {
       # <쿼리식>,
@@ -218,8 +218,8 @@
 
   - 저장된 스크립트 삭제하기
 
-  ```bash
-  $ curl -XDELETE "localhost:9200/_scripts/<스크립트명>"
+  ```http
+  DELETE _scripts/<스크립트명>
   ```
 
 
@@ -230,16 +230,16 @@
     - `_update`  API는 문서를 부분적으로 수정할 수도 있다.
   - 필드의 값을 수정
 
-  ```bash
-  # 문서를 색인하고
-  $ curl -XPUT "localhost:9200/my_index/_doc/1" -H "Content-type:application/json" -d '
+  ```json
+  // 문서를 색인하고
+  // PUT my_index/_doc/1
   {
     "counter" : 1,
     "tags" : ["red"]
-  }'
+  }
   
-  # _update API를 통해 counter 필드의 값을 증가
-  $ curl -XPUT "localhost:9200/my_index/_update/1" -H "Content-type:application/json" -d '
+  // _update API를 통해 counter 필드의 값을 증가
+  // PUT my_index/_update/1
   {
     "script" : {
       "source": "ctx._source.counter += params.count",
@@ -248,10 +248,10 @@
         "count" : 4
       }
     }
-  }'
+  }
   
-  # _update API를 통해 tag 필드에 값을 추가
-  $ curl -XPUT "localhost:9200/my_index/_update/1" -H "Content-type:application/json" -d '
+  // _update API를 통해 tag 필드에 값을 추가
+  // PUT my_index/_update/1
   {
     "script": {
       "source": "ctx._source.tags.add(params['tag'])",
@@ -260,10 +260,10 @@
         "tag": "blue"
       }
     }
-  }'
+  }
   
-  # 특정 tag 값이 존재할 때 해당 태그 값을 삭제
-  $ curl -XPUT "localhost:9200/my_index/_update/1" -H "Content-type:application/json" -d '
+  // 특정 tag 값이 존재할 때 해당 태그 값을 삭제
+  // PUT my_index/_update/1
   {
     "script": {
       "source": "if (ctx._source.tags.contains(params['tag'])) { ctx._source.tags.remove(ctx._source.tags.indexOf(params['tag'])) }",
@@ -272,20 +272,20 @@
         "tag": "blue"
       }
     }
-  }'
+  }
   ```
 
   - 필드 자체를 수정
 
-  ```bash
-  # 새로운 필드 추가
-  $ curl -XPUT "localhost:9200/my_index/_update/1" -H "Content-type:application/json" -d '
+  ```json
+  // 새로운 필드 추가
+  // PUT my_index/_update/1
   {
     "script" : "ctx._source.new_field = 'value_of_new_field'"
   }'
   
-  # 기존 필드 삭제
-  $ curl -XPUT "localhost:9200/my_index/_update/1" -H "Content-type:application/json" -d '
+  // 기존 필드 삭제
+  // PUT my_index/_update/1
   {
     "script" : "ctx._source.remove('new_field')"
   }'
@@ -294,10 +294,10 @@
   - 문서 자체를 수정
     - `ctx.op`를 통해 문서에 어떤 동작을 수행할 것인지를 입력한다.
 
-  ```bash
-  # 조건에 부합하면 특정 행동(operation)을 하고, 조건에 부합하지 않으면 아무 것도 하지 않는 스크립트(noop 사용)
-  # 아래 스크립트의 경우 
-  $ curl -XPUT "localhost:9200/my_index/_update/1" -H "Content-type:application/json" -d '
+  ```json
+  // 조건에 부합하면 특정 행동(operation)을 하고, 조건에 부합하지 않으면 아무 것도 하지 않는 스크립트(noop 사용)
+  // 아래 스크립트의 경우 
+  // PUT my_index/_update/1
   {
     "script": {
       "source": "if (ctx._source.tags.contains(params['tag'])) { ctx.op = 'delete' } else { ctx.op = 'none' }",
@@ -306,7 +306,7 @@
         "tag": "green"
       }
     }
-  }'
+  }
   ```
 
 

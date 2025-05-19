@@ -205,7 +205,7 @@
   - 인덱스명이 모두 동일할 경우에는 아래와 같이 하는 것도 가능하다.
 
   ```json
-  POST learning/_bulk
+  // POST learning/_bulk
   
   {"index":{"_id":"1"}}
   {"field":"elasticsearch"}
@@ -248,7 +248,7 @@
 - 그 외에 색인 성능을 확보하는 방법들
   - 문서의 id 없이 색인하기
     - PUT 메서드로 문서의 id를 지정하여 색인하는 것 보다 POST 메서드로 ES가 문서의 id를 임의로 생성하게 하는 것이 더 빠르게 색인 된다.
-    - PUT의 경우 사용자가 입력한 id가 이미 존재하는지 검증하는 과정을 거쳐야 하지만 POST의 경우 기존에 동일한 id를 가진 문서가 없다는 전제 조건하에 색인되기 때문에 이미 존재하는 문서인지 확인하는 과정을 생략한다.
+    - PUT의 경우 사용자가 입력한 id가 이미 존재하는지 검증하는 과정을 거쳐야 하지만 POST의 경우 기존에 동일한 id를 가진 문서가 없다는 전제하에 색인되기 때문에 이미 존재하는 문서인지 확인하는 과정을 생략한다.
   - 레플리카 샤드 갯수를 0으로 설정하기
     - 프라이머리 샤드에 색인 된 후 레플리카에 복제하는 시간을 줄일 수 있다.
     - 클러스터를 운영하는 환경에 복제본이 꼭 필요하지 않거나 하둡과 같은 별도의 저장소에 사용자의 문서를 복제하는 경우라면 고려해 볼 만 하다.
@@ -266,18 +266,6 @@
     - 단, Elasticsearch의 thread pool queue가 전부 차면 발생하는 `TOO_MANY_REQUESTS(429)` error등은 주의해야한다.
 
 
-
-- Index 전략
-  - `refresh_interval`을 조정한다.
-    - 기본적으로 Elasticsearch는 매 초 refresh를 실행한다.
-    - 만일 바로 검색될 필요가 없는 데이터라면, `refresh_interval`을 길게 줌으로써 색인 성능을 향상시킬 수 있다.
-    - 색인 전에 `refresh_interval`을 늘린 후, 색인 후에 다시 돌려 놓는다.
-  - 자동으로 생성되는 `_id`를 사용.
-    - 자동으로 생성되는 `_id`를 사용할 경우 Elasticsearch가 `_id`의 고유성을 확인할 필요가 없으므로 색인 속도가 빨라질 수 있다.
-    - 만약 Lucene friendly한 format으로 `_id`를 사용한다면, 자동 생성되는 `_id`를 사용하지 않아도 색인 속도가 크게 느려지지는 않는다.
-  - Replica shard를 비활성화한다.
-    - Replica shard가 있을 경우, primary에 색인이 완료된 후 replica에 복사까지 해야하므로 색인 속도가 느려진다.
-    - 따라서 색인 전에 replica shard를 비활성화 한 후 색인이 완료되면 다시 활성화시킨다.
 
 
 
@@ -529,30 +517,31 @@
   
   ```bash
   # node별 query cache 확인
-  $ curl -XGET "http://localhost:9200/_cat/nodes?v&h=name,qcm"
-  $ curl -XGET "http://localhost:9200/_nodes/stats/indices/query_cache?human&pretty"
+  GET _cat/nodes?v&h=name,qcm
+  GET _nodes/stats/indices/query_cache?human
   
   # query cache 확인
-  $ curl -XGET "http://localhost:9200/_stats/query_cache?human&pretty"
+  GET _stats/query_cache?human
   
   # 특정 index의 query cache 확인
-  $ curl -XGET "http://localhost:9200/<index_name>/_stats/query_cache?human&pretty"
+  GET <index_name>/_stats/query_cache?human
   ```
   
   - 기본적으로 활성화되어 있으며, 아래와 같이 변경이 가능하다.
     - Dynamic setting이 아니기에 인덱스를 close로 바꾸고 설정해줘야 한다.
   
-  ```bash
-  # 인덱스를 close 상태로 변경하고
-  $ curl -XGET "http://localhost:9200/my_index/_close" -H 'Content-Type: application/json'
+  ```json
+  // 인덱스를 close 상태로 변경하고
+  // POST "http://localhost:9200/my_index/_close
   
-  # 바꿔준다.
-  $ curl -XGET "http://localhost:9200/my_index/_settings" -H 'Content-Type: application/json' -d'{
-  "index.queries.cache.enable":true # false면 비활성화
-  }'
+  // 바꿔준다.
+  // PUT my_index/_settings
+  {
+  	"index.queries.cache.enable": true 	// false면 비활성화
+  }
   
-  # 인덱스를 다시 open 상태로 변경한다.
-  $ curl -XGET "http://localhost:9200/my_index/_open" -H 'Content-Type: application/json'
+  // 인덱스를 다시 open 상태로 변경한다.
+  // POST my_index/_open
   ```
   
   - 많은 문서가 캐싱되어 허용된 캐시 메모리 영역이 가득 차면 LRU(Least Recently Used Algorithm) 알고리즘에 의해 캐싱된 문서를 삭제한다.
@@ -563,6 +552,34 @@
   - 서로 다른 query라 할지라도 공통된 filter context query를 사용하면 cache 결과를 재사용한다.
     - 각 query들에 공통으로 들어간 filter context query의 결과로 생성된 문서들을 먼저 추린다.
     - 그 후에 추려진 문서들을 대상으로 filter context에 속하지 않는 부분으로 마저 검색을 수행한다.
+  - Query context와 filter context가 혼합된 query일 경우 filter context에 해당되는 부분만 caching된다.
+    - 예를 들어 아래 query에서 query context에 해당하는 `must` 절은 caching되지 않지만, filter context에 해당하는 `filter` 절은 caching된다.
+  
+  ```json
+  // GET test-index/_search
+  {
+    "query": {
+      "bool": {
+        "must":[
+          {
+            "match":{
+              "description":"game win"
+            }
+          }
+        ],
+        "filter": [
+          {
+            "match":{
+              "description":"skill hard"
+            }
+          }
+        ]
+      }
+    }
+  }
+  ```
+  
+  
 
 
 
@@ -611,46 +628,51 @@
 - Shard Request Cache
 
   - Node Query Cache가 노드에 할당된 캐시 영역이라면 Shard Request Cache는 샤드를 대상으로 캐싱되는 영역이다.
-    - 특정 필드에 의한 검색이기 때문에 전체 샤드에 캐싱된다.
-    - Node Query Cache와 달리 문서의 내용을 캐싱하는 것이 아니라, aggregation query의 집계 결과 혹은 ReqeustBody의 파라미터 중 size를 0으로 설정했을 때의 쿼리 응답 결과에 포함되는 매칭된 문서의 수(total hits)에 대해서만 캐싱한다.
+    - 각 shard 단위로 caching이 이루어진다.
+    - Node Query Cache와 달리 문서의 내용을 캐싱하는 것이 아니라, size를 0으로 설정했을 때의 쿼리 응답 결과에 포함되는 매칭된 문서의 수(total hits), aggregation query의 집계 결과 등을 caching하며, `hits`는 caching하지 않는다.
+    - `now` 값을 사용하는 대부분의 query는 caching되지 않는다.
     - Node Query Cache가 검색 엔진에 활용하기 적합한 캐시 영역이라면 Shard Request Cache는 분석 엔진에서 활용하기 적합한 캐시 영역이라고 할 수 있다.
     - 다만 이 영역은 refresh 동작을 수행하면 캐싱된 내용이 사라진다.
     - 즉, 문서 색인이나 업데이트를 한 후 refresh를 통해 샤드의 내용이 변경되면 기존에 캐싱된 결과가 초기화 된다.
     - 따라서 계속해서 색인이 일어나고 있는 인덱스에는 크게 효과가 없다.
   - 아래 명령으로 Shard Request Cache의 상황을 볼 수 있다.
-
-  ```bash
-  $ curl -XGET "http://localhost:9200/_cat/nodes?v&h=name,rcm"
+  
+  ```http
+  GET _cat/nodes?v&h=name,rcm
+  
+  GET _nodes/stats/indices/request_cache
   ```
-
+  
   - Shard Request Cache도 ES 클러스터에 기본적으로 활성화되어 있다.
     - 다만 dynamic setting이어서 인덱스를 대상으로 온라인중에 설정이 가능하다.
-
-  ```bash
-  $ curl -XGET "http://localhost:9200/my_index/_settings" -H 'Content-Type: application/json' -d'{
-  "index.requests.cache.enable":true # false면 비활성화
-  }'
+  
+  ```json
+  // GET my_index/_settings
+  {
+  	"index.requests.cache.enable":true // false면 비활성화
+  }
   ```
-
+  
   - 검색시에도 활성/비활성화가 가능하다.
     - size를 0으로 줬으므로 본래 Shard Request Cache가 생성되어야 하지만 `request_cache=false`로 인해 생성되지 않는다.
-
-  ```bash
-  $ curl -XGET "http://localhost:9200/my_index/_search?request_cache=false" -H 'Content-Type: application/json' -d'{
-  "size":0,	# size가 0일 때 Shard Request Cache가 생성된다.
-  "aggs":{
-  	"cityaggs":{
-  		"terms":{"field":"city.keyword"}
-  	}
+  
+  ```json
+  // GET my_index/_search?request_cache=false
+  {
+      "size":0,	// size가 0일 때 Shard Request Cache가 생성된다.
+      "aggs":{
+          "cityaggs":{
+              "terms":{"field":"city.keyword"}
+          }
+      }
   }
-  }'
   ```
-
+  
   - 가이드라인
     - Shard Request Cache 설정을 기본으로 활성화한 다음, 색인이 종료된 과거 인덱스는 request_cache를 true로 집계하고 색인이 한참 진행 중인 인덱스는 false로 집계하는 방식으로 사용한다 
     - 이렇게 하면 과거 인덱스에 대해서는 캐싱 데이터를 리턴해서 빠르게 결과를 전달 받고, 색인이 빈번하게 진행 중이어서 캐싱이 어려운 인덱스는 불필요하게 캐싱하는 낭비를 막을 수 있다.
     - 또한 과거 인덱스에 색인이 들어오면 캐싱된 데이터가 초기화되기 때문에 인덱스를 쓰지 못하도록 read only 처리하는 것도 캐싱 데이터를 유지시킬 수 있는 방법이다.
-
+  
   - 각 노드의  elasticsearch.yml 파일에서 다음과 같이 Shard Request Cache 영역을 조정 가능하다.
     - `indices.requests.cache.size: 10%`
     - 이 경우 노드를 재시작해야 한다.
@@ -670,8 +692,8 @@
 
   - Field Data Cache 사용 현황 확인
 
-  ```bash
-  $ curl -XGET "http://localhost:9200/_cat/nodes?v&h=name,fm"
+  ```http
+  GET _cat/nodes?v&h=name,fm
   ```
 
   - 마찬가지로 elasticsearch.yml 파일에서 다음과 같이 Field Data Cache 영역을 조정 가능하다.
@@ -1162,7 +1184,7 @@
 
   ```python
   from faker import Faker
-  import josn
+  import json
   import random
   
   
