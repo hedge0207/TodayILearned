@@ -780,8 +780,6 @@
 
 
 
-
-
 - 사용자 중심 QAC model
   - 사용자가 검색한 검색어를 분석함으로써 사용자가 원하는 것을 보다 잘 파악할 수 있다.
   - 사용자 중심 QAC model은 크게 두 종류로 나눌 수 있다.
@@ -803,8 +801,6 @@
   q_c ← arg\ \underset{q\in Q_I(p)}{max} {v_q \cdot v_C \over ||v_q|| \cdot ||v_C||}
   $$
   
-
-
 
 
 
@@ -846,19 +842,27 @@
   - pSaved
     - Query를 작성하는 동안 query suggestion 결과를 사용할 가능성으로 정의된다.
     - 사용자가 입력한 query를 $q$라 하고, $q$의 길이를 $|q|$라 하며, 길이가 $i$인 $q$의 prefix를 $q[1, ..., i]$라 한다.
-    - $S_{ij}$는 사용자가 prefix $q[1, ..., i]$에 대해 주어진 suggestion 중 $j$번째 suggestion에 만족했는 지를 표현한다.
+    - $S_{ij}$는 사용자가 prefix $q[1, ..., i]$에 대해 주어진 suggestion 중 $j$번째 suggestion을 선택했는 지를 표현한다.
     - 예를 들어 $S_{ij}$에서 $i=5$, $j=3$이라면 사용자는 query의 5번째 prefix까지 입력했을 때, 제안된 자동완성 결과중 3번째 결과를 선택했다는 의미이다.
-    - $I(S_{ij})$는 만약 사용자가 query suggestion을 click했으면 1, 아닐 경우 0의 값을 가진다.
+    - $I(S_{ij})$는 사용자가 $i$번째 prefix에서 $j$번째 suggestion를 실제로 본 적이 있는지를 의미하여 1 또는 0의 값을 가진다.
     - $P(S_{ij})$는 사용자가 만족했을 가능성을 정의하며, user model에 따라 달라진다.
-    - $\sum_jP(S_{ij}=1)$는 $q[1..i]$까지만 query를 작성할 확률과 같다(즉 $i$번째 까지만 작성하고 자동 완성 결과를 선택할 확률과 같다).
-
+    - $P(S_{ij}=1)$는 사용자가 i번째 query까지 입력했을 때, j번째 suggestion을 선택할 확률이다.
+    - $\sum_jP(S_{ij}=1)$는 $q[1..i]$까지 입력했을 때, 제안된 자동 완성 결과중 하나라도 선택할 확률이다(즉 $i$번째 까지 작성했을 때 자동 완성 결과 중 하나라도 선택할 확률이다).
+    - 아래 수식에서 $I(S_{ij})$가 식에 포함된 것과 없는 것이 동일한 이유는 $I(S_{ij})$가 0일 경우 $i$번째 prefix에서 $j$번째 suggestion이 제안된 적 없다는 의미이므로 계산하는 것이 무의미하다. 그러므로 $I(S_{ij})$가 1일 경우만 고려하면 되는데, 1을 곱해도 차이는 없으므로 $I(S_{ij})$는 있으나 없으나 동일하다.
+  
   $$
   pSaved(q)=\sum_{i=1}^{|q|} \sum_j I(S_{ij})P(S_{ij}=1)=\sum_{i=1}^{|q|} \sum_jP(S_{ij}=1)
   $$
-
+  
   - eSaved
     - Query suggestion mechanism으로 인해 사용자가 누르지 않아도 되는 keypress의 정규화된 양을 의미한다.
-
+    - $\sum_jP(S_{ij}=1)$는 $q[1..i]$까지 입력했을 때, 제안된 자동 완성 결과중 하나라도 선택할 확률이다.
+    - 전체 쿼리 길이가 $|q|$일 때, $i$까지 입력하고 자동완성 결과를 클릭하면, 그 이후 $|q| - i$ 만큼의 타이핑을 생략할 수 있다.
+    - 결국 사용자가 얼마나 타이핑을 아꼈는가로 자동 완성 결과를 평가하는 것이다.
+    - $\frac{i}{|q|}$는 이미 입력한 비율을 나타내는데, 따라서 1에서 이미 입력한 비율을 빼면 아직 입력하지 않은 비율이 된다.
+    - 이 비율에 해당 시점의 suggestion 수용 확률 $\sum_j P(S_{ij} = 1)$을 곱해 그 순간 자동완성을 수용했을 때 절약할 수 있는 키 입력 기대값을 계산한다.
+    - 예를 들어 사용자가 `"hanam city hall"`이라는 15글자짜리 쿼리를 입력하려고 할 때,  5글자(`"hanam"`)까지 입력했을 때 `"hanam city hall"`을 제안받았고, 그때 클릭할 확률($\sum_jP(S_{ij}=1)$)이 0.6이라면, (1 - 5/15 * 0.6)으로 기여값은 약 0.39이고, 모든 i에 대해 이런 식으로 반복해서 합산하여 구한다.
+  
   $$
   eSaved(q)=\sum_{i=1}^{|q|}(1-{i \over |q|}) \sum_jP(S_{ij}=1)
   $$
@@ -872,7 +876,7 @@
     - 자동 완성 후보군들을 저장하기 위해서 일반적으로 사용하는 자료구조이다.
     - Character들을 tree 형태로 저장하여 상대적으로 빠른 속도로 prefix로부터 자동 완성 후보군들을 찾아낼 수 있다.
     - 일반적으로 root node는 빈 character를 저장하고, leaf node에는 마지막 node라는 표시와 함께 query frequency 등의 정보를 저장한다.
-  - Copletion Trie, RMQ Trie, Score-Decomposed Trie
+  - Completion Trie, RMQ Trie, Score-Decomposed Trie
     - 자동 완성 set이 너무 커서 메모리에 올리기 위해 압축이 필요한 경우 사용하기 위해 Hsu와 Ottaviano가 trie를 기반으로 고안한 자료구조이다.
     - 각각은 공간과 속도, 복잡도에서 trade-off 관계이다.
 
@@ -977,10 +981,14 @@
     - Prefix 방식의 매칭만 지원하기 때문에 시작 부분이 반드시 일치해야한다.
     - 이로 인해 위 예시에서 황금붕어빵은 검색되지 않았다.
     - 또한 "빵"으로 검색하면 어떤 결과도 반환되지 않는다.
+    - Analyzer 설정이 불가능해 한글을 자소 단위로 분해할 수 없다.
+  - `search_as_you_type` type 역시 QAC에 많이 사용되지만, 한글에는 적합하지 않다.
+    - `searc_as_you_type`은 문자열을 자동완성에 적합한 형태로ngram으로 자동으로 분할해준다.
+    -  그러나 이 방식 역시 analyzer를 설정할 수 없어 한글을 자소 단위로 분할할수 없다는 문제가 있다.
 
 
 
-- Ngram tokenizer와 filter를 사용하여 구현하기
+- Ngram token filter 사용하여 구현하기
 
   - 아래와 같이 index를 생성하고, data는 위와 동일하게 색인한다.
     - 전방 일치, 부분 일치, 후방 일치가 모두 가능하도록 할 것이다.
@@ -1220,6 +1228,225 @@
 
 
 
+- Edge-Ngram token filter 사용하여 구현하기
+
+  - 한글의 경우 ngram보다 edge-ngram이 더 적합할 수 있다.
+    - 위에서 본 것과 같이 ngram을 사용하여 분해하면 중간 일치가 가능하다는 장점이 있다.
+    - 그러나 한글의 경우에는 ngram token filter를 사용할 경우 지나치게 많은 토큰이 생성되어 오히려 품질이 떨어질 수 있다.
+  - Index 생성하기
+    - edge_ngram filter를 사용한다.
+    - java-cafe plugin을 사용하여 색인시에 token들을 자모로 변환한다.
+    - 아래에서는 검색 analyzer에도 nori tokenizer를 사용했지만, nori tokenizer대신 ngram이나 keyword tokenizer를 쓰는 것이 더 나을 수 있다.
+
+  ```json
+  // PUT auto_complete_test
+  {
+    "settings": {
+      "analysis": {
+        "filter": {
+          "1_15_edgegram": {
+            "type": "edge_ngram",
+            "min_gram": "1",
+            "max_gram": "15"
+          }
+        },
+        "tokenizer": {
+          "none_nori_tokenizer": {
+            "type": "nori_tokenizer",
+            "decompound_mode": "none"
+          }
+        },
+        "analyzer": {
+          "kr_nori_auto_analyzer": {
+            "filter": [
+              "javacafe_jamo",
+              "1_15_edgegram"
+            ],
+            "type": "custom",
+            "tokenizer": "none_nori_tokenizer"
+          },
+          "kr_nori_auto_search_analyzer": {
+            "filter": [
+              "javacafe_jamo"
+            ],
+            "type": "custom",
+            "tokenizer": "none_nori_tokenizer"
+          }
+        }
+      }
+    },
+    "mappings": {
+      "properties": {
+        "text":{
+          "type":"text",
+          "analyzer": "kr_nori_auto_analyzer",
+          "search_analyzer": "kr_nori_auto_search_analyzer"
+        }
+      }
+    }
+  }
+  ```
+
+  - 자동 완성 후보군을 색인한다.
+
+  ```json
+  // PUT auto_complete_test/_doc/1
+  {
+    "text":"붕어빵"
+  }
+  
+  // PUT auto_complete_test/_doc/2
+  {
+    "text":"잉어빵"
+  }
+  
+  // PUT auto_complete_test/_doc/3
+  {
+    "text":"황금붕어빵"
+  }
+  
+  // PUT auto_complete_test/_doc/4
+  {
+    "text":"붕어빵기계"
+  }
+  ```
+
+  - 검색한다.
+
+  ```json
+  // GET auto_complete_test/_search
+  {
+    "query": {
+      "bool": {
+        "should": [
+          {
+            "match_phrase_prefix": {
+              "text": "부"
+            }
+          }
+        ]
+      }
+    }
+  }
+  
+  // response
+  {
+    // ...
+    "hits" : {
+      // ...
+      "hits" : [
+        {
+          "_index" : "auto_complete_test",
+          "_type" : "_doc",
+          "_id" : "1",
+          "_score" : 3.2026296,
+          "_source" : {
+            "text" : "붕어빵"
+          }
+        },
+        {
+          "_index" : "auto_complete_test",
+          "_type" : "_doc",
+          "_id" : "3",
+          "_score" : 3.020662,
+          "_source" : {
+            "text" : "황금붕어빵"
+          }
+        },
+        {
+          "_index" : "auto_complete_test",
+          "_type" : "_doc",
+          "_id" : "4",
+          "_score" : 3.020662,
+          "_source" : {
+            "text" : "붕어빵기계"
+          }
+        }
+      ]
+    }
+  }
+  ```
+
+  - ngram을 사용했을 때와는 달리 각 token별 중간 일치는 되지 않는다.
+
+  ```json
+  // GET auto_complete_test/_search
+  {
+    "query": {
+      "bool": {
+        "should": [
+          {
+            "match_phrase_prefix": {
+              "text": "빵"
+            }
+          }
+        ]
+      }
+    }
+  }
+  
+  
+  // response
+  {
+    // ...
+    "hits" : {
+      // ... 
+      "hits" : [
+        {
+          "_index" : "auto_complete_test",
+          "_type" : "_doc",
+          "_id" : "2",
+          "_score" : 1.8001148,
+          "_source" : {
+            "text" : "잉어빵"
+          }
+        }
+      ]
+    }
+  }
+  ```
+
+  - 그러나 전체 텍스트에 대한 중간 일치는 토큰이 분리된다면 가능하다.
+    - Completion suggester의 경우 이 방식 역시 불가능하다.
+
+  ```json
+  // GET auto_complete_test/_search
+  {
+    "query": {
+      "bool": {
+        "should": [
+          {
+            "match_phrase_prefix": {
+              "text": "긱"
+            }
+          }
+        ]
+      }
+    }
+  }
+  
+  // response
+  {
+    // ...
+    "hits" : {
+      // ...
+      "hits" : [
+        {
+          "_index" : "auto_complete_test",
+          "_type" : "_doc",
+          "_id" : "4",
+          "_score" : 4.158883,
+          "_source" : {
+            "text" : "붕어빵기계"
+          }
+        }
+      ]
+    }
+  }
+  ```
+
+
+
 - 초성 검색하기
 
   - 방식은 한글 자모를 대상으로 자동완성 기능을 구현하는 것과 동일하다.
@@ -1278,6 +1505,306 @@
   ```
 
 
+
+- 자동 완성, 초성 검색 시의 highlighting 문제
+
+  - Elasticsearch는 token 단위로 highlighting을 한다.
+    - 따라서 아래와 같이 index를 생성하고
+
+  ```json
+  // PUT auto_complete_test
+  {
+    "settings": {
+      "analysis": {
+        "filter": {
+          "1_15_edgegram": {
+            "type": "edge_ngram",
+            "min_gram": "1",
+            "max_gram": "15"
+          }
+        },
+        "tokenizer": {
+          "none_nori_tokenizer":{
+            "type":"nori_tokenizer",
+            "decompound_mode":"none"
+          }
+        },
+        "analyzer": {
+          "nori_auto_analyzer": {
+            "filter": [
+              "javacafe_jamo",
+              "1_15_edgegram"
+            ],
+            "type": "custom",
+            "tokenizer": "none_nori_tokenizer"
+          },
+          "nori_auto_search_analyzer": {
+            "filter": [
+              "javacafe_jamo"
+            ],
+            "type": "custom",
+            "tokenizer": "none_nori_tokenizer"
+          }
+        }
+      }
+    },
+    "mappings": {
+      "properties": {
+        "text": {
+          "type": "text",
+          "analyzer": "nori_auto_analyzer",
+          "search_analyzer": "nori_auto_search_analyzer",
+          "term_vector": "with_positions_offsets"
+        }
+      }
+    }
+  }
+  
+  // PUT auto_complete_test/_doc/1
+  {
+    "text":"붕어빵"
+  }
+  
+  // PUT auto_complete_test/_doc/2
+  {
+    "text":"잉어빵" 
+  }
+  
+  // PUT auto_complete_test/_doc/3
+  {
+    "text":"황금붕어빵"
+  }
+  
+  // PUT auto_complete_test/_doc/4
+  {
+    "text":"붕어빵기계"
+  }
+  ```
+
+  - 위 index를 대상으로 검색을 실행하면
+    - 아래와 같이 자동 완성 대상인 "부"가 포함된 token 전체가 highlight 된다.
+
+  ```json
+  // GET auto_complete_test/_search
+  {
+    "query": {
+      "bool": {
+        "should": [
+          {
+            "match_phrase_prefix": {
+              "text": "붕"
+            }
+          }
+        ]
+      }
+    },
+    "highlight": {
+      "fields": {
+        "text": {
+          "type":"fvh"
+        }
+      }
+    }
+  }
+  
+  // response
+  {
+    // ...
+    "hits" : {
+      // ...
+      "hits" : [
+        {
+          "_index" : "auto_complete_test",
+          "_type" : "_doc",
+          "_id" : "1",
+          "_score" : 3.963872,
+          "_source" : {
+            "text" : "붕어빵"
+          },
+          "highlight" : {
+            "text" : [
+              "<em>붕어빵</em>"
+            ]
+          }
+        },
+        {
+          "_index" : "auto_complete_test",
+          "_type" : "_doc",
+          "_id" : "3",
+          "_score" : 3.732967,
+          "_source" : {
+            "text" : "황금붕어빵"
+          },
+          "highlight" : {
+            "text" : [
+              "황금<em>붕어빵</em>"
+            ]
+          }
+        },
+        {
+          "_index" : "auto_complete_test",
+          "_type" : "_doc",
+          "_id" : "4",
+          "_score" : 3.732967,
+          "_source" : {
+            "text" : "붕어빵기계"
+          },
+          "highlight" : {
+            "text" : [
+              "<em>붕어빵</em>기계"
+            ]
+          }
+        }
+      ]
+    }
+  }
+  
+  ```
+
+  - 만약 일치하는 글자만 highlighting 돼야 한다면, 아래와 같이 index를 생성한다.
+    - tokenizer로 1글자씩 자르는 ngram tokenizer를 사용한다.
+    - 이후 동일한 데이터를 색인한다.
+
+  ```json
+  // PUT auto_complete_test
+  {
+    "settings": {
+      "analysis": {
+        "filter": {
+          "1_3_edgegram": {
+            "type": "edge_ngram",
+            "min_gram": "1",
+            "max_gram": "3"
+          }
+        },
+        "tokenizer": {
+          "11ngram": {
+            "type": "ngram",
+            "min_gram": 1,
+            "max_gram": 1,
+            "token_chars": [
+              "letter",
+              "digit"
+            ]
+          }
+        },
+        "analyzer": {
+          "ngram_auto_analyzer": {
+            "filter": [
+              "javacafe_jamo",
+              "1_3_edgegram"
+            ],
+            "type": "custom",
+            "tokenizer": "11ngram"
+          },
+          "ngram_auto_search_analyzer": {
+            "filter": [
+              "javacafe_jamo"
+            ],
+            "type": "custom",
+            "tokenizer": "11ngram"
+          }
+        }
+      }
+    },
+    "mappings": {
+      "properties": {
+        "text": {
+          "type": "text",
+          "analyzer": "ngram_auto_analyzer",
+          "search_analyzer": "ngram_auto_search_analyzer",
+          "term_vector": "with_positions_offsets"
+        }
+      }
+    }
+  }
+  ```
+
+  - 이후에 highlighting을 실행하면, 아래와 같이 한 글자 단위로 highlighting이 되는 것을 확인할 수 있다.
+
+  ```json
+  // GET auto_complete_test/_search
+  {
+    "query": {
+      "bool": {
+        "should": [
+          {
+            "match_phrase_prefix": {
+              "text": "부"
+            }
+          }
+        ]
+      }
+    },
+    "highlight": {
+      "fields": {
+        "text": {
+          "type":"fvh"
+        }
+      }
+    }
+  }
+  
+  // response
+  {
+    // ...
+    "hits" : {
+      // ...
+      "hits" : [
+        {
+          "_index" : "auto_complete_test",
+          "_type" : "_doc",
+          "_id" : "1",
+          "_score" : 1.0078521,
+          "_source" : {
+            "text" : "붕어빵"
+          },
+          "highlight" : {
+            "text" : [
+              "<em>붕</em>어빵"
+            ]
+          }
+        },
+        {
+          "_index" : "auto_complete_test",
+          "_type" : "_doc",
+          "_id" : "3",
+          "_score" : 0.9078999,
+          "_source" : {
+            "text" : "황금붕어빵"
+          },
+          "highlight" : {
+            "text" : [
+              "황금<em>붕</em>어빵"
+            ]
+          }
+        },
+        {
+          "_index" : "auto_complete_test",
+          "_type" : "_doc",
+          "_id" : "4",
+          "_score" : 0.9078999,
+          "_source" : {
+            "text" : "붕어빵기계"
+          },
+          "highlight" : {
+            "text" : [
+              "<em>붕</em>어빵기계"
+            ]
+          }
+        }
+      ]
+    }
+  }
+  ```
+
+  - 동작 방식
+    - ngram을 통해 모든 token을 길이 1로 자른다.
+    - 이후 잘린 token을 jamo_filter를 사용해 분해한다.
+    - jamo_filter로 분해된 token을 edge_ngram(min_gram=1, max_gram=3)으로 분해하는데, max_gram이 3인 이유는 초성, 중성, 종성으로 조합할 경우 최대 한 글자당 3개의 자모로 분해되기 때문이다.
+    - 이후 검색을 실행하면 검색어 또한 위 과정을 거쳐 분해된다(edge_ngram은 적용하지 않는다).
+    - "부"라는 검색어는 "ㅂㅜ"로 분해되고, match_phrase_prefix query를 통해 "ㅂㅜ", "ㅂㅜㅇ"과 일치하는 token을 가진 문서를 찾는다.
+    - 한 글자씩 개별 토큰이 일치하게 되고, fvh highlighter를 통해 highlighting이 실행된다.
 
 
 
@@ -2009,7 +2536,7 @@
     - `max_edits`: edit distance의 최댓값을 받는다(기본값은 2).
     - `prefix_length`: suggestion에 포함되기 위해 일치해야 하는 prefix character 개수의 최솟값을 받는다(기본값은1).
     - `min_word_length`: suggestion에 포함되기 위한 term의 최소 길이를 받는다(기본 값은 4).
-    - `min_doc_freq`: suggestion에 포함되기 위해 term이 전체 문서들 중 몇 개의 문서에 포함되어야 하는지를 지정한다. 정수를 주면 문서의 개수, 0~1 사이의 소수를 주면 percent가 설정된다.
+    - `min_doc_freq`: suggestion에 포함되기 위해 term이 전체 문서들 중 몇 개의 문서에 포함되어야 하는지를 지정한다(이 값을 초과하는 term만 포함된다). 정수를 주면 문서의 개수, 0~1 사이의 소수를 주면 percent가 설정된다.
     - `max_term_freq`: suggestion에 포함되기 위해 term이 전체 문서들 중 몇 개 미만의 문서에 포함되어야 하는지를 지정한다. 정수를 주면 문서의 개수, 0~1 사이의 소수를 주면 percent가 설정된다.
     - `string_distance`: edit distance를 구하는 방식을 선택한다.
   - `string_distance`는 아래 5가지 중 하나를 선택할 수 있다.

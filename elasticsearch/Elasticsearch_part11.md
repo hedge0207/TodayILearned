@@ -1335,8 +1335,13 @@
     - 현재는 비교적 크기가 작은 document를 대상으로 했지만, document의 크기가 커질수록 차이가 커질 수 있다.
 
   ```python
-  from elasticsearch import Elasticsearch, helpers
+  from elasticsearch import Elasticsearch
   from faker import Faker
+  
+  
+  INDEX_NAME = "test-index"
+  es_client = Elasticsearch("http://localhost:9200")
+  fake = Faker()
   
   N = 10000
   without_id = 0
@@ -1358,7 +1363,7 @@
   print(without_id / N)	# 1.1176
   print(with_id / N)		# 2.3076
   ```
-
+  
   - `_id`를 제외시켰을 때 속도가 빨라지는 이유
     - `_id`가 저장되는 stored fields는 row 형태로 저장되기에 column 형태로 저장되는 doc_values에 비해 retrieve 속도가 느리다.
 
