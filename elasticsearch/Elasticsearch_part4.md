@@ -1,21 +1,23 @@
 # 인덱스 생성하기
 
-- mapping & setting 없이 아래와 같이 인덱스명 만으로 생성이 가능하다.
+- 인덱스 생성
 
-  ```bash
-  $ curl -XPUT 'localhost:9200/<인덱스명>'
+  - mapping & setting 없이 아래와 같이 인덱스명 만으로 생성이 가능하다.
+  
+  ```http
+  PUT <index_name>
   ```
+  
+  - 인덱스명 규칙
+    - 소문자만 사용이 가능하다.
+    -  `\`, `/`, `*`, `?`, `"`, `<`, `>`, `|`, ` ` (space character), `,`, `#`는 사용이 불가능하다.
+    - `-`, `_`, `+`로 시작할 수 없다.
+    - `.` 혹은 `..`으로 생성할 수 없다.
+    - 255 bytes 이상으로 생성할 수 없다.
+    - `.`으로 시작하는 인덱스는 deprecate 될 예정이다(오직 hidden index와 plugin에서 관리하는 내부 인덱스에만 허용).
+  
 
 
-
-- 인덱스명 규칙
-  - 소문자만 사용이 가능하다.
-  -  `\`, `/`, `*`, `?`, `"`, `<`, `>`, `|`, ` ` (space character), `,`, `#`는 사용이 불가능하다.
-  - `-`, `_`, `+`로 시작할 수 없다.
-  - `.` 혹은 `..`으로 생성할 수 없다.
-  - 255 bytes 이상으로 생성할 수 없다.
-  - `.`으로 시작하는 인덱스는 deprecate 될 예정이다.
-    - 오직 hidden index와 plugin에서 관리하는 내부 인덱스에만 허용된다.
 
 
 
@@ -210,7 +212,7 @@
   ```json
   // GET numeric_detection/_mapping
   
-  # response
+  // response
   {
     "numeric_detection" : {
       "mappings" : {
@@ -340,8 +342,8 @@
 
   - 필드명에 `.`을 넣고 생성
 
-  ```bash
-  PUT mapping_test
+  ```json
+  // PUT mapping_test
   {
     "mappings": {
       "properties": {
@@ -355,9 +357,8 @@
 
   - 결과
 
-  ```bash
-  GET mapping_test/_mapping
-  
+  ```json
+  // GET mapping_test/_mapping
   {
     "mapping_test" : {
       "mappings" : {
@@ -426,7 +427,7 @@
     - 아래에서 title field는 field를 저장하고, content filed는 저장하지 않았다.
   
   ```json
-  PUT my-index-000001
+  // PUT my-index-000001
   {
     "mappings": {
       "properties": {
@@ -442,7 +443,7 @@
   }
   
   // data 색인
-  PUT my-index-000001/_doc/1
+  // PUT my-index-000001/_doc/1
   {
     "title":   "Some short title",
     "content": "A very long content field..."
@@ -453,7 +454,7 @@
     - 결과를 보면 `store: true`로 준 title은 정보가 나오지만, content는 나오지 않는다.
   
   ```json
-  GET my-index-000001/_search
+  // GET my-index-000001/_search
   {
     "stored_fields": [ "title", "content" ] 
   }

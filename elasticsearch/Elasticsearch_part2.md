@@ -511,7 +511,7 @@
   	"persistent":{
   		"cluster.routing.allocation.enable":"none"
   	}
-  }'
+  }
   ```
 
   - 프라이머리 샤드와 레플리카 샤드 데이터 동기화

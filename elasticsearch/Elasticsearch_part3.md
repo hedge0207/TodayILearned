@@ -1256,17 +1256,6 @@
 
 
 
-- Translog(Transactional log)
-  - Lucene의 변경사항은 commit이 발생해야만 disk에 저장되면서 영구적으로 반영된다.
-    - 이는 상대적으로 비용이 많이 드는 작업이므로 모든 색인, 삭제 작업이 발생할 때마다 실행할 수는 없다.
-    - Commit과 다음 commit 사이에 발생한 작업들은 process가 종료되거나 hardware에 문제가 생기면 유실될 수 있다.
-  - Commit이 비용이 많이 드는 작업이므로 각 shard는 translog라 불리는 transaction log에 작업들을 저장해둔다.
-    - 모든 shard들은 translog를 하나씩 가지고있다.
-    - 색인되고 삭제되는 모든 작업은 translog에 기록된다.
-    - Commit과 commit 사이에 문제가 생겨서 시스템이 내려가더라도, translog를 보고 복구가 가능하다.
-
-
-
 - Elasticsearch의 색인 처리 과정
   - Elasticsearch는 Lucene 기반으로 만들어져 색인 방식도 유사하다.
   - In-memory buffer와 translog에 data를 적재한다.
@@ -1283,6 +1272,10 @@
     - Flush가 발생하는 주기가 따로 있는 것은 아니다.
     - 아직 flush 되지 않은 translog와 각 flush를 수행하는 비용의 trade off를 고려하는 heuristic으로 flush 실행 여부를 결정한다.
     - 이러한 결정에는 translog에 얼마나 많은 transaction log가 적재되었는지, data의 크기, 마지막 flush 시점 등이 영향을 미친다.
+  - Refresh를 바로 실행하지 않는 이유는 아래와 같다.
+    - Refresh를 바로 실행할 경우 segment의 개수가 지나치게 많아질 수 있다.
+    - 또한 일정 기간 동안 모아뒀다가 한 번에 실행하는 것이 보다 자원을 효율적으로 사용할 수 있다.
+    - 이것이 Elasticsearch의 refresh_interval의 기본 값이 1초인 이유이며, Elasticsearch가 NRT로 동작하는 이유이다.
 
 
 
@@ -1377,6 +1370,10 @@
     - 그러나 translog가 있다면, refresh와 flush 사이에 장애가 발생하더라도 translog를 통해 복구가 가능하다.
     - 또한 Elasticsearch는 shard crash가 발생할 경우에도 translog를 사용한다.
     - Translog에 기록된 내용을 사용하면 shard를 완벽하게 복구할 수 있다.
+
+  - Lucene의 변경사항은 commit이 발생해야만 disk에 저장되면서 영구적으로 반영된다.
+    - 이는 상대적으로 비용이 많이 드는 작업이므로 모든 색인, 삭제 작업이 발생할 때마다 실행할 수는 없다.
+    - Commit과 다음 commit 사이에 발생한 작업들은 process가 종료되거나 hardware에 문제가 생기면 유실될 수 있다.
 
 
 
@@ -1545,7 +1542,7 @@
 
   - 기본형
 
-  ```bash
+  ```http
   DELETE /<index>/_doc/<document_id>
   ```
 

@@ -425,22 +425,19 @@
 
   - size를 표시할 때 어떤 단위로 보여줄지 설정이 가능하다.
     - `bytes=<단위>`를 입력하면 된다.
-
-
+  
   ```http
   GET _cat/indices?h=i,p,r,dc,ss,cds&bytes=kb
   ```
-
-  - `expand_wildcards` 옵션을 통해 open 상태인 인덱스만 보는 것도 가능하다.
-
+  
+    - `expand_wildcards` 옵션을 통해 open 상태인 인덱스만 보는 것도 가능하다.
+  
   ```http
   GET _cat/indices?h=i,status,p,r,dc,ss,cds&s=cds:desc&expand_wildcards=open
   ```
-
-
-
-- 인덱스 상태 정보
-
+  
+  - 인덱스 상태 정보
+  
   ```json
   // GET _cat/indices?format=json
   [
@@ -458,6 +455,8 @@
         }
   ]
   ```
+
+
 
 
 
@@ -495,11 +494,9 @@
   ```http
   GET _cluster/allocation/explain
   ```
-
-
-
-- 응답
-
+  
+  - 응답
+  
   ```json
   [
   	{
@@ -514,9 +511,9 @@
     	}
   ]
   ```
-
+  
   - state
-
+  
   | 값           | 의미                                                         |
   | ------------ | ------------------------------------------------------------ |
   | STARTED      | 정상적인 상태                                                |
@@ -530,30 +527,29 @@
 
   - `_cat` API
     - `v`, `h`, `format` 옵션을 모두 사용 가능하다.
-
-
+  
   ```http
   GET _cat/segments[/<target>]
   ```
-
-  - Index segments API
-    - 특정 index에 속한 segments들만 확인할 수 있다.
-    - Application에서 사용할 때는 이 API를 사용하는 것이 권장된다.
-
+  
+    - Index segments API
+      - 특정 index에 속한 segments들만 확인할 수 있다.
+      - Application에서 사용할 때는 이 API를 사용하는 것이 권장된다.
+  
   ```http
   GET <index_name>/_segments
   ```
-
-  - Index segments API의 response
-    - Segment의 이름은 실제 file이름이다(`<data_dir>/indices/<index_uuid>/<shard>/index`에서 확인할 수 있다).
-    - `num_docs`은 삭제된 문서는 포함하지 않으며, nested documents들도 별개의 문서로 집계한다.
-    - `committed`가 true면 disk와 segment가 sync되었다는 것을 의미하며, false면 disk와 sync되어 있지 않다는 의미이다.
-    - Disk와 sync되어 있다면(committed가 true면) ES가 reboot 되더라도 segment data에 유실이 없다.
-    - `committed`가 false라고 하더라도, commit되지 않은 segment의 data들은 trans log에 기록되어 ES가 reboot될 때 trans log에서 data를 읽어올 수 있으므르로 유실이 발생할 일은 거의 없다.
-    - `search`가 true면 검색이 가능하다는 의미이고, false이면 refresh를 통해 검색이 가능하게 해줘야한다는 의미이다.
-    - `version`은 Lucene version을 의미한다.
-    - `attributes`: 압축과 관련된 정보를 보여준다.
-
+  
+    - Index segments API의 response
+      - Segment의 이름은 실제 file이름이다(`<data_dir>/indices/<index_uuid>/<shard>/index`에서 확인할 수 있다).
+      - `num_docs`은 삭제된 문서는 포함하지 않으며, nested documents들도 별개의 문서로 집계한다.
+      - `committed`가 true면 disk와 segment가 sync되었다는 것을 의미하며, false면 disk와 sync되어 있지 않다는 의미이다.
+      - Disk와 sync되어 있다면(committed가 true면) ES가 reboot 되더라도 segment data에 유실이 없다.
+      - `committed`가 false라고 하더라도, commit되지 않은 segment의 data들은 trans log에 기록되어 ES가 reboot될 때 trans log에서 data를 읽어올 수 있으므르로 유실이 발생할 일은 거의 없다.
+      - `search`가 true면 검색이 가능하다는 의미이고, false이면 refresh를 통해 검색이 가능하게 해줘야한다는 의미이다.
+      - `version`은 Lucene version을 의미한다.
+      - `attributes`: 압축과 관련된 정보를 보여준다.
+  
   ```json
   "shards": {
       "0": [
@@ -585,13 +581,14 @@
       ]
   }
   ```
-
-  - `compound`
-    -  true면 Lucene이 file descriptor를 아끼기 위해 segment의 모든 파일들을 하나의 파일에 저장했다는 의미이다.
-    -  Lucene에서 segment는 compound 방식과 multifile 방식이라는 두 가지 방식 중 하나로 저장된다.
-    -  Multifile 방식은 segment를 여러 개의 file을 사용해서 저장하는 방식으로, term vector, inverted index, stored field 등을 모두 개별 file에 작성한다.
-    -  Multifile의 단점은 너무 많은 file을 관리해야 한다는 점이다. OS에서는 open file의 개수가 제한되어 있는데(linux의 경우 `ulimit -n <숫자>` 옵션으로 변경 가능), 너무 많은 segment file이 열려 있을 경우 `Too many open files` error가 발생할 수 있다.
-    -  Compound 방식은 segment의 여러 file들(term vector, inverted index, stored field 등)을 하나의 file에 저장하는 방식으로 file descriptor를 multifile 방식에 비해 덜 필요로 한다는 장점이 있다.
+  
+    - `compound`
+      -  true면 Lucene이 file descriptor를 아끼기 위해 segment의 모든 파일들을 하나의 파일에 저장했다는 의미이다.
+      -  Lucene에서 segment는 compound 방식과 multifile 방식이라는 두 가지 방식 중 하나로 저장된다.
+      -  Multifile 방식은 segment를 여러 개의 file을 사용해서 저장하는 방식으로, term vector, inverted index, stored field 등을 모두 개별 file에 작성한다.
+      -  Multifile의 단점은 너무 많은 file을 관리해야 한다는 점이다. OS에서는 open file의 개수가 제한되어 있는데(linux의 경우 `ulimit -n <숫자>` 옵션으로 변경 가능), 너무 많은 segment file이 열려 있을 경우 `Too many open files` error가 발생할 수 있다.
+      -  Compound 방식은 segment의 여러 file들(term vector, inverted index, stored field 등)을 하나의 file에 저장하는 방식으로 file descriptor를 multifile 방식에 비해 덜 필요로 한다는 장점이 있다.
+  
 
 
 
