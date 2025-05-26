@@ -188,14 +188,14 @@
   - Young Generation
     - 새로운 객체가 생성되었을 때 저장되는 공간이다.
     - 이 영역이 다 차게 되면 **Minor GC**가 실행된다.
-    - Eden, survivor1, survivor2의 3가지 영역으로 나뉜다.
+    - Eden, survivor0, survivor1의 3가지 영역으로 나뉜다.
     - 새로운 객체가 생성되면 Eden 영역에 저장되고, Eden 영역이 가득 차면 Minor GC가 실행된다.
     - 참조되지 않은 객체들은 Minor GC가 실행되면서 삭제되고, 삭제되지 않은 객체들은 survivor 영역 중 하나로 이동한다.
     - 두 개의 survivor 영역 중 하나가 차게 되면 해당 영역에 Minor GC가 실행되고, 살아남은 object는 다른 GC가 실행되지 않은 survivor 영역으로 이동하게 된다.
   - Old Generation
     - 여러 번의 Minor GC를 거치고도 살아남은 객체들은 Old Generation으로 이동한다.
     - 한 번의 Minor GC에서 살아남을 때 마다 age가 1씩 추가되는 데 age가 몇일 때 부터 Old 영역으로 이동시킬지를 설정 가능하다.
-    - Old 영역에서 메모리가 가득 차면 **Major GC**(혹은 **Full GC**)가 발생한다.
+    - Old 영역에서 메모리가 가득 차면 **Major GC**가 발생한다.
   - Perm(Permenet)
     - 이 영역은 Java8부터 삭제되었다.
 
@@ -204,12 +204,43 @@
 - Garbage Collection(GC)
   - heap memory를 무한대로 늘릴 수 없으므로 주기적으로 정리해줘야 한다.
     - 시간이 갈수록 사용 중인 heap memory영역이 점점 증가하다가 어느 순간 사용할 수 있는 공간이 부족해지면 사용 중인 영역에서 더 이상 사용하지 않는 데이터들을 지워서 공간을 확보하는데 이런 일련의 과정을 **garbage collection**이라 부른다.
+    - 요약하면 GC는 heap memory를 주기적으로 정리해주는 작업이다.
   - GC는 아래의 가정(**weak generational hypothesis**)에 근거한다.
     - 대부분의 객체는 금방 접근 불가 상태(unreachable)가 된다.
     - 오래된 객체에서 젊은 객체로의 참조는 아주 적게 존재한다.
     - 즉 대부분의 객체는 일회성이며, 메모리에 오래 남아있는 경우는 드물다는 것이다.
     - 힙 메모리가 Old/Young 영역으로 나뉜 것 역시 이 가설에 근거한다.
-  - 다양한 GC 방식이 존재하며 상황에 따라 적절한 방식을 사용해야 한다.
+
+
+
+- Elasticsearch의 GC
+
+  - 기본적으로 G1GC 방식을 사용한다.
+    - G1GC는 STW를 최소화하기 위해 고안된 알고리즘이다.
+    - G1GC는 전체 heap을 region이라는 고정된 크기의 블록으로 나누고(Eden, Survivor, Old) 각각의 영역에 대해 GC를 수행한다.
+    - G1GC는 young region을 대상으로 수행되는 Young GC, young 영역과 old 영역을 대상으로 하는 mixed GC, 전체 heap을 대상으로 하는 Full GC 등이 있다.
+    - G1GC에서는 minor GC라는 표현 대신 young GC라는 표현을 사용하며, major GC라는 표현 대신 mixed GC라는 표현을 사용한다.
+    
+  - Mixed GC
+    - Old region을 수집하는 전통적인 Major GC를 여러 구역으로 쪼개어 여러 번 실행하는 방식이다.
+    - 매 실행마다 Young region 전체 + 쪼개진 Old 영역의 일부 구역을 대상으로 수집을 수행한다.
+    - Young GC를 포함하는 상위 개념으로 볼 수 있다.
+    - G1GC가 Major GC를 대체하기 위해 도입한 점진적이고 부분적인 Old 영역 수집 방식이다.
+  - 모든 종류의 GC는 Stop The World(STW)를 발생시킨다.
+    - 그러나 그 범위와 유지 기간은 서로 다르다.
+  
+  | GC       | 범위              | 기간            |
+  | -------- | ----------------- | --------------- |
+  | Young GC | Young region      | 1ms ~ 50ms      |
+  | Mixed GC | Young, Old region | 200ms <         |
+  | Full GC  | Heap 전체         | 수백 ms ~ 수 초 |
+  
+  - Full GC
+    - Young, Old, Metaspace 영역을 포함한 JVM 전체 힙 메모리를 수집하는 작업.
+    - 이 과정에서 모든 애플리케이션 스레드가 일시 정지(STW)된다.
+    - G1GC의 Mixed GC가 실패할 때 fallback으로 수행되거나, Mixed GC로도 수집이 불충분할 때 발생한다.
+    - 발생 자체를 피해야할 GC이며, G1GC는 이를 최대한 방지하기 위해 고안된 방식이다.
+    - Full GC가 최대한 발생하지 않도록 관리해야한다.
 
 
 
@@ -323,7 +354,7 @@
 
 ​	
 
-- heap memory 크기를 정하는 규칙
+- Heap memory 크기를 정하는 규칙
   - heap 사이즈를 늘릴수록 cache를 위한 메모리도 증가하지만, 그만큼 garbage collection 시간도 증가(Stop-The-World 증가)하므로 주의해야 한다.
     - 작을수록 색인 및 검색 성능 저하와 함께 OOM이 발생할 수 있다.
     - 클수록 색인 성능 및 검색 성능이 향상될 수 있지만, Stop-The-World가 길게 발생할 수 있다.
@@ -372,7 +403,7 @@
 
 
 
-- Elasticsearch에서 swapping을 비활성화해야 하는 이유
+- Elasticsearch를 사용할 때 swapping을 비활성화해야 하는 이유
 
   - 운영체제 입장에서 봤을 때 swapping은 많은 resource를 사용하는 작업이다.
   - Elasticsearch가 동작하는 데 필요한 memory도 swapping으로 인해 언제든지 disk로 swapping될 수 있다.
