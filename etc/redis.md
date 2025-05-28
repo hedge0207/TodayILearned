@@ -81,6 +81,7 @@
     - 위 작업과 동시에 Master는 이후부터 들어오는 쓰기 명령들을 Buffer에 저장해 놓는다.
     - 덤프 작업이 완료되면 Master는 Slave에 해당 RDB 파일을 전달해주고, Slave는 디스크에 저장한 후에 메모리로 로드한다.
     - Buffer에 모아두었던 쓰기 명령들을 전부 slave로 보내준다.
+  - 
 
 
 
@@ -193,7 +194,9 @@
 
 
 
-# HA
+
+
+# 구성
 
 - 레디스는 단일 인스턴스만으로도 충분히 운영이 가능하다.
   - 그러나 아래와 같은 경우 다른 운영 방식을 도입할 필요가 있다.
@@ -232,6 +235,9 @@
     - 이 파일을 받은 레플리카 노드는 데이터를 메모리로 로드한다.
   - 마스터까지만 데이터가 입력된 후 마스터 노드가 죽는다면 이 데이터는 레플리카까지 전달되지 않았기에 유실이 발생할 수 있다.
     - 현재는 이 현상을 디버깅하기 힘들 정도로 데이터의 전달 속도가 매우 빠르기 때문에 유실이 자주 발생되지는 않을 것이다.
+  - 이 방식은 고가용성을 보장하지는 않는다.
+    - 이 구성 만으로는 자동 장애 감지 및 복구가 불가능하다.
+    - 이 구성의 목적은 읽기 부하의 분산에 있지 고가용성의 확보에 있지 않다.
 
 
 
@@ -288,11 +294,7 @@
 
 
 
-
-
-# Redis 사용해보기
-
-## 설치
+# 설치
 
 - Docker로 Redis 설치하기
 
@@ -313,36 +315,8 @@
   - Docker 컨테이너 생성 및 실행
     - 기본 port는 6379이다.
   
-  
   ```bash
   $ docker run --network <network 이름> -p <port 번호>:<port 번호> redis
-  ```
-  
-  - redis-cli로 redis 접속하기
-    - `--rm` 옵션을 주면 컨테이너가 내려갈 시에 컨테이너도 함께 삭제되며, 컨테이너를 띄울 때에도 같은 이름의 컨테이너가 있으면 해당 컨테이너를 삭제하고 띄운다.
-  
-  ```bash
-  $ docker run -it --network <network 이름> --rm redis-cli -h <redis 컨테이너 이름>
-  ```
-  
-  - redis-cli를 docker로 띄우지 않고도 접속이 가능하다.
-    - 아래와 같이 설치 후 사용하면 된다.
-    - `-a`의 경우 `requirepass`를 설정해줬으면 해당 password를 입력하면 된다.
-  
-  ```bash
-  # 설치
-  $ sudo apt-get install redis-tools
-  
-  # 사용
-  $ redis-cli [-h 호스트 주소] [-p 포트] [-a password]
-  ```
-  
-  - 설정 변경하기
-    - redis.cfg 파일을 생성하고 설정하고 싶은 내용을 작성한다.
-    - 이후 해당 파일을  컨테이너 내부의 `/usr/local/etc/redis/redis.conf` 경로에 볼륨을 잡아준다.
-  
-  ```bash
-  $ docker run --network <network 이름> -v <redis.cfg 파일 경로>:</usr/local/etc/redis/redis.conf> redis
   ```
 
 
@@ -360,13 +334,13 @@
   ```
 
   - persistence 관련 파라미터
-    - save는 time 동안 count 만큼의 key 변경이 발생하면(time 만큼의 시간이 지났을 때) rdb 파일로 저장한다(사용하지 안을 경우 `""`로 주면 된다).
-    - save는 여러 개 지정할 수 있으며 or 연산이므로 지정한 조건들 중 하나라도 일치하면 저장된다.
-    - stop-writes-on-bgsave-error가 yes인 경우 RDB 파일을 작성하다 실패하면 이후 모든 쓰기 요청을 막는다(SAVE 명령에만 적용되며 BGSAVE에는 적용되지 않는다).
-    - appendonly: AOF 기능을 사용할지 여부를 설정한다.
-    - appendfsync: AOF 파일에 기록하는 시점을 설정한다.
+    - `save`는 time 내에 count 만큼의 key 변경이 발생하면 dump.rdb 파일을 작성한다(사용하지 않을 경우 `""`로 주면 된다).
+    - `save`는 여러 개 지정할 수 있으며 or 연산이므로 지정한 조건들 중 하나라도 일치하면 저장된다.
+    - `stop-writes-on-bgsave-error`가 yes인 경우 RDB 파일을 작성하다 실패하면 이후 모든 쓰기 요청을 막는다(SAVE 명령에만 적용되며 BGSAVE에는 적용되지 않는다).
+    - `appendonly`: AOF 기능을 사용할지 여부를 설정한다.
+    - `appendfsync`: AOF 파일에 기록하는 시점을 설정한다.
   - auto-aof-rewrite-percentage: AOF 파일 사이즈가 숫자값 % 이상으로 커지면 rewrite한다(%의 기준은 레디스 서버가 시작할 시점의 AOF 파일 사이즈이다).
-  
+
   ```txt
   # RDB
   save [time], [count]
@@ -377,28 +351,119 @@
   appendfsync [always/everysec/no]
   auto-aof-rewrite-percentage [0-100]
   ```
-  
+
   - replica 관련 파라미터들
-  
+
   ```bash
   replicaof <마스터 IP> <마스터 port>
   masterauth <"마스터의 requirepass"
   ```
+
     - back/foreground 실행 설정
-        - no로 설정할 경우(default) foregrund로 실행된다.
-  
+      - no로 설정할 경우(default) foregrund로 실행된다.
+
   ```bash
   daemonize [yes/no]
   ```
-  
+
     - 메모리 관련 설정
       - 64bit 환경에서는 maxmemory의 default 값은 0이며, swap 메모리를 사용할 때까지 계속해서 커지게 된다.
       - 32bit 환경에서는 3GB가 기본 값이다.
-  
+
   ```bash
   maxmemory <가용 메모리의 60~70%>
   maxmemory-policy <policy>
   ```
+
+
+
+
+
+## Replication으로 설치
+
+- 2 대의 서버에 master-slave 구조로 설치한다.
+  - 설치를 위해 Redis Docker image를 준비한다.
+  
+  ```bash
+  $ docker pull redis:6.2.6
+  ```
+  
+  - 앞서 말했듯 이 구조는 고가용성을 지원하지는 않는다.
+
+
+
+- 설치하기
+
+  - A 서버에 아래와 같이 docker-compose file을 작성한다.
+
+  ```yaml
+  services:
+    redis-master:
+      image: redis:6.2.6
+      container_name: redis-master
+      ports:
+        - 6379:6379
+      command: redis-server --appendonly yes
+  ```
+
+  - Redis container를 실행한다.
+
+  ```bash
+  $ docker compose up
+  ```
+
+  - B서버에 아래와 같이 docker-compose file을 작성한다.
+
+  ```yaml
+  services:
+    redis-slave:
+      image: redis:6.2.6
+      container_name: redis-slave
+      ports:
+        - 6379:6379
+      command: redis-server --replicaof <serverA_host> 6379
+  ```
+
+  - Redis container를 실행한다.
+
+  ```bash
+  $ docker compose up
+  ```
+
+
+
+- 테스트
+
+  - Python Redis client를 사용하여 master와 slave 모두에 연결해본다.
+
+  ```python
+  from redis import Redis
+  
+  master_redis = Redis(host="<serverA_host>")
+  slave_redis = Redis(host="<serverB_host>")
+  
+  # 둘 모두 연결은 가능하다.
+  print(master_redis.ping())		# True
+  print(slave_redis.ping())		# True
+  ```
+
+  - 다만 slave node의 경우 쓰기는 불가능하고 읽기만 가능하다.
+
+  ```python
+  from redis.exceptions import ReadOnlyError
+  
+  
+  master_redis.set("foo", "bar")
+  try:
+      slave_redis.set("baz", "qux")
+  except ReadOnlyError:
+      print("Error!")			# Error!
+  
+  master_redis.get("foo")		# b'bar'
+  slave_redis.get("bar")		# b'bar'
+  ```
+
+
 
 
 
@@ -832,6 +897,8 @@
 
 
 
+
+# Redis Clients
 
 ## CLI
 
