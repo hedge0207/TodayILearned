@@ -330,3 +330,430 @@
     - 위 코드를 보면 `EventStreamer`가 인터페이스에 의존하게 된 것 외에도 추가적인 변경 사항이 있는데, 이는 `DataTarget` 객체를 직접 생성하지 않고 생성자 함수의 인자로 받는다는 것이다.
     - 이를 통해 보다 유현한 사용이 가능하다.
 
+
+
+
+
+
+
+# Python과 decorator
+
+- 함수 데코레이터
+
+  - 함수에 데코레이터를 사용하면 다양한 종류의 로직을 추가할 수 있다.
+    - 일반적으로 유효성 검사, 사전조건 검사, 함수이 시그니처 변경, 함수의 결과 캐싱 등에 사용된다.
+    - 아래 코드는 특정 예외에 대해 특정 횟수만큼 재시도하는 데코레이터이다.
+
+  ```python
+  def retry(func):
+      @wraps(func)
+      def wrapped(*args, **kwargs):
+          last_raise = None
+          RETRIES_LIMIT = 3
+          for _ in range(RETRIES_LIMIT):
+              try:
+                  return func(*args, **kwargs)
+              except Exception as e:
+                  logger.info("retry")
+                  last_raised = e
+          raise last_raised
+      return wrapped
+  ```
+
+  - 위에서 작성한 데코레이터는 아래와 같이 적용할 수 있다.
+    - `@retry`는 `run_operation = retry(run_operation)`을 실행해주는 문법적 설탕이다.
+
+  ```python
+  @retry
+  def run_operation(task):
+      return task.run()
+  ```
+
+
+
+- 클래스 데코레이터
+
+  - 클래스 데코레이터 사용의 이점
+    - 코드 재사용과 DRY 원칙의 모든 이점을 공유한다.
+    - 클래스 데코레이터를 사용하면 여러 클래스가 특정 인터페이스나 기준을 따르도록 강제할 수 있다.
+    - 데코레이터를 통해 클래스의 점진적인 보강이 가능하다.
+  - 클래스 데코레이터를 사용하지 않은 코드
+    - 아래 코드는 시간이 지남에 따라 아래와 같은 문제가 발생할 수 있다.
+    - 이벤트와 직렬화 클래스가 1:1로 매핑되어 있으므로 직렬화 클래스가 점점 많아지게 된다.
+    - `LoginEvnt.serialize()` 메서드는 모든 이벤트 클래스가 구현해야한다.
+
+  ```python
+  class LoginEventSerializer:
+      def __init__(self, event):
+          self._event = event
+      
+      def serialize(self) -> dict:
+          return {
+              "username": self._event.username,
+              "password": "private_information",
+              "ip": self._event.ip,
+              "timestamp": self._event.timestamp.strftime("%Y-%m-%d %H:%M")
+          }
+  
+  @dataclass
+  class LoginEvnt:
+      # 이벤트와 직렬화 클래스가 1:1로 매핑된다.
+      SERIALIZER = LoginEventSerializer
+      
+      username: str
+      password: str
+      ip: str
+      timestamp: datetime
+      
+      def serialize(self) -> dict:
+          return self.SERIALIZER(self).serialize()
+  ```
+
+  - 데코레이터를 사용하도록 변경하기
+    - 데코레이터를 사용하면 다른 클래스의 코드를 확인하지 않고도 각 필드가 어떻게 처리되는지 쉽게 알 수 있다.
+    - 클래스 데코레이터에 전달된 인수를 읽는 것만으로도 username과 ip는 수정되지 않고, password는 숨겨지고, timestamp는 포매팅 된다는 것을 알 수 있다.
+
+  ```python
+  from datetime import datetime
+  from dataclasses import dataclass
+  
+  
+  def hide_field(field) -> str:
+      return "private_information"
+  
+  def format_time(field_timestamp: datetime) -> str:
+      return field_timestamp.strftime("%Y-%m-%d %H:%M")
+  
+  def show_original(event_field):
+      return event_field
+  
+  
+  class EventSerializer:
+      def __init__(self, serialization_fields: dict) -> None:
+          self.serialization_fields = serialization_fields
+      
+      def serialize(self, event) -> dict:
+          return {
+              field: transformation(getattr(event, field))
+              for field, transformation
+              in self.serialization_fields.items()
+          }
+  
+  
+  class Serialization:
+      def __init__(self, **transformations):
+          self.serializer = EventSerializer(transformations)
+          
+      def __call__(self, event_class):
+          def serialize_method(event_instance):
+              return self.serializer.serialize(event_instance)
+          event_class.serialize = serialize_method
+          return event_class
+  
+  
+  @Serialization(
+      username=show_original,
+      password=hide_field,
+      ip=show_original,
+      timestamp=format_time
+  )
+  @dataclass
+  class LoginEvent:
+      username: str
+      password: str
+      ip: str
+      timestamp: datetime
+      
+      
+  
+  login_event = LoginEvent(username="John", password="1q2w3e4r", ip="127.0.0.1", timestamp=datetime.now())
+  print(login_event.serialize())	# {'username': 'John', 'password': 'private_information', 'ip': '127.0.0.1', 'timestamp': '2025-05-09 14:35'}
+  ```
+
+
+
+- 중첩 함수를 사용한 데코레이터
+
+  - 데코레이터는 간단히 말해 함수를 파라미터로 받아 함수를 반환하는 함수이다.
+    - 함수형 프로그래밍에서 함수를 받아서 함수를 반환하는 함수를 고차 함수라 부르는데, 이와 같은 개념이다.
+  - 데코레이터에 파라미터를 추가하려면 다른 수준의 간접 참조가 필요하다.
+    - 첫 번째 함수는 파라미터를 받아서 내부 함수에 전달하고, 두 번째 함수는 데코레이터가 될 함수이며, 세 번째 함수는 데코레이팅의 결과를 반환하는 함수다.
+    - 즉 최소 세 단계의 중첩 함수가 필요하다.
+  - @ 구문은 데코레이팅 객체에 대한 연산 결과를 반환한다.
+    - 즉 `@retry(arg1, arg2, ...)`는 의미상 아래와 같다.
+    - `<original_function> = retry(args1, args2, ...)(<original_function>)`
+  - 중첩 함수를 사용하여 파라미터를 받도록 변경한 코드는 아래와 같다.
+
+  ```python
+  from typing import Optional, Sequence
+  from functools import wraps
+  
+  
+  _DEFAULT_RETRIES_LIMIT = 3
+  
+  def with_retry(retries_limit: int = _DEFAULT_RETRIES_LIMIT, allowed_exceptions: Optional[Sequence[Exception]] = Exception):    
+      def retry(func):
+          @wraps(func)
+          def wrapped(*args, **kwargs):
+              last_raise = None
+              for _ in range(retries_limit):
+                  try:
+                      return func(*args, **kwargs)
+                  except allowed_exceptions as e:
+                      print("retry")
+                      last_raised = e
+              raise last_raised
+          return wrapped
+      return retry
+  ```
+
+  - 위 데코레이터는 아래와 같이 적용할 수 있다.
+
+  ```python
+  @with_retry(retries_limit=2, allowed_exceptions=(ZeroDivisionError, AttributeError))
+  def run_with_custom_params(task):
+      return task.run()
+  ```
+
+
+
+- 객체를 사용한 데코레이터
+
+  - 앞에서는 데코레이터에 파라미터를 추가하기 위해 세 단계의 중첩된 함수를 사용했다.
+  - 클래스를 사용하여 데코레이터를 정의하면 보다 깔끔한 방식으로 데코레이터에 파라미터를 전달할 수 있다.
+    - `__init__` 메서드에 파라미터를 전달한 다음 `__call__`메서드에 데코레이터의 로직을 구현하면 된다.
+
+  ```python
+  _DEFAULT_RETRIES_LIMIT = 3
+  
+  class WithRetry:
+      def __init__(self, retires_limit: int = _DEFAULT_RETRIES_LIMIT, allowed_exceptions: Optional[Sequence[Exception]] = Exception):
+          self._retires_limit = retries_limit
+          self._allowed_exceptions = allowed_exceptions
+      
+      def __call__(self, func):
+          @wraps(func)
+          def wrapped(*args, **kwargs):
+              last_raise = None
+              for _ in range(retires_limit):
+                  try:
+                      return func(*args, **kwargs)
+                  except allowed_exceptions as e:
+                      print("retry")
+                      last_raised = e
+              raise last_raised
+          return wrapped
+  ```
+
+  - 사용 방법은 이전과 거의 유사하다.
+
+  ```python
+  @WithRetry(retries_limit=2, allowed_exceptions=(ZeroDivisionError, AttributeError))
+  def run_with_custom_params(task):
+      return task.run()
+  ```
+
+
+
+- 기본값을 가진 데코레이터
+
+  - 데코레이터의 파라미터에 기본값이 있다고 하더라도, 대상 함수에 데코레이터를 추가할 때 괄호가 없으면 기본값이 적용되지 않는다.
+    - 괄호가 없는 경우, 첫 번째 파라미터로 함수가 전달되지만, 괄호가 있는 경우 첫 번째 파라미터로 None이 전달되기 때문이다.
+
+  ```python
+  # 아래와 같이 아무 파라미터를 넘기지 않더라도 괄호를 달면 기본값이 적용되지만
+  @retry()
+  def my_function(): ...
+  
+  # 아래와 같이 괄호를 달지 않으면 기본값이 적용되지 않는다.
+  @retry
+  def my_function(): ...
+  ```
+
+  - 괄호 없이도 기본값이 적용되도록 데코레이터 생성하는 방법1
+    - 가장 간단한 방법은 조건문으로 첫 번째 인자로 오는 함수가 None인지에 따라 분기하는 방법이다.
+
+  ```python
+  from functools import wraps
+  
+  
+  def decorator(func=None, *, x=3, y=4):
+      if func is None:
+          def decorated(func):
+              @wraps(func)
+              def wrapped():
+                  return func(x, y)
+              return wrapped
+          return decorated
+      else:
+          @wraps(func)
+          def wrapped():
+              return func(x, y)
+          return wrapped
+  
+  
+  @decorator
+  def sum_(x, y):
+      return x + y
+  
+  print(sum_())
+  ```
+
+  - 괄호 없이도 기본값이 적용되도록 데코레이터 생성하는 방법2
+    - 래핑된 데코레이터의 일부를 추상화한 다음 `functools.partial`을 사용해 함수의 일부분에 적용하는 것이다.
+
+  ```python
+  def decorator(func=None, *, x=3, y=4):
+      if function is None:
+          return lambda f: decorator(f, x=x, y=y)
+      
+      @wraps(func)
+      def wrapped():
+          return func(x, y)
+      return wrapped
+  ```
+
+  - 위 방식은 모두 데코레이터의 파라미터를 키워드 인자로 받는다는 공통점이 있다.
+    - 데코레이터의 파라미터는 기본값을 가지고 있는지에 관계 없이 키워드 인자로 설정하는 것이 좋다.
+    - 데코레이터를 적용할 때 각 값이 하는 일에 대한 컨텍스트 정보를 제공할 수 있기 때문이다.
+
+
+
+- 코루틴을 위한 데코레이터
+
+  - Python의 비동기 프로그래밍 구문은 일반 구문과 차이가 있으며, 이는 데코레이터도 마찬가지다.
+    - 간단하게 생각하면 코루틴에 대한 데코레이터를 작성하려면 새로운 구문(래핑 할 객체를 `def`이 아닌 `async def`으로 선언하고, 래핑된 코루틴을 `await`한다)을 사용하면 된다.
+    - 문제는 우리가 만든 데코레이터를 함수와 코루틴에 모두 적용하고자 하는 경우이다.
+    - 각각을 따로 지원하는 두 개의 데코레이터를 만드는 것이 가장 좋은 방법일 수도 있지만, 데코레이터 사용자에게 보다 간단한 인스턴스를 제공하기 위해 내부적으로 어떤 데코레이터를 사용해야 하는지 분기해주는 디스패치 래퍼를 만들 수 있다.
+    - 이는 마치 데코레이터를 위한 facade를 만드는 것과 같다.
+  - 코루틴에 대해 한 가지 주의할 점이 있다.
+    - 데코레이터는 호출 가능한 인자를 받아서 파라미터와 함께 그것을 호출하는데, 코루틴을 받았을 경우에도 await 없이 호출한다는 점이다.
+    - 이렇게 하면 코루틴 객체(이벤트 루프에 전달할 작업)가 생성되지만 작업이 끝날 때까지 기다리지는 않는다.
+    - 즉 나중에 `await coro()`를 호출하는 곳에서 결과를 알 수 있다.
+    - 일반적으로는 전달 받은 코루틴에 대한 처리를 하는 것을 권장한다.
+  - 예시
+    - 두 번째 래퍼는 코루틴을 위해 필요한데, 이 부분이 없다면 두 가지 문제가 발생한다.
+    - 첫 번째 문제는 await 없이 코루틴을 호출하면 실제로는 작업이 끝나길 기다린 것이 아니므로 정확한 결과가 아니다.
+    - 두 번째 문제는 반환하는 dictionary에서 result키에 대한 값은 실제 결과 값이 아니라 코루틴이라는 것이다.
+    - 결과적으로 나중에 await 없이 result 키에 대한 값을 사용하려고 하면 에러가 발생한다.
+
+  ```python
+  from functools import wraps
+  import time
+  import inspect
+  
+  def timing(callable):
+      @wraps(callable)
+      def wrapped(*args, **kwargs):
+          start = time.time()
+          result = callable(*args, **kwargs)
+          latency = time.time() - start
+          return {"latency": latency, "result": result}
+      
+      @wraps(callable)
+      async def warpped_coro(*args, **kwargs):
+          start = time.time()
+          result = await callable(*args, **kwargs)
+          latency = time.time() - start
+          return {"latency": latency, "result": result}
+      
+      if inspect.iscoroutinefunction(callable):
+          return warpped_coro
+      return wrapped
+  ```
+
+
+
+- 데코레이터를 위한 확장 구문
+
+  - Python 3.9에서는 PEP-614를 받아들여 보다 일반화된 문법을 지원하는 새로운 데코레이터 문법이 추가되었다.
+    - 기존에는 @를 사용할 수 있는 범위가 제한적이어서 모든 함수 표현식에 적용할 수 없었다.
+    - Python 3.9부터는 이러한 제약이 해제되어 보다 복잡한 표현식을 데코레이터에 사용할 수 있게 되었다.
+  - 예시
+    - 아래는 함수에서 호출된 파라미터의 로그를 남기는 데코레이터이다.
+    - 내부 함수의 정의를 데코레이터 호출 시 두 개의 람다 표현식으로 대체했다.
+
+  ```python
+  def _log(f, *args, **kwargs):
+      print(f"function_name: {f.__qualname__!r}, params: {args=}, {kwargs=}")
+      return f(*args, **kwargs)
+  
+  @(lambda f: lambda *args, **kwargs: _log(f, *args, **kwargs))
+  def func(x):
+      return x + 1
+  
+  func(3)
+  ```
+
+
+
+
+
+## 데코레이터 활용 사례
+
+- 데코레이터가 가장 유용하게 사용되는 경우는 아래와 같다.
+  - 파라미터 변환
+    - 파라미터가 어떻게 처리되는지 세부사항을 숨기면서 함수의 서명을 변경하는 경우에 사용한다.
+    - 명확한 의도를 가지고 사용할 경우에만 유용하기에 주의해서 사용해야 한다.
+    - 즉 기존의 다소 복잡한 함수에 대해 데코레이터를 사용해서 보다 간결한 시그니처를 제공하는 경우라면 권장할 만한 방법이다.
+  - 코드 추적
+    - 파라미터와 함께 함수의 실행 경로를 로깅하려는 경우이다.
+    - 이는 기존 코드를 건드리지 않고 외부의 기능을 통합할 수 있는 강력한 추상화이자 좋은 인터페이스로 기능한다.
+  - 파라미터 유효성 검사
+    - 파라미터의 값이나 데이터 타입이 유효한지 검사하는 데 사용할 수 있다.
+    - 계약에 의한 디자인을 따르면서 추상화의 전제조건을 강요하도록 할 수 있다.
+  - 재시도 로직 구현
+    - 이전에 직접 구현해본 retry 데코레이터가 이에 해당한다.
+  - 일부 반복 작업을 데코레이터로 이동하여 클래스 단순화.
+    - DRY 원칙과 관련이 있다.
+
+
+
+- 함수의 시그니처 변경
+
+  - 레거시 코드에 복잡한 시그니처(많은 파리미터나 보일러 플레이트 코드 등)를 가진 함수가 많이 있는 경우 데코레이터를 유용하게 사용할 수 있다.
+    - 데코레이터를 사용하면 기존 함수의 변경은 최소화하면서 보다 깔끔한 인터페이스를 제공할 수 있다.
+  - 아래와 같은 함수를 여러 곳에서 호출하는 경우를 상상해보자.
+    - 이 함수를 여러 곳에서 사용하고 있어서 모든 파라미터의 처리 부분을 캡슐화하고 애플리케이션에 알맞은 동작으로 변환하는 추상화를 하려고 한다.
+    - 아래 코드를 보면 첫 번째 줄에서 동일한 객체를 반복해서 생성하는 보일러 플레이트 코드가 있고, 나머지 코드는 오직 이를 통해 생성한 도메인 객체와 교류하고 있다.
+
+  ```python
+  def resolver_function(root, args, context, info):
+      helper = DomainObject(root, args, context, info)
+      # ...
+      helper.process()
+  ```
+
+  - 데코레이터를 통해 함수의 시그니처를 변경하여 도메인 객체가 직접 전달되는 것 처럼 할 수 있다.
+    - 데코레이터는 원래의 파라미터을 가로채서 도메인 객체를 만들고, 데코레이팅된 함수에 도메인 객체(helper)를 전달한다.
+    - 이제 원래의 함수는 이미 초기화된 helper 객체를 가진 것 처럼 시그니처를 변경할 수 있다.
+
+  ```python
+  @DomainArgs
+  def resolver_function(helpers):
+      # ...
+      helper.process()
+  ```
+
+  - 이러한 원리는 반대 방향으로 활용할 수도 있다.
+    - 즉 기존의 레거시 코드가 객체를 받아서 많은 파라미터로 분해하고 있는 상황이다.
+    - 이 때 기존 코드를 모두 리팩터링하는 것보다는 데코레이터를 중간 레이어로 활용할 수 있다.
+
+
+
+- 파라미터 유효성 검사
+  - 데코레이터를 사용하여 파라미터의 유효성을 검사할 수 있다.
+    - 계약에 의한 설계의 원칙에 따라 사전조건 혹은 사후조건을 강제할 수도 있다.
+  - 유사한 객체를 반복적으로 생성하거나 추상화를 위해 유사한 변형을 반복하는 경우 데코레이터를 만들어 사용하면 이 작업을 쉽게 처리할 수 있다.
+
+
+
+- 코드 추적
+  - 특정 함수를 추적하는 데 사용할 수 있다.
+  - 주로 아래와 같은 내용을 추적한다.
+    - 함수의 실행 경로 추적
+    - 함수 지표 모니터링
+    - 함수의 실행 시간 측정
+    - 함수가 실행되는 시점
+    - 함수에 전달된 파라미터 확인.
+
