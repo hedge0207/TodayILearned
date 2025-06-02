@@ -1,21 +1,5 @@
 # Redis
 
-- 캐시
-
-  - 한 번 읽어온 데이터를 임의의 공간에 저장하여 다음에 읽을 때는 빠르게 결과값을 받을 수 있도록 도와주는 공간
-
-  - Cache 사용 구조
-    - Cache Hit: DB에 데이터를 요청하기 전에 Cache에 데이터가 있는지 확인하고 있으면, 데이터를 DB에 요청하지 않고 캐시에서 가져오는 것.
-    - Cache Miss: cache 서버에 데이터가 없어 DB에 해당 데이터를 요청하는 것, DB에서 요청 받을 데이터를 다음 번에는 캐시에서 사용하기 위해 캐시에 저장한다.
-  - 캐시를 사용하는 경우
-    - 영구적으로 저장해야 하는 데이터가 아닐 경우에 DB가 아닌 캐시에 저장하면 보다 빠르게 데이터에 접근 할 수 있고, DB의 부하도 감소시킬 수 있다.
-    - 동시다발적인 쓰기가 발생하는 경우, 갑자기 쓰기 요청이 몰려들 경우 DB에 과부하가 걸릴 수 있다. 따라서, 캐시에 일시적으로 저장 한 후 캐시에 저장된 데이터를 DB에 순차적으로 삽입하는 방식을 사용하면, 이러한 부하를 감소시킬 수 있다.
-  - 한계
-    - 캐시 서버는 속도를 위해 주로 메모리를 사용한다.
-    - 따라서 서버에 장애가 나면 메모리가 날아가서 데이터가 손실될 수 있다.
-
-
-
 - Redis(Remote Dictionary Server)
   - 키-값 기반의 인-메모리 데이터 저장소.
     - 인-메모리란 컴퓨터의 메인 메모리(RAM)에 DB 데이터와 같은 주요 데이터를 저장하는 것을 말한다.
@@ -152,7 +136,7 @@
     - 디스크의 데이터에 fsync를 얼마나 수행할지를 설정할 수 있다.
     - ` appendfsync alway`: 매번 새로운 command가 AOF에 추가될 때마다 fsync를 수행한다. 매우 느리지만 매우 안전하다.
     - ` appendfsync everysec`: fsync 매 초마다 수행한다. 스냅샷 만큼 빠르며, 재난 발생시 1초의 데이터를 잃을 수 있다(권장).
-    -  `appendfsync no`: 디스크에 쓰는 시점을 OS에 맡긴다(리눅스는 일반적으로 30초 간격으로 내려 쓴다).
+    - `appendfsync no`: 디스크에 쓰는 시점을 OS에 맡긴다(리눅스는 일반적으로 30초 간격으로 내려 쓴다).
   - AOF가 잘리는 경우
     - AOF 파일이 작성되는 동안 서버가 꺼지거나 AOF 파일 작성 시점에 저장 공간이 가득 찬 경우에 발생할 수 있다.
     - 잘못된 형식의 명령이 존재하는 경우 이를 무시하고 계속 진행하는 것이 기본값으로 설정되어 있다.
@@ -247,7 +231,7 @@
     - 복제 노드에 접속해서 `REPLICAOF NO ONE` 커맨드를 통해 마스터 연결 해제
     - 어플리케이션 코드에서 레디스 연결 설정을 변경(마스터 노드의 IP에서 복제 노드의 IP로)
     - 배포
-  -  Sentinel은 위와 같은 과정을 자동으로 수행해준다.
+  - Sentinel은 위와 같은 과정을 자동으로 수행해준다.
     - 마스터 노드와 복제 노드를 계속 모니터링하면서 장애 상황이 발생하면 복제 노드를 마스터로 승격시키기 위해 자동 failover를 진행한다.
     - failover: 시스템 장애시 대체본으로 자동으로 변경되어서 장애를 극복하는 것
     - 담당자에게 메일을 보내도록 알림을 설정하는 것도 가능하다.
@@ -314,7 +298,7 @@
 
   - Docker 컨테이너 생성 및 실행
     - 기본 port는 6379이다.
-  
+
   ```bash
   $ docker run --network <network 이름> -p <port 번호>:<port 번호> redis
   ```
@@ -382,12 +366,13 @@
 ## Replication으로 설치
 
 - 2 대의 서버에 master-slave 구조로 설치한다.
+
   - 설치를 위해 Redis Docker image를 준비한다.
-  
+
   ```bash
   $ docker pull redis:6.2.6
   ```
-  
+
   - 앞서 말했듯 이 구조는 고가용성을 지원하지는 않는다.
 
 
@@ -467,9 +452,154 @@
 
 
 
+## Sentinel로 설치
+
+- Sentinel로 사용할 node에 설정해줘야 하는 값들은 아래와 같다.
+
+  - `port`
+    - Sentinel node가 리스닝할 포트 번호를 설정한다.
+    - 기본값은 26379
+  - `sentinel monitor <name> <ip> <port> <quorum>`
+    - Sentinel node가 감시할 master node의 정보를 입력한다.
+    - `<ip> <port>`에 해당하는 Redis master node를 `<name>`이라는 이름으로 등록하겠다는 의미이며, 이후 다른 설정에서 `<name>`에 설정한 값을 사용한다.
+    - IP 대신 hostname도 사용은 가능하다.
+    - `quorum`은 failover를 위해 필요한 sentinel의 수이며, 모든 sentinel에 동일한 값을 입력해야한다. 
+    - 여기서 설정한 master node와 연결된 slave node에도 자동으로 연결된다.
+    - 필수 설정이므로 기본값은 없다.
+
+  - `sentinel down-after-milliseconds <name> <milliseconds>`
+    - Sentinel과 연결된 master 혹은 slave를 다운으로 간주하기까지 대기할 시간을 설정한다.
+    - 기본값은 30000(30초)이다.
+    - 너무 짧을 경우 정상 노드를 비정상이라고 판단할 수 있다.
+  - `sentinel failover-timeout <name> <milliseconds>`
+    - Failover과정에 허용되는 시간이다.
+    - 이 시간 내에 slave가 master로 승격되지 못하면 해당 slave는 master 후보에서 제외된다.
+    - 기본값은 180000이다.
+  - `sentinel parallel-syncs <name> <count>`
+    - Failover이후 새로운 마스터로부터 슬레이브들이 동시에 동기화할 수 있는 최대 수
+    - 슬레이브 수가 많을 경우, 이 값을 늘리면 빠르게 클러스터가 안정화되지만, 너무 높이면 마스터 과부하될 가능성이 있다.
+    - 기본값은 1이다.
+
+  - 예시
+
+  ```
+  port 26379
+  
+  sentinel monitor mymaster 172.28.0.10 6379 2
+  sentinel down-after-milliseconds mymaster 5000
+  sentinel failover-timeout mymaster 10000
+  sentinel parallel-syncs mymaster 1
+  ```
 
 
-## Cluster로 설치하기
+
+- 설치하기
+
+  - Sentinel 설정 파일 준비
+    - 세 개의 sentinel 모두 동일한 설정 파일을 사용한다.
+
+  ```
+  port 26379
+  
+  sentinel monitor mymaster 172.28.0.10 6379 2
+  sentinel down-after-milliseconds mymaster 5000
+  sentinel failover-timeout mymaster 10000
+  sentinel parallel-syncs mymaster 1
+  ```
+
+  - docker-compose.yml
+    - `redis-net`에 subnet을 지정하고, 각 컨테이너별로 `ipv4_address`를 지정한 이유는 `sentinel monitor <name> <ip> <port> <quorum>`를 설정할 때 `<ip>`에 hostname을 설정할 경우 에러가 발생하면서 sentinel node의 실행이 실패했기 때문이다.
+    - Redis 버전이 낮아서 발생하는 문제인지는 확인이 필요하다.
+
+  ```yaml
+  services:
+  
+    redis-node-1:
+      image: redis:6.2.6
+      container_name: redis-node-1
+      ports:
+        - "6379:6379"
+      command: redis-server --appendonly yes
+      networks:
+        redis-net:
+          ipv4_address: 172.28.0.10
+  
+    sentinel-node-1:
+      image: redis:6.2.6
+      container_name: sentinel-node-1
+      depends_on:
+        - redis-node-1
+      ports:
+        - "26379:26379"
+      command: redis-sentinel /sentinel/sentinel.conf
+      volumes:
+        - ./sentinel-1.conf:/sentinel/sentinel.conf
+      networks:
+        redis-net:
+          ipv4_address: 172.28.0.11
+  
+    redis-node-2:
+      image: redis:6.2.6
+      container_name: redis-node-2
+      ports:
+        - "6380:6379"
+      command: redis-server --replicaof redis-node-1 6379 --appendonly yes
+      networks:
+        redis-net:
+          ipv4_address: 172.28.0.12
+  
+    sentinel-node-2:
+      image: redis:6.2.6
+      container_name: sentinel-node-2
+      depends_on:
+        - redis-node-2
+      ports:
+        - "26380:26379"
+      command: >
+        redis-sentinel /sentinel/sentinel.conf
+      volumes:
+        - ./sentinel-2.conf:/sentinel/sentinel.conf
+      networks:
+        redis-net:
+          ipv4_address: 172.28.0.13
+  
+    redis-node-3:
+      image: redis:6.2.6
+      container_name: redis-node-3
+      ports:
+        - "6381:6379"
+      command: redis-server --replicaof redis-node-1 6379 --appendonly yes
+      networks:
+        redis-net:
+          ipv4_address: 172.28.0.14
+  
+    sentinel-node-3:
+      image: redis:6.2.6
+      container_name: sentinel-node-3
+      depends_on:
+        - redis-node-3
+      ports:
+        - "26381:26379"
+      command: redis-sentinel /sentinel/sentinel.conf
+      volumes:
+        - ./sentinel-3.conf:/sentinel/sentinel.conf
+      networks:
+        redis-net:
+          ipv4_address: 172.28.0.15
+  
+  networks:
+    redis-net:
+      driver: bridge
+      ipam:
+        config:
+          - subnet: 172.28.0.0/16
+  ```
+
+
+
+
+
+## Cluster로 설치
 
 - Clustering 관련 설정은 아래와 같다.
 
@@ -483,6 +613,7 @@
   - `cluster-node-timeout`
     - Cluster를 구성 중인 node가 down되었다고 판단하는 시간이다.
     - 단위는 millisecond이다.
+  - 예시
 
   ```toml
   cluster-enabled yes
@@ -725,7 +856,7 @@
 
   ```bash
   $ docker exec -it redis1 /bin/bash
-  $ redis-cli --cluster create <host>:7001 <host>:7002 <host>:7003
+  $ redis-cli --cluster create redis1:7001 redis2:7002 redis3:7003
   $ redis-cli -p 7001
   cluster info
   cluster nodes
@@ -734,9 +865,9 @@
   - Slave를 추가한다.
 
   ```bash
-  $ redis-cli --cluster add-node <host>:7101 <host>:7001 --cluster-slave
-  $ redis-cli --cluster add-node <host>:7102 <host>:7002 --cluster-slave
-  $ redis-cli --cluster add-node <host>:7103 <host>:7003 --cluster-slave
+  $ redis-cli --cluster add-node redis-slave1:7101 redis1:7001 --cluster-slave
+  $ redis-cli --cluster add-node redis-slave2:7102 redis2:7002 --cluster-slave
+  $ redis-cli --cluster add-node redis-slave3:7103 redis3:7003 --cluster-slave
   ```
 
   - 정상적으로 추가 됐는지 확인한다.
@@ -744,582 +875,91 @@
   ```bash
   $ redis-cli -p 7001
   cluster info
-  cluster nodes
+  cluster nodes 
   ```
 
-
-
-- 고가용성 확인하기
-
-  - Redis CLI에 접속한다.
-    - `-c` 옵션은 cluster mode로 접속하는 option으로 다른 node에도 접근할 수 있게 해준다.
+  - 아래와 같이 cluster 생성과 동시에 slave를 설정하는 것도 가능하다.
 
   ```bash
-  $ redis-cli -p 7001 -c
+  $ redis-cli --cluster create \
+    redis1:7001 \
+    redis2:7002 \
+    redis3:7003 \
+    redis-slave1:7101 \
+    redis-slave2:7102 \
+    redis-slave3:7103 \
+    --cluster-replicas 1
   ```
 
-  - Key와 value를 설정한다.
-    - 세 개의 master node에 모두 분배되도록 한다.
+
+
+- Cluster가 생성되는 과정
+
+  - Cluster에 참여하는 노드들이 실행된다.
+    - `cluster-enabled yes`값이 설정된 노드들은 cluster에 참여하는 노드가 된다.
+  - Cluster 생성 명령어가 실행된다.
+    - 아래 명령어가 실행되면 명령어를 실행한 노드가 각 노드에게 `CLUSTER MEET` 메시지를 보낸다.
 
   ```bash
-  set foo bar
-  set bar baz
-  set baz qux
+  $ redis-cli --cluster create <host>:<port> [...] [--cluster-replicas <num>]
   ```
 
-  - 세 개의 master node에 분배된 상태에서 아래와 같이 하나의 master node를 정지한다.
-    - `redis1` node에는 baz:qux가 저장되어 있었다.
+  - Cluster에 참여하려는 노드들은 `CLUSTER MEET` 메시지를 받은 후 자신을 광고(advertise)한다.
+    - 이 때, 자신의 IP와 port를 광고하는데, `cluster-announce-ip`, `cluster-announce-port`에 설정된 IP와 port로 광고한다.
+    -  `cluster-announce-ip`의 기본값은 eth0 같은 인터페이스에서 자신의 IP를 추론한다. 위 예시의 경우 그 결과로 docker container가 자신이 속한 docker network에서 할당 받은 IP값이 설정된다.
+    - `cluster-announce-port`의 기본 값은 `redis.conf`에 설정해준 `port` 값이다.
+    - 다른 노드들은 이 정보를 기반으로 해당 노드에 연결을 시도한다.
+  - 각 노드가 서로 연결되면 master/slave 역할을 나눈다.
+
+
+
+- Docker를 사용하여 한 서버에 여러 대의 node를 띄워 cluseter를 구성할 때의 주의사항
+
+  - 운영 환경이 아닌 테스트 환경에서는 한 서버에 여러 노드를 실행해 cluster를 구성해야 하는 경우가 있다.
+    - Cluster 생성시에 위 예시에서와 같이 hostname을 사용하면 큰 문제가 없지만, IP를 사용하고자 할 경우 문제가 생길 수 있다.
+    - 예를 들어 아래와 같이 cluster를 생성하려 할 경우, 아무리 기다려도 cluster가 생성되지 않는다.
 
   ```bash
-  $ docker stop redis1
+  # host machine의 IP가 11.22.33.44라고 가정
+  $ redis-cli --cluster create \
+    11.22.33.44:7001 \
+    11.22.33.44:7002 \
+    11.22.33.44:7003 \
+    11.22.33.44:7101 \
+    11.22.33.44:7102 \
+    11.22.33.44:7103 \
+    --cluster-replicas 1
   ```
 
-  - 다른 container에 attach한다.
-
-  ```bash
-  $ docker exec -it redis2 /bin/bash
-  ```
-
-  - Redis CLI에 접속하여 cluster 상태를 확인한다.
-    - 기존에 `redis1` node의 slave였던 `redis-slave1` node가 master가 된 것을 확인할 수 있다.
-
-  ```bash
-  $ redis-cli -p 7002 -c
-  cluster nodes
-  ```
-
-  - 기존에 `redis1` node에 저장되어 있던 baz key로 조회가 가능한지 확인한다.
-    - `redis-slave1` node에서 값을 redirect 해주는 것을 확인할 수 있다.
-
-  ```bash
-  get baz
-  Redirected to slot [4813] located at <docker_network_host>:7101
-  ```
-
-
-
-- 주의사항
-
-  - 주의할 점은 예전 버전에서는 cluster 생성시에 hostname이 아닌 IP를 입력해야 한다는 것이다.
-    - 6.2.6 버전에서는 hostname이 사용 불가능한 것을 확인
-    - 7.2.0 버전에서는 hostname이 사용 가능한 것을 확인
-
-  - 예를 들어 아래와 같이 같은 docker network를 사용한도록 구성했을 때
-    - 모든 노드가 기본 포트(6379)를 사용하도록 설정한다.
+  - 원인
+    - 잘못된 advertise로 인해 다른 노드에 연결되지 못 하기 때문이다.
+    - 위 예시에서는 `redis.conf` 파일에 `cluster-announce-ip`값을 따로 설정해주지 않았다.
+    - 따라서 redis가 이 값을 추론하여 container가 속한 docker network에서 할당 받은 IP값이 설정된다.
+    - 즉, 각 노드는 `<container_IP>:<자신의 port>`로 자신을 광고한다.
+    - 문제는 클러스터를 생성할 때는 host machine의 IP로 설정했으므로, 두 정보 사이에 불일치가 발생한다.
+    - 이로 인해 각 노드들 사이의 연결은 실패하고 cluster는 구성되지 못한다.
+  - 해결 방법1. `cluster-announce-ip`를 설정하면 해결이 가능하다.
+    - `cluster-announce-ip`를 설정하여 각 노드가 정확한 IP로 자신을 advertise 할 수 있게 한다.
 
   ```yaml
-  services:
-    redis1:
-      image: redis:6.2.6
-      container_name: redis1
-      environment:
-        - TZ=Asia/Seoul
-      volumes:
-        - ./config/redis1.conf:/etc/redis.conf
-      command: redis-server /etc/redis.conf
-      restart: always
-      networks:
-        - redis-test
-    
-    redis2:
-      image: redis:6.2.6
-      container_name: redis2
-      environment:
-        - TZ=Asia/Seoul
-      volumes:
-        - ./config/redis2.conf:/etc/redis.conf
-      command: redis-server /etc/redis.conf
-      restart: always
-      networks:
-        - redis-test
-    
-    redis3:
-      image: redis:6.2.6
-      container_name: redis3
-      environment:
-        - TZ=Asia/Seoul
-      volumes:
-        - ./config/redis3.conf:/etc/redis.conf
-      command: redis-server /etc/redis.conf
-      restart: always
-      networks:
-        - redis-test
-    
-    redis-slave1:
-      image: redis:6.2.6
-      container_name: redis-slave1
-      environment:
-        - TZ=Asia/Seoul
-      volumes:
-        - ./config/redis-slave1.conf:/etc/redis.conf
-      command: redis-server /etc/redis.conf
-      restart: always
-      networks:
-        - redis-test
-  
-    redis-slave2:
-      image: redis:6.2.6
-      container_name: redis-slave2
-      environment:
-        - TZ=Asia/Seoul
-      volumes:
-        - ./config/redis-slave2.conf:/etc/redis.conf
-      command: redis-server /etc/redis.conf
-      restart: always
-      networks:
-        - redis-test
-    
-    redis-slave3:
-      image: redis:6.2.6
-      container_name: redis-slave3
-      environment:
-        - TZ=Asia/Seoul
-      volumes:
-        - ./config/redis-slave3.conf:/etc/redis.conf
-      command: redis-server /etc/redis.conf
-      restart: always
-      networks:
-        - redis-test
-  
-  networks:
-    redis-test:
-      driver: bridge
-  ```
-
-  - 아래와 같이 hostname을 사용하더라도 clustering은 불가능하다.
-
-  ```bash
-  $ redis-cli --cluster create redis1:6379 redis2:6379 redis3:6379
-  ```
-
-
-
-
-
-
-
-# Redis Clients
-
-## CLI
-
-- redis-cli 실행
-
-  - 아래 명령어로 redis-cli를 실행시킨다.
-    - 기본 port는 6379이다.
-  
-
-  ```bash
-  $ redis-cli [-h 호스트 주소] [-p 포트] [-n db 번호] [-s 소켓] [-a 비밀번호] [-u 서버 url]
+  port 6379
+  cluster-enabled yes
+  cluster-config-file nodes.conf
+  cluster-node-timeout 3000
+  cluster-announce-ip 11.22.33.44
   ```
   
-  - 비밀번호 입력
-    - redis-cli를 실행할 때 `-a`를 입력하지 않았으면 아래 명령어를 통해 인증이 가능하다.
+  - 해결 방법2. cluster 생성시에 container IP를 입력한다.
+    - 이 경우, container들이 재실행되면서 container IP가 변경되면 cluster 구성에 문제가 생길 것이 걱정될 수 있다.
+    - 만약 재실행시에 기존과 동일한 IP를 부여 받은 node가 하나라도 있으면, `node.conf`와 node ID를 사용해서 자동으로 재구성된다(확인 필요).
   
   ```bash
-  > auth <password>
-  ```
-
-
-
-
-- Redis 정보 확인
-
-  ```bash
-  > info
-  ```
-
-  - config 정보 확인
-
-  ```bash
-  > config get <확인할 정보>
-  ```
-
-  - grep 사용하기
-    - redis-cli 내부가 아닌 외부에서 아래 명령어 실행
-
-  ```bash
-  $ redis-cli [-h 호스트 주소] [-p 포트] [-n db 번호] [-s 소켓] [-a 비밀번호] [-u 서버 url] | grep <찾을 내용>
-  ```
-
-  - 도움말
-
-  ```bash
-  > help
-  ```
-
-  - 모니터링
-
-  ```bash
-  > monitor
-  ```
-
-
-
-- 데이터 삽입
-  - 옵션으로ttl(초)을 줄 수 있다.
-
-  ```bash
-  > set <key> <value> [ex seconds]
-  ```
-
-  - 데이터 여러 개 삽입
-
-  ```bash
-  > mset <key1> <value1> <key2> <value2> ...
-  ```
-
-  - list 자료형의 맨 앞 부터 삽입 삽입
-    - 문자열이라도 `"`는 붙이지 않아도 된다.
-    - space 로 구분한다.
-
-  ```bash
-  > lpush my_list Hello
-  > lpush my_list World
-  > lpush my_list Hello World
-  > lpush my_list HelloWorld
-  ```
-
-  - list 자료형의 맨 뒤 부터 삽입
-    - `rpush` 사용
-    - 나머지는 `lpush`와 동일
-
-  - 소멸 시간 지정해서 삽입
-    - 단위는 초
-
-  ```bash
-  > setex <key> <시간> <value>
-  ```
-
-
-
-
-- 데이터 조회
-  - 찾으려는 키가 없는 경우 `(nil)`을 반환한다.
-
-  ```bash
-  > get <key>
-  ```
-
-  - 데이터 여러 개 조회
-
-  ```bash
-  > mget <key1> <key2> ...
-  ```
-
-  - 리스트 데이터 앞에서부터 조회
-    - 뒤의 숫자는 몇 번째 부터 몇 번째 까지를 조회할지를 선택하는 것이다.
-
-  ```bash
-  lrange my_list 0 -1
-  
-  # 출력, 마지막에 넣은 것이 가장 먼저 나온다.
-  1) "HelloWorld"
-  2) "World"
-  3) "Hello"
-  4) "World"
-  5) "Hello"
+  $ redis-cli --cluster create \
+    <redis1_container_IP>:7001 \
+    <redis2_container_IP>:7002 \
+    # ...
+    --cluster-replicas 1
   ```
   
-  - 모든 key 확인
-    - redis는 single thread이다.
-    - 이 명령을 처리하기 위해 뒤의 작업들은 멈춰버리므로 가급적 사용을 자제하는 것이 좋다.
-    - scan을 사용하는 것이 좋다.
-  
-  ```bash
-  > keys *
-  ```
-  
-  - scan
-    - cursor 기반으로 key들을 출력한다.
-    - 첫 번째 응답(`1)`)으로 다음번 cursor가 오는데 다시 이 것을 cursor애 넣고 명령어를 입력하는 것을 반복하다 0이 나오면 모든 key를 조회했다는 뜻이 된다.
-    - 첫 scan에서 아무것도 안 나온다고 결과가 없는 것이 아닐 수도 있다.
-  
-  ```bash
-  > scan <cursor> [Match pattern] [Count]
-  
-  # 예시
-  > scan 0
-  
-  #응답
-  1) "88"
-  2)  1) "key62"
-      2) "key71"
-      3) "key85"
-      4) "key19"
-      5) "key92"
-      6) "key84"
-      7) "key20"
-      8) "key40"
-      9) "key34"
-     10) "key21"
-     11) "key2"
-  ```
   
 
-
-
-
-- 데이터 삭제
-  - `(integer) 1`은 삭제 성공, `(integer) 0`은 삭제하려는 데이터가 없을 경우 반환된다.
-
-  ```bash
-  > del <key>
-  ```
-
-  - 모든 데이터 삭제
-
-  ```bash
-  > flushall
-  ```
-
-  - 리스트형 데이터에서 맨 뒤의 데이터 삭제
-    - 맨 앞의 데이터 삭제는 `lpop`
-
-  ```bash
-  > rpop my_list
-  ```
-
-  - 리스트형 데이터에서 맨 뒤의 데이터 삭제 후, 삭제한 값을 다른 list에 삽입(deprecated)
-
-  ```bash
-  > rpop my_list other_list
-  ```
-
-  - 리스트형 데이터에서 head나 tail을 삭제하고 이를 다른 list의 head나 tail에 삽입
-
-  ```bash
-  # my_list의 tail(right)을 빼서 other_list의 head(left)에 삽입
-  > lmove my_list other_list rigth left
-  ```
-
-  - 리스트형 데이터에서 일정 범위 제외하고 삭제
-    - 삭제할 범위가 아닌 삭제하지 않을 범위를 지정한다.
-
-  ```bash
-  > ltrim my_list <시작> <끝>
-  ```
-
-
-
-
-- key 이름 변경
-  - rename의 경우 변경하려는 이름의 key가 이미 존재할 경우 덮어 쓴다.
-  - renamenx의 경우 변경하려는 이름의 key가 있을 경우 `(integer) 0`을 반환한다.
-
-  ```bash
-  > rename <key>
-  
-  > renamenx <key>
-  ```
-
-  - 리스트형 데이터 변경
-
-  ```bash
-  # my_list의 value인 리스트에서, 첫 번째 인자를 Bye로 변경
-  LSET my_list 0 "Bye"
-  ```
-
-
-
-
-- 기타
-
-  - 타임 아웃까지 남은 시간 확인
-    - `(integer) -1`은 기한이 없는 경우, `(integer) -2`는 키 값이 없거나 소멸된 경우 반환된다.
-
-  ```bash
-  # 초 단위로 반환
-  > ttl <key>
-  
-  # 밀리 초 단위로 반환
-  > pttl <key>
-  ```
-
-  - 리스트 길이 확인
-
-  ```bash
-  > llen my_list
-  ```
-
-  - ttl(time to live) 제거하기
-    - 특정 키를 삭제하지 않고 redis에 계속 저장하고 싶을 때 사용한다.
-
-  ```python
-  > persist <key>
-  ```
-
-  - ttl(time to live) 설정하기
-    - 기본적으로 expire 명령을 통해 타임아웃을 설정해주지 않으면 -1(무기한)로 설정된다.
-
-  ```bash
-  > expire <key> <seconds>
-  ```
-
-
-
-
-
-## Python
-
-- Python에서 사용하기
-
-  - Redis 패키지 설치
-
-  ```bash
-  $ pip install redis
-  ```
-
-  - 테스트
-    - 호스트와 포트를 지정해주고 `ping()` 메서드를 통해 테스트 해본다.
-    - 그 밖에도 password, decode_response 등의 옵션을 줄 수 있다.
-    - `Redis`, 혹은 `RedisStrict`를 사용할 수 있는데 둘 사이의 차이는 없다.
-    - `RedisStrict`가 구버전에서 사용하던 것이다.
-  
-  ```python
-  import redis
-  
-  
-  r = redis.Redis(host="localhost",port=6379)
-  # 비밀번호를 서정한 경우
-  r = redis.Redis(host="localhost",port=6379,password=1234)
-  print(r.ping())	# True
-  ```
-  
-  - 데이터 삽입
-    - list, set, dictionary 등은 삽입이 불가능하다.
-    - json 패키지를 통해 dumps, loads를 사용하면 삽입, 조회가 가능하다.
-  
-  ```bash
-  import redis
-  
-  
-  r = redis.Redis(host="localhost", port=6379)
-  r.set("key", "value")
-  
-  my_dict = {"a":1,"B":2}
-  r.set("my_dict", jsonDataDict)
-  result_data = r.get("my_dict").decode('utf-8')
-  result = dict(json.loads(result_data))
-  ```
-  
-  - 데이터 여러 개 삽입
-  
-  ```python
-  import redis
-  
-  
-  r = redis.Redis(host="localhost", port=6379)
-  r.mset({"key":"value","key2":"value2"})
-  ```
-  
-  - 데이터 조회
-  
-  ```bash
-  import redis
-  
-  
-  r = redis.Redis(host="localhost", port=6379)
-  print(r.get("key")) 	# b'value'
-  print(r.get("key").decode("utf-8"))		# value
-  ```
-  
-  - scan을 통한 데이터 조회
-  
-  ```python
-  import redis
-  
-  
-  r = redis.StrictRedis('localhost', port=6379)
-  init = 0 # cursor 값 0으로 스캔 시작
-  
-  while(True):
-      ret = r.scan(init)
-      print(init)
-      init = ret[0]
-      print(ret[1])
-      if (init == 0): # 반환된 cursor 값이 0이면 스캔 종료
-          break
-  ```
-  
-  - 데이터 삭제
-  
-  ```bash
-  import redis
-  
-  
-  r = redis.Redis(host="localhost",port=6379)
-  r.delete("key")
-  ```
-  
-  - 데이터 전체 삭제
-  
-  ```python
-  import redis
-  
-  
-  r = redis.Redis(host="localhost",port=6379)
-  r.flushdb()
-  ```
-
-
-
-
-
-
-
-# Redis 사용 전략
-
-- Look Aside(==Lazy Loading)
-  - 필요할 때만 데이터를 캐시에 로드하는 캐싱 전략
-  - 캐시는 DB와 어플리케이션 사이에 위치한다.
-    - 어플리케이션에서 data를 가져올 때 redis를 먼저 찔러보고, redis에 data가 있으면 data를 반환한다.
-    - 없을 경우 어플리케이션은 DB에 data를 요청하고, 어플리케이션이 이 데이터를 받아 레디스에 저장한다.
-  - 장점
-    - 실제로 사용되는 데이터만 캐시할 수 있다.
-    - 레디스의 장애가 어플리케이션에 치명적인 영향을 주지 않는다.
-  - 단점
-    - 캐시(redis)에 없는 데이터를 쿼리할 때 오랜 시간이 걸린다.
-    - 캐시가 최신 데이터를 가지고 있다는 것을 보장하지 못한다(redis에 해당 key 값이 없을 때만 캐시에 대한 업데이트가 일어나기 때문).
-
-
-
-- Write-Through
-  - DB에서 데이터를 작성할 때마다 캐시에 데이터를 추가하거나 업데이트한다.
-  - 장점
-    - 캐시의 데이터는 항상 최신 상태로 유지된다.
-  - 단점
-    - 데이터 입력 시 두 번의 과정을 거쳐야 하기 때문에 지연 시간이 증가한다.
-
-
-
-
-
-# 참조
-
-- redis 공식 문서
-
-> https://redis.io/commands
-
-- Redis 기본 정리
-
-> https://brunch.co.kr/@jehovah/20
-
-- redis-cli에서 redis 사용
-
-> https://freeblogger.tistory.com/10
-
-- python에서 redis 사용
-
-> https://soyoung-new-challenge.tistory.com/117
-
-- Redis의 SCAN은 어떻게 동작하는가
-
-> https://tech.kakao.com/2016/03/11/redis-scan/
-
-- 개발자를 위한 레디스 튜토리얼
-
-> https://meetup.toast.com/posts/226
-
-- [Redis\] redis.conf 의 파라미터 의미 파악하기
-
-> https://mozi.tistory.com/368?category=1102290
