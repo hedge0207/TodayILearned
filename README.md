@@ -799,7 +799,22 @@
 <br/>
 <br/>
 
+# android
+## android_part1
+- 앱 실행 및 출시
+
+- 안드로이드 앱의 기본 구조
+
+<br/>
+<br/>
+
+<br/>
+<br/>
+
 # clean_code
+<br/>
+<br/>
+
 ## clean_code_part1
 - 깨끗한 코드
 
@@ -819,13 +834,43 @@
 
 - 오류 처리
 
+- 경계
+
+- 단위 테스트
+
+<br/>
+<br/>
+
+## clean_code_part3
+- 클래스
+
+- 변경 전
+
+- 변경 후
+
+- 시스템
+
+- 창발성
+
+- 동시성
+
+<br/>
+<br/>
+
+## clean_code_part4
+- 점진적인 개선
+
+- JUnit 들여다보기
+
+- SerialDate 리팩터링
+
+- 냄새와 휴리스틱
+
 <br/>
 <br/>
 
 ## code_readability
 - 코드 가독성
-
-- 오류 처리
 
 <br/>
 <br/>
@@ -1168,9 +1213,7 @@
 <br/>
 
 ## Elasticsearch_part1
-- 검색 엔진 개요
-
-- 엘라스틱 서치 개요
+- 개요
 
 - 엘라스틱서치 기본 개념
 
@@ -1226,6 +1269,8 @@
 <br/>
 
 ## Elasticsearch_part14
+- 클러스터 성능 모니터링과 최적화
+
 - Shorts
 
 <br/>
@@ -1244,9 +1289,9 @@
 
 - Elasticsearch의 score 계산 방식
 
-- 클러스터 성능 모니터링과 최적화
+- 데이터 색인
 
-- 분석 엔진으로 활용하기
+- 데이터 삭제
 
 <br/>
 <br/>
@@ -1256,19 +1301,13 @@
 
 - Mapping explosion
 
-- 데이터 색인
-
-- 데이터 삭제
-
 <br/>
 <br/>
 
 ## Elasticsearch_part5
 - 데이터 검색
 
-- Exist query
-
-- Nested query
+- 기타 query
 
 - 검색 관련 옵션
 
@@ -1457,6 +1496,9 @@
 <br/>
 
 # etc
+<br/>
+<br/>
+
 ## 2022_aws_summit
 - 아키텍처 현대화
 
@@ -1543,18 +1585,22 @@
 <br/>
 <br/>
 
-## redis
+## redis_part1
 - Redis
 
+- 구성
+
+- 설치
+
+<br/>
+<br/>
+
+## redis_part2
 - Data Persistence
 
-- HA
-
-- Redis 사용해보기
+- Redis Clients
 
 - Redis 사용 전략
-
-- 참조
 
 <br/>
 <br/>
@@ -2274,6 +2320,9 @@
 <br/>
 
 # python
+<br/>
+<br/>
+
 ## PEP8
 - google 스타일 가이드 추가할것
 
@@ -2296,6 +2345,14 @@
 - 개요
 
 - CRUD 실행하기
+
+<br/>
+<br/>
+
+## clean_code_in_python
+- SOLID
+
+- Python과 decorator
 
 <br/>
 <br/>
@@ -2336,6 +2393,8 @@
 - APScheduler
 
 - Linter & formmater
+
+- uvloop
 
 <br/>
 <br/>
@@ -2408,9 +2467,13 @@
 <br/>
 <br/>
 
-## python_part2
-- Immutable 
+## python_part11
+- 예외처리
 
+<br/>
+<br/>
+
+## python_part2
 <br/>
 <br/>
 
@@ -2476,8 +2539,6 @@
 - 코루틴
 
 - async / await
-
-- 예외처리
 
 <br/>
 <br/>
@@ -2578,6 +2639,12 @@
 <br/>
 <br/>
 
+## test
+- Test
+
+<br/>
+<br/>
+
 ## test_part1
 - Unit Test
 
@@ -2590,6 +2657,22 @@
 
 ## test_part2
 - 모의 객체를 사용한 상호 작용 테스트
+
+- 격리 프레임워크
+
+- 비동기 코드 단위 테스트
+
+- 신뢰할 수 있는 테스트
+
+<br/>
+<br/>
+
+## test_part3
+- 유지 보수성
+
+- 가독성
+
+- 더 나은 테스트 전략 수립
 
 <br/>
 <br/>
