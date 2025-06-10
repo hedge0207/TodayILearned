@@ -151,18 +151,18 @@
     - 이를 tree로 표현하면, 10진수는 오직 자기 자신만을 component로 가진다.
     - 그러므로 아래와 같은 사실은 참이다(E는 모든 program의 집합).
 
-  ![image-20230105160543994](introdution to programming language.assets/image-20230105160543994-1673001497553-1.png)
+  ![image-20230105160543994-1673001497553-1](Introduction_To_Programming_Language_part1.assets/image-20230105160543994-1673001497553-1.png)
 
   - AE에서 두 산술식의 합 역시 program이다.
     - 이 프로그램은 피연산자1(표현식1, e<sub>1</sub>)과 피연산자2(표현식2, e<sub>2</sub>)라는 두 개의 component를 가진다.
     - 각각의 피연산자는 산술식이므로 program이다.
     - 따라서 아래와 같은 사실은 참이다.
 
-  ![image-20230105160554462](introdution to programming language.assets/image-20230105160554462-1673001512688-3.png)
+  ![image-20230105160554462-1673001512688-3](Introduction_To_Programming_Language_part1.assets/image-20230105160554462-1673001512688-3.png)
 
   - 위와 같은 사실들을 종합하면, E의 가장 작은 집합으로 아래의 조건을 만족하는 AE의 abstract syntax를 정의할 수 있다.
 
-  ![image-20230105160604873](introdution to programming language.assets/image-20230105160604873-1673001529065-5.png)
+  ![image-20230105160604873-1673001529065-5](Introduction_To_Programming_Language_part1.assets/image-20230105160604873-1673001529065-5.png)
 
 
 
