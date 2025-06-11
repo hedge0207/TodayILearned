@@ -757,3 +757,284 @@
     - 함수가 실행되는 시점
     - 함수에 전달된 파라미터 확인.
 
+
+
+
+
+## 데코레이터 사용시 주의할 점
+
+- 래핑된 원본 객체의 데이터를 보존해야한다.
+
+  - 데코레이터를 함수에 적용할 때 가장 많이 하는 실수 중 하나는 원본 함수의 일부 속성을 유지하지 않아 부작용을 유발하는 것이다.
+  - 예를 들어 아래와 같이 함수가 실행될 때 로그를 남기는 데코레이터가 있다고 가정해보자.
+
+  ```python
+  def trace_decorator(func):
+      def wrapped(*args, **kwrags):
+          print(f"{func.__qualname__} 실행")
+          return func(*args, **kwrags)
+     	return wrapped
+  ```
+
+  - 위 데코레이터를 사용하는 함수는 아래와 같다.
+    - Docstring을 가지고 있다.
+
+  ```python
+  @trace_decorator
+  def process_account(account_id: int):
+      """id별 계정 처리"""
+      print(f"{account_id} 계정 처리")
+  ```
+
+  - 위에서 데코레이터를 사용하는 함수의 help와 호출 정보, 그리고 어노테이션 정보를 확인하면 아래와 같다.
+    - 데코레이터가 원본 함수를 wrapped라 불리는 새로운 함수로 변경해버렸기에 원본 함수의 속성이 아닌 새로운 함수의 속성이 출력된다.
+    - 또 다른 문제는 docstring또한  warpped 함수의 docstring으로 덮어씌워진다는 것이다.
+
+  ```python
+  help(process_account)
+  """
+  Help on function wrapped in module __main__:
+  
+  wrapped(*args, **kwrags)
+  """
+  
+  print(process_account.__qualname__)	# trace_decorator.<locals>.wrapped
+  print(process_account.__annotations__) # {}
+  ```
+
+  - 이 문제를 해결하려면 래핑된 함수에 `@wraps` 데코레이터를 적용하여 실제로는 func 파라미터 함수를 래핑한 것이라고 알려주는 것이다.
+
+  ```python
+  from functools import wraps
+  
+  def trace_decorator(func):
+      @wraps(func)
+      def wrapped(*args, **kwargs):
+          print(f"{func.__qualname__} 실행")
+          return func(*args, **kwargs)
+      return wrapped
+  ```
+
+  - 위와 같이 수정한 후 다시 확인해보면, 원래 함수의 정보가 정상적으로 출력되는 것을 확인할 수 있다.
+
+  ```python
+  help(process_account)
+  """
+  Help on function process_account in module __main__:
+  
+  process_account(account_id: int)
+      id별 계정 처리
+  """
+  
+  print(process_account.__qualname__)		# process_account
+  print(process_account.__annotations__) 	# {'account_id': <class 'int'>}
+  ```
+
+  - 이것이 앞의 모든 예제에서 `functools.wraps`를 사용한 이유이다.
+
+
+
+- 잘못 선언한 데코레이터
+
+  - 데코레이터 함수를 구현할 때 반드시 지켜야하는 단 하나의 조건은 구현 함수가 가장 안쪽에 위치해야 한다는 것이다.
+    - 아래와 같이 함수의 실행 시간을 로깅하는 데코레이터가 있다.
+
+  ```python
+  from functools import wraps
+  import time
+  
+  def trace_function_wrong(func):
+      print(f"{func} 실행")
+      start_time = time.time()
+      
+      @wraps(func)
+      def wrapped(*args, **kwargs):
+          result = func(*args, **kwargs)
+          print(f"{func}의 실행 시간: {time.time()-start_time}")
+          return result
+      return wrapped
+  ```
+
+  - 위 데코레이터에는 중요한 버그가 하나 있다.
+    - 아래와 같이 데코레이터를 적용한 함수가 있을 때, 해당 함수가 실행되지 않더라도 데코레이터가 실행된다.
+    - 이는 다른 모듈에서 해당 데코레이터를 import만 해도 동일하게 실행된다.
+
+  ```python
+  from functools import wraps
+  import time
+  
+  
+  def trace_function_wrong(func):
+      print(f"{func} 실행")
+      start_time = time.time()
+      
+      @wraps(func)
+      def wrapped(*args, **kwargs):
+          result = func(*args, **kwargs)
+          print(f"{func}의 실행 시간: {time.time()-start_time}")
+          return result
+      return wrapped
+  
+  
+  @trace_function_wrong
+  def hello_world():
+      time.sleep(1)
+      print("hello world!")
+  ```
+
+  - 위 문제 외에도 아래와 같은 문제도 있다.
+    - 데코레이터로 수식한 함수의 실행 시간은 비슷해야하는데, 함수를 호출할수록 더 오랜 시간이 걸리는 것으로 출력된다.
+    - 이는 실제 시간이 더 걸리는 것이 아니라 데코레이터에서 실행 시간을 잘 못 출력하고 있는 것이다.
+
+  ```python
+  hello_world()
+  hello_world()
+  hello_world()
+  
+  """
+  <function hello_world at 0x1048fe020> 실행
+  hello world!
+  <function hello_world at 0x1048fe020>의 실행 시간: 1.0050990581512451
+  hello world!
+  <function hello_world at 0x1048fe020>의 실행 시간: 2.010247230529785
+  hello world!
+  <function hello_world at 0x1048fe020>의 실행 시간: 3.0154359340667725
+  """
+  ```
+
+  - 이 문제의 원인은 아래와 같다.
+    - `@trace_function_wrong`은 `hello_world = trace_function_wrong(hello_world)`를 의미한다.
+    - 이 문장은 모듈이 실행될 때실행되며, 데코레이터에 설정된  `start_time`은 모듈이 실행되는 시점이 된다.
+    - 함수을 연속적으로 호출하면 함수의 실행 시간으로 모듈이 실행된 시간과의 시간차를 계산한다.
+    - 이는 함수가 실제로 호출된 순간부터 계산한 것이 아니기에 잘못된 값이다.
+  - 수정하기
+    - 래핑된 함수 내부로 코드를 이동시킨다.
+
+  ```python
+  from functools import wraps
+  import time
+  
+  
+  def trace_function_wrong(func):    
+      @wraps(func)
+      def wrapped(*args, **kwargs):
+          print(f"{func} 실행")
+      	start_time = time.time()
+          result = func(*args, **kwargs)
+          print(f"{func}의 실행 시간: {time.time()-start_time}")
+          return result
+      return wrapped
+  ```
+
+
+
+- 잘못 선언한 데코레이터 활용하기
+
+  - 때로는 의도적으로 데코레이터를 잘못 선언하여 데코레이턱 실제 실행되는 시점까지 기다리지 않는 경우도 있다.
+    - 대표적인 예로 모듈의 공용 레지스트리에 객체를 등록하는 경우가 있다.
+    - 예를 들어 아래 예시의 경우 각 클래스마다 처리 여부를 flag로 표시하는 대신 데코레이터를 사용해 명시적으로 레지스트리에 등록할 수 있다.
+    - 아래 모듈이 어떤 방식으로든 실행되면(직접 실행하거나 import하거나) `EVENT_REGISTRY`에 클래스들이 등록된다.
+
+  ```python
+  EVENT_REGISTRY = {}
+  
+  def register_event(event_cls):
+      EVENT_REGISTRY[event_cls.__name__] = event_cls
+      return event_cls
+  
+  class UserEvent:
+      TYPE = "user"
+  
+  @register_event
+  class UserLoginEvent(UserEvent):
+      ...
+      
+  @register_event
+  class UserLogOutEvent(UserEvent):
+      ...
+  
+  print(EVENT_REGISTRY)	# {'UserLoginEvent': <class '__main__.UserLoginEvent'>, 'UserLogOutEvent': <class '__main__.UserLogOutEvent'>}
+  ```
+
+  - 이런 동작 방식이 문제가 되는 경우도 있지만, 경우에 따라 필요한 경우도 있다.
+    - 사실 많은 웹 프레임워크나 널리 알려진 라이브러리들은 이 방식으로 객체를 노출하거나 활용하고 있다.
+    - 단, 이러한 방식이 예상치 못한 부수 효과를 일으킬 수 있다는 것을 항상 염두에 둬야한다.
+
+
+
+- 데코레이터는 범용적이면 좋다.
+
+  - 특정한 함수, 특정한 객체제 적용할 수 있는 데코레이터보다는 재사용을 고려해 다양한 곳에서 사용할 수 있는 데코레이터가 좋다.
+    - 다만, 데코레이터의 파라미터에 `*args, **kwrags`를 정의하면 모든 곳에서 사용할 수 있지만, 아래의 이유로 수식하는 함수의 시그니처와 비슷하게 데코레이터를 정의하는 것이 나을 수 있다.
+    - 원래의 함수와 모양이 비슷하기에 읽기가 쉽다.
+    - 파라미터를 받아서 뭔가를 처리해야 하는 경우 `*args, **kwargs`보다는 파라미터 자체를 받는 것이 편하다.
+  - 아래와 같은 데코레이터가 있다고 가정해보자.
+    - 파라미터를 받아 특정 객체를 생성하는 경우가 많다고 가정해보자.
+    - 예를 들어 문자열을 받아서 드라이버 객체를 초기화하는 경우가 있을 수 있다.
+    - 이 경우 파라미터를 변환해주는 데코레이터를 만들어 중복을 제거할 수 있다.
+
+  ```python
+  from functools import wraps
+  
+  class DBDriver:
+      def __init__(self, db_string: str):
+          self._db_string = db_string
+      
+      def execute(self, query: str) -> str:
+          return f"query {query} at {self._db_string}"
+      
+  def inject_db_driver(func):
+      @wraps(func)
+      def wrapped(db_string):
+          return func(DBDriver(db_string))
+      return wrapped
+  
+  @inject_db_driver
+  def run_query(driver):
+      return driver.execute("test_function")
+  
+  print(run_query("test_ok"))		# query test_function at test_ok
+  ```
+
+  - 이제 같은 기능을 하는 데코레이터를 클래스 메서드에 재사용하려고 한다.
+    - 아래 코드를 실행하면 에러가 발생한다.
+    - 에러가 발생하는 원인은 클래스의 메서드에는 `self`라는 추가 파라미터가 있기 때문이다.
+    - 하나의 파라미터만 받도록 설계된 위 데코레이터는 `db_string` 자리에 `self`를 전달하고, 두 번째 파라미터는 전달받지 못해서 에러가 발생한다.
+
+  ```python
+  class DataHandler:
+      @inject_db_driver
+      def run_query(self, driver):
+          return driver.execute(self.__class__.__name__)
+  
+  print(DataHandler().run_query("test_fails"))
+  ```
+
+  - 위 문제를 해결하려면 메서드와 함수에 대해 동일하게 동작하는 데코레이터를 만들어야한다.
+    - 데코레이터를 클래스 객체로 구현하고 `__get__` 메서드를 구현한 디스크립터(추후 설명) 객체를 만들 것이다.
+    - 이제 일반 함수와 메서드 모두에서 정상 동작한다.
+
+  ```python
+  from functools import wraps
+  from types import MethodType
+  
+  class inject_db_driver:
+      def __init__(self, func):
+          self._func = func
+          wraps(self._func)(self)
+      
+      def __call__(self, db_string):
+          return self._func(DBDriver(db_string))
+      
+      def __get__(self, instance, owner):
+          if instance is None:
+              return self
+          return self.__class__(MethodType(self._func, instance))
+      
+  
+  print(run_query("test_ok"))			# query test_function at test_ok
+  print(DataHandler().run_query("test_fails"))	# query DataHandler at test_fails
+  ```
+
+
+
