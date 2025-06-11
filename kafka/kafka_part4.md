@@ -213,7 +213,6 @@
         CONNECT_PLUGIN_PATH: "/usr/share/java"
   ```
   
-  
 
 
 
@@ -222,7 +221,7 @@
   - 예를 들어 3개의 Kafka connect로 connect group을 실행 후, 아래와 같이 connector를 실행한다.
 
   ```bash
-  curl -XPOST 'localhost:8083/connectors' \
+  $ curl -XPOST 'localhost:8083/connectors' \
   --header 'Content-type: application/json' \
   --data-raw '{
     "name": "mysql-cdc-source-connector",
@@ -246,8 +245,9 @@
   - Task의 상태를 확인한다.
 
   ```bash
-  curl localhost:8083/connectors/mysql-cdc-source-connector/status
+  $ curl localhost:8083/connectors/mysql-cdc-source-connector/status
   
+  # response
   {
     "name":"mysql-cdc-source-connector",
     "connector":{
@@ -264,13 +264,14 @@
     "type":"source"
   }
   ```
-
+  
   - 해당 task를 실행하는 Kafka connect를 종료하고 다시 확인해보면 아래와 같은 상태가 된다.
     - `connector.status`와 `tasks.0.status`가 모두 `UNASSIGNED` 상태가 된다.
-
-  ```bash
-  curl localhost:8083/connectors/mysql-cdc-source-connector/status
   
+  ```bash
+  $ curl localhost:8083/connectors/mysql-cdc-source-connector/status
+  
+  # response
   {
     "name":"mysql-cdc-source-connector",
     "connector":{
@@ -287,7 +288,7 @@
     "type":"source"
   }
   ```
-
+  
   - `UNASSIGNED` 상태가 되었다고 바로 rebalancing이 발생하지는 않는다.
     - Kafka connect 설정 중 `scheduled.rebalance.max.delay.ms`(기본 값은 5분) 값은 group에서 이탈한 Kafka connect가 있을 경우, 해당 Kafka connect가 다시 복귀할 때 까지 얼마나 기다릴지를 설정한다.
     - 만약 설정한 시간까지 Kafka connect가 group에 다시 합류하지 않을 경우, group 내의 다른 Kafka connect에게 할당된다.
@@ -301,7 +302,7 @@
       - `topic.index.map` 옵션은 11 버전부터 삭제 됐다.
 
     ```bash
-    curl -XPOST <kafka connect url>/connectors -H "Content-Type:application/json" -d '{
+    $ curl -XPOST <kafka connect url>/connectors -H "Content-Type:application/json" -d '{
         "name":"elasticsearch-sink",
         "config":{
             "connector.class":"io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
@@ -423,7 +424,7 @@
   - Kafka cluster에 연결하기 위한 `host:port`의 배열을 받는다.
   - 정보
     - Type: list
-    - Defailt: [localhost:9092]
+    - Default: [localhost:9092]
 
 
 
@@ -825,26 +826,45 @@
       - `password`: JDBC connection password를 설정한다.
   
   
-    - `table` 관련 옵션
+  - `table` 관련 옵션
       - 기본적으로 JDBC source connector는 system table이 아닌 모든 table을 대상으로 data를 가져온다.
       - 그러나, `table.whitelist` 혹은 `table.blacklist`를 통해 data를 가져올 table을 설정할 수 있다.
       - 둘 중 하나의 값만 설정이 가능하다.
       - 두 설정 모두 컴마로 구분 된 table명을 String으로 받는다(e.g. `"Product, User, Email"`)
       - `table.whitelist`: data를 가져올 table들을 나열한다.
       - `table.blacklist`: data를 가져오지 않을 table들을 나열한다.
-    - `query`
+  - `query`
       - 수집 대상 row들을 조회하는 query를 설정한다.
       - Query에 table도 지정하므로, 이 값을 설정하면 모든 table에서 data를 가져오지는 않는다.
       - 일반적으로 특정 row만 수집하고자 하거나, table들을 join하거나, table 내의 일부 column들만 필요할 경우 사용한다.
       - `mode`가 `bulk`일 경우 `WHERE` 절을 사용할 수 있으며, 다른 `mode`를 사용할 경우 가능할 수도 있고, 불가능 할 수 도 있다.
-  
-    - `poll.interval.ms`
+  - `poll.interval.ms`
       - 각 table에서 새로운 data를 가져올 주기를 ms단위로 설정한다.
+      - 마지막 polling이 끝난 시점부터 주기를 계산한다.
       - 기본값은 100ms이다.
-    - `dialect.name`
+  - `dialect.name`
       - Connector에서 사용할 DB dialect을 설정한다.
       - 아무 값도 주지 않을 경우 빈 문자열(`""`)이 설정되며, 이 경우 `connection.url`에 설정된 JDBC URL 값에서 DB를 확인하고 dialect을 결정한다.
+  - `batch.max.rows`
   
+      - DB에서 한 번에 읽어올 최대 row의 수를 제한하는 설정이다.
+      - 기본값은 100이다.
+      - JDBC의 ffetch size로 사용된다.
+      - 주의할 점은 일부 JDBC driver(MySQL, Oracle)는 기본적으로 `batch.max.rows` 설정을 무시하고 전체 데이터를 한 번메 메모리에 로드한다.
+      - 따라서 이 값을 설정해도 전체 데이터를 한 번에 조회하고 메모리에 로드해서 OOM이 발생할 수 있다.
+      - 그러므로 이 JDBC driver들에는 별도의 설정을 추가해야 하는데, MySQL의 경우 `useCursorFetch`와 `defaultFetchSize`를 설정해줘야한다.
+  
+  
+  ```json
+  {
+      "connection.url": "jdbc:mysql://localhost:3306/my_db?useCursorFetch=true&defaultFetchSize=10",
+      "mode": "bulk",
+      "query": "SELECT * FROM product",
+      "batch.max.rows": 10,
+      // ...
+    }
+  }
+  ```
 
 
 
@@ -855,6 +875,10 @@
     - 예를 들어 Tibero에 연결해야 하는 경우 Tibero에 연결하기 위한 JDBC driver가 JDBC connector에 포함되어있지 않으므로, 추가를 해줘야한다.
   - `<JDBC_connector_dir>/lib` 내부에 JDBC driver를 추가하면 된다.
     - 추가한 후에는 Kafka Connect를 재실행해야한다.
+
+
+
+
 
 
 
@@ -1421,24 +1445,25 @@
 - Producer 튜닝하기
 
   - Producer를 튜닝하기 위해서는 `batch.size`를 증가시킬 필요가 있다.
-  - 현재 한 번 polling할 때 `batch.max.rows`의 기본값인 100만큼 가져오고, record size의 평균인 `record_size_avg`의 값이 1.09 KiB이므로 `batch_size`는 `100*1.09*1024=111616`(KiB를 bytes로 변환하기위해 1024를 곱함)이 되어야한다.
-  - 만약 poll 할 때 더 많은 record를 poll 하고자 한다면 `batch.max.rows`의 값도 함께 수정하면 된다.
-  - `batch_max_rows`의 값을 변경할 경우 `batch_size`도 다시 계산해야한다. 
-  - 예를 들어 `batch_max_rows`를  500으로 증가시키면, `batch_size`는 `500*1.09*1024=558080`이 된다.
+    - 현재 한 번 polling할 때 `batch.max.rows`의 기본값인 100만큼 가져오고, record size의 평균인 `record_size_avg`의 값이 1.09 KiB이므로 `batch_size`는 `100*1.09*1024=111616`(KiB를 bytes로 변환하기위해 1024를 곱함)이 되어야한다.
+    - 만약 poll 할 때 더 많은 record를 poll 하고자 한다면 `batch.max.rows`의 값도 함께 수정하면 된다.
+    - `batch_max_rows`의 값을 변경할 경우 `batch_size`도 다시 계산해야한다. 
+    - 예를 들어 `batch_max_rows`를  500으로 증가시키면, `batch_size`는 `500*1.09*1024=558080`이 된다.
+  
   - Kafka source connector 설정에서 아래와 같이 `batch.size`와 `batch_max_rows`의 값을 조정한다.
-
+  
   ```json
   {
       "producer.override.batch.size": 111616,
       "batch.max.rows": 500
   }
   ```
-
+  
   - 튜닝 후 지표 확인하기
     - `records_per_request_avg`의 값이 `batch.max.rows`에 미치지 않는 것을 확인할 수 있다.
     - `records_per_request_avg`의 값이 `batch.max.rows`에 미치지 않는 다는 것은, producer가 batch가 채워질 때 까지 좀 더 기다려야 한다는 것을 나타낸다.
     - 이는 `linger.ms`의 값이 증가해야 한다는 것을 의미한다.
-
+  
   | Metric                                                     | Value       |
   | ---------------------------------------------------------- | ----------- |
   | kafka_connect_source_task_metrics_source_record_poll_rate  | 61.5K ops/s |
@@ -1448,21 +1473,21 @@
   | kafka_producer_producer_metrics_batch_size_avg             | 95.3 KiB    |
   | kafka_producer_producer_metrics_records_per_request_avg    | 95.9        |
   | kafka_producer_producer_metrics_records_send_rate          | 60.8K       |
-
+  
   - `linger.ms` 증가시키기
     - `linger.ms`의 값은 환경에 따라 다르기 때문에 특별히 정하는 규칙이 있지는 않다.
     - 아래와 같이 `linger.ms`의 값을 기본값인 0에서 10으로 증가시킨다.
-
+  
   ```json
   {
       "producer.override.linger.ms": 10
   }
   ```
-
+  
   - 다시 producer 지표 확인하기
     - `records_per_request_avg`의 값이 `batch.max.rows` 이상으로 증가한 것을 확인할 수 있다.
     - 다만 `records_send_rate`의 값은 거의 변화가 없는 것을 확인할 수 있는데, 이는 connector가 producer에게 충분히 빠르게 record들을 전송하지 못하고 있다는 것을 가리킨다.
-
+  
   | Metric                                                  | Value   |
   | ------------------------------------------------------- | ------- |
   | kafka_producer_producer_metrics_batch_size_avg          | 543 KiB |
