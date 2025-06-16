@@ -3,6 +3,8 @@
 - Dockerfile
   - Docker 상에서 작동시킬 컨테이너의 구성 정보를 기술하기 위한 파일.
   - Dockerfile로 Docker 이미지를 생성하면 Dockerfile에 작성된 구성 정보가 담긴 이미지가 생성된다.
+  - 다른 Image를 기반으로 작성할 경우, 해당 image에 덮어씌워지는 형식이 아니라 추가되는 형식이다.
+    - 단, ENTRYPOINT와 CMD의 경우 마지막으로 작성된 하나만 적용되므로, 이들은 덮어씌워진다.
 
 
 
@@ -109,17 +111,18 @@
 
 -  ADD 명령
 
-  - 이미지에 호스트 상의 파일 및 디렉토리를 추가할 때 사용한다.
-
+  - 이미지에 호스트 상의 파일 및 디렉터리를 추가할 때 사용한다.
+  - 호스트의 파일 및 디렉터리 뿐 아니라 원격 파일도 추가가 가능하다.
+  
   ```dockerfile
-  ADD <호스트의 파일 경로> <Docker 이미지의 파일 경로>
+  ADD <src> <dst(docker image 상의 경로)>
   ```
 
 
 
 - COPY 명령
 
-  - 이미지에 호스트상의 파일이나 디렉토리를 복사할 때 사용한다.
+  - 이미지에 호스트상의 파일이나 디렉터리를 복사할 때 사용한다.
 
   ```dockerfile
   COPY <호스트의 파일 경로> <Docker 이미지의 파일 경로>
@@ -199,7 +202,7 @@
   
     - 단 쉘을 지정하면 환경 변수를 사용 가능하다.
   
-  ```bash
+  ```dockerfile
   ENV foo bar
   
   # 아래와 같이 실행하면 exec 형식이라고 하더라도 환경 변수를 사용할 수 있다.
@@ -212,10 +215,10 @@
 
 - CMD 명령어
   - RUN 명령은 이미지를 작성하기 위해 실행하는 명령을 기술하는 반면 CMD 명령은 이미지를 바탕으로 생성된 컨테이너 안에서 실행할 명령을 기술한다.
-  - 하나의  CMD 명령만을 기술할 수 있으며 복수의 명령을 작성하면 마지막 명령만 적용된다.
-  - Exec  형식으로 기술
+  - 하나의 CMD 명령만을 기술할 수 있으며 복수의 명령을 작성하면 마지막 명령만 적용된다.
+  - Exec 형식으로 기술
     - RUN 명령의 구문과 동일하다.
-  - Shell  형식으로 기술
+  - Shell 형식으로 기술
     - RUN 명령의 구문과 동일하다.
   - ENTRYPOINT 명령의 파라미터로 기술
     - ENTRYPOINT 명령의 인수로 CMD 명령을 사용할 수 있다.
@@ -223,17 +226,86 @@
 
 
 - ENTRYPOINT 명령어
-  - 데몬 실행
   - ENTRYPOINT 명령에서 지정한 명령은 `docker run` 명령을 실행했을 때 실행된다.
-  - Exec  형식으로 기술
+    - 오직 마지막에 작성된 ENTRYPOINT만 적용된다.
+  - Exec 형식으로 기술
     - RUN 명령의 구문과 동일하다.
-  - Shell  형식으로 기술
-    - RUN 명령의 구문과 동일하다
-  - CMD  명령과의 차이
-    - `docker run` 명령 실행 시의 동작에 차이가 있다.
-    -  CMD 명령의 경우는 컨테이너 시작 시에 실행하고 싶은 명령을 정의해도 `docker run` 명령 실행 시에 인수로 새로운 명령을 지정한 경우 이것을 우선 실행한다.
+  - Shell 형식으로 기술
+    - RUN 명령의 구문과 동일하다.
+
+
+
+- CMD와 ENTRYPOINT 명령의 차이
+
+  - 기본적인 차이
+    - 기본적으로 ENTRYPOINT는 컨테이너가 시작할 때 반드시 실행되어야 하는 주 명령을 지정한다.
+    - CMD는 기본 인자 또는 기본 명령을 지정하는 것으로, ENTRYPOINT에 인자를 전달하거나, 별도 명령을 지정한다.
+  - `docker run` 명령 실행 시의 동작에 차이가 있다.
+    - CMD 명령의 경우는 컨테이너 시작 시에 실행하고 싶은 명령을 정의해도 `docker run` 명령 실행 시에 인수로 새로운 명령을 지정한 경우 이것을 우선 실행한다.
     - 반면 ENTRYPOINT 에서 지정한 명령은 반드시 컨테이너에서 실행되는데, 실행 시에 명령 인수를 지정하고 싶을 때는 CMD 명령과 조합하여 사용한다.
     - ENTRYPOINT 명령으로는 실행하고 싶은 명령 자체를 지정하고 CMD 명령으로는 그 명령의 인수를 지정하면, 컨테이너를 실행했을 때의 기본 작동을 결정할 수 있다.
+
+  - 예를 들어 아래와 같이 Dockerfile을 작성하고
+
+  ```dockerfile
+  ENTRYPOINT ["echo", "hello"]
+  ```
+
+  - 아래와 같이 실행하면
+    - `echo hello`가 실행된다.
+
+  ```bash
+  $ docker run myimg
+  ```
+
+  - 만약 아래와 같이 추가 인자를 줄 경우
+    - `echo hello world`가 실행된다.
+
+  ```bash
+  $ docker run myimg world
+  ```
+
+  - 반면에 아래와 같이 Dockerfile을 작성하고
+
+  ```dockerfile
+  CMD ["echo", "hello"]
+  ```
+
+  - 아래와 같이 실행하면
+    - `echo hello`가 실행된다.
+
+  ```bash
+  $ docker run myimg
+  ```
+
+  - 그러나 아래와 같이 추가 인자를 줄 경우
+    - CMD에 지정한 `echo hello`가 무시되고, `date`명령어가 실행된다.
+
+  ```bash
+  $ docker run myimg date
+  ```
+
+  - 둘을 같이 사용하여 Dockerfile을 작성하고
+
+  ```dockerfile
+  ENTRYPOINT ["echo"]
+  CMD ["hello"]
+  ```
+
+  - 아래와 같이 실행하면
+    - `echo hello`가 실행된다.
+    - CMD가 ENTRYPOINT의 인자로 넘어가
+
+  ```bash
+  $ docker run myimg
+  ```
+
+  - 아래와 같이 추가 인자를 줘서 실행하면
+    - CMD가 무시되고 `echo world`가 실행된다.
+
+  ```bash
+  $ docker run myimg world
+  ```
 
 
 
@@ -1675,9 +1747,10 @@
     - 일반적으로 같은 host에 실행중인 container들 사이의 통신에 사용된다.
   - `host`
     - Docker container가 host machine의 network를 바로 사용하게 하는 driver이다.
+    - 즉 Docker container와 host machine 사이의 네트워크 격리를 제거한다.
   - `overlay`
     - 각기 다른 daemon에서 실행중인 container 사이의 통신에 사용된다.
-
+  
   - `none`
     - Container의 network를 host machine과 다른 container부터 완전히 격리시킨다.
     - Swarm service에서는 사용할 수 없다.
@@ -1692,10 +1765,11 @@
     - Docker bridge driver는 host machine에 규칙을 설정하여 다른 bridge network에 속한 container들끼리는 직접적으로 통신을 할 수 없게 막는다.
   - Bridge network는 같은 Docker daemon에서 실행중인 container 사이에만 적용된다.
     - 다른 daemon에서 실행중인 container들 사이에 통신을 하기 위해서는 OS level에서 routing을 관리하던가 overlay driver를 사용해야한다.
-
   - Docker를 처음으로 실행할 때 자동으로 bridge라는 network가 생성된다.
     - 만약 container를 생성할 때 network를 설정해 주지 않으면 bridge network에 연결된다.
     - 그러나 bridge network를 직접 생성하여 사용하는 것이 자동으로 생성된 bridge network를 사용하는 것 보다 나으므로, 직접 생성하는 것이 권장된다.
+  - 같은 network에 속한 container들 사이의 통신에 container의 이름을 사용할 수 있다.
+    - 만약 docker compose로 실행했을 경우 container name뿐 아니라 service name으로 통신이 가능하다.
 
 
 
@@ -1729,6 +1803,21 @@
   ```
 
 
+
+- Host
+  - Docker container와 host machine 사이의 네트워크 격리를 제거한다.
+    - 따라서 Docker container는 host machine의 network namespace를 공유한다.
+    - 또한 이 경우 container는 고유한 IP address를 할당받지 않는다.
+    - `-p` 옵션을 줄 경우 이 옵션은 무시된다.
+  - 아래와 같은 경우에 유용하게 사용할 수 있다.
+    - Docker container는 외부와 통신할 때 network address translation(NAT)과 userland proxy를 사용한다.
+    - Host 모드는 이러한 중간 계층 없이 container가 host machine의 network interface를 바로 사용하기 때문에 불필요한 오버헤드가 줄어든다.
+    - 따라서 성능을 최적화해야하는 경우 유용하게 사용할 수 있다.
+    - 또한 container는 각 포트마다 userland-proxy 프로세스를 생성할 수 있으며, 이로 인해 CPU 자원 낭비와 성능 저하가 발생할 수 있다.
+    - 따라서 container가 광범위한 port들을 다뤄야 하는 경우에도 유용하게 사용할 수 있다.
+  - 제약 사항
+    - Container 내부에서 host machine의 IP address로 bind 할 수 없다.
+    - Linux 환경에서만 사용이 가능하다.
 
 
 

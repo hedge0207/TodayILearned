@@ -65,7 +65,7 @@
   - 아래 명령어를 통해 컨테이너에 설정된 logging driver를 확인할 수 있다.
 
   ```bash
-  docker inspect -f '{{.HostConfig.LogConfig.Type}}' <CONTAINER 식별자>
+  $ docker inspect -f '{{.HostConfig.LogConfig.Type}}' <CONTAINER 식별자>
   ```
 
 
