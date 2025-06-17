@@ -338,46 +338,6 @@
 
 
 
-- mapping 작성시 field명에 `.`을 넣으면  object 타입으로 생성된다.
-
-  - 필드명에 `.`을 넣고 생성
-
-  ```json
-  // PUT mapping_test
-  {
-    "mappings": {
-      "properties": {
-        "user.name":{
-          "type":"keyword"
-        }
-      }
-    }
-  }
-  ```
-
-  - 결과
-
-  ```json
-  // GET mapping_test/_mapping
-  {
-    "mapping_test" : {
-      "mappings" : {
-        "properties" : {
-          "user" : {
-            "properties" : {
-              "name" : {
-                "type" : "keyword"
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  ```
-
-
-
 - `_source` 
 
   - `_source` 필드에 original data를 저장할지 저장하지 않을지 설정이 가능하다.
@@ -702,6 +662,34 @@
 
 
 
+- `fields`
+
+  - 멀티 필드를 생성하기 위한 설정이다.
+    - 서브 필드라고 부르기도 하나 Elasticsearch 공식 문서에서 multi-field라 지칭한다. 
+    - 아래와 같이 `fields`에 멀티 필드를 설정할 수 있다.
+
+  ```json
+  // PUT movies
+  {
+    "mappings": {
+      "properties": {
+        "title": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword"
+            }
+          }
+        }
+      }
+    }
+  }
+  ```
+
+  - 멀티 필드는 _source에 어떠한 변경도 주지 않는다.
+    - 따라서 멀티 필드를 설정해도 `_source`에 노출되지는 않는다.
+  - Dynamic하게 추가하는 것은 불가능하며, 반드시 mapping을 수정해야한다.
+
 
 
 
@@ -919,8 +907,9 @@
     - 보통은 한 요소가 여러 하위 정보를 가지고 있는 경우 object 타입 형태로 사용한다.
   - object 필드를 선언할 때는 다음과 같이 `"properties"`를 입력하고 그 아래에 하위 필드 이름과 타입을 지정한다.
 
-  ```bash
-  $ curl -XPUT 'localhost:9200/movies?pretty' -H 'Content-Type: application/json' -d '{
+  ```json
+  // PUT movies
+  {
     "mappings": {
       "properties": {
         "characters": {
@@ -940,11 +929,11 @@
     }
   }
   ```
-
+  
   - object 필드를 쿼리로 검색하거나 집계를 할 때는 `.`를 이용해서 하위 필드에 접근한다.
-
-  ```bash
-  $ curl "http://localhost:9200/movie/_search" -H 'Content-Type: application/json' -d'
+  
+  ```json
+  // GET movies/_search
   {  
   	"query": {    
   		"match": { 
@@ -953,12 +942,12 @@
       }
   }'
   ```
-
+  
   - 역색인 방식
-    - 역색인은 필드 별로 생성된다.
+    - 역색인은 필드 내부의 개별 필드가 아닌 최상위 필드하나로 생성된다.
     - 즉 object 필드 내부의 값이 각기 따로 따로 역색인 구조를 갖는 것이 아니라 하나의 역색인 구조를 갖게 된다.
     - 아래와 같이 데이터를 입력하고, 검색을 하면 `characters.name`이 Loki 이면서 `characters.side`가 villain인 1번 문서만 검색 될 것 같지만 막상 검색을 해보면 둘 다 검색된다.
-
+  
   ```json
   // 아래와 같이 2개의 문서를 삽입
   // PUT movies/_doc/1
@@ -992,7 +981,7 @@
   }
   
   // 위에서 삽입한 문서를 검색한다.
-  // GET movie/_search
+  // GET movies/_search
   {
     "query": {
       "bool": {
@@ -1023,7 +1012,7 @@
 
   - nested 타입으로 지정하려면 매핑이 다음과 같이 `"type":"nested"`를 명시한다.
     - 다른 부분은 object와 동일하다.
-  
+
   ```json
   curl -XPUT "http://localhost:9200/movie" -H 'Content-Type: application/json' -d'{
   "mappings":{    
@@ -1043,17 +1032,17 @@
     }
   }'
   ```
-  
+
     - nested 필드를 검색 할 때는 반드시 nested 쿼리를 써야 한다. 
       - nested 쿼리 안에는 path 라는 옵션으로 nested로 정의된 필드를 먼저 명시하고 그 안에 다시 쿼리를 넣어서 입력한다.
       - nested 쿼리로 검색하면 nested 필드의 내부에 있는 값 들을 모두 별개의 도큐먼트로 취급한다.
       - object 필드 값들은 실제로 하나의 도큐먼트 안에 전부 포함되어 있다.
       - nested 필드 값들은 내부적으로 별도의 도큐먼트로 분리되어 저장되며 쿼리 결과에서 상위 도큐먼트와 합쳐져서 보여지게 된다.
-  
+
     - 역색인 방식
       - Object 타입과 달리 필드 내부의 값들이 각각 역색인 된다.
       - 따라서 아래와 같은 검색 쿼리를 보내면 `characters.name`이 Loki 이면서 `characters.side`가 villain인 1번 문서만 검색되게 된다.
-  
+
   ```json
   // 인덱스 생성
   // PUT movies
@@ -1132,6 +1121,54 @@
     }
   }
   ```
+
+  - `fields`를 사용한 multi field와의 차이
+    - 둘은 목적이 다르다.
+    - `fields`는 멀티 필드를 사용하기 위한 기능이며, object type은 데이터를 object 형태로 저장하기 위한 기능이다.
+    - `fields`로 설정된 각각의 멀티 필드는 각기 다른 역색인 구조를 가지지만, object는 하나의 역색인을 가진다.
+
+
+
+- mapping 작성시 field명에 `.`을 넣으면  object 타입으로 생성된다.
+
+  - 필드명에 `.`을 넣고 생성
+
+  ```json
+  // PUT mapping_test
+  {
+    "mappings": {
+      "properties": {
+        "user.name":{
+          "type":"keyword"
+        }
+      }
+    }
+  }
+  ```
+
+  - 결과
+
+  ```json
+  // GET mapping_test/_mapping
+  {
+    "mapping_test" : {
+      "mappings" : {
+        "properties" : {
+          "user" : {
+            "properties" : {
+              "name" : {
+                "type" : "keyword"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  ```
+
+  - Object 형식으로 색인하는 것과, dot 을 사용하여 색인하는 것 사이에 동작에는 차이가 없다.
+    - 다만, _source는 데이터를 있는 그대로의 형태로 저장하기에, _source에서 노출될 때는 차이가 있다.
 
 
 
@@ -1718,9 +1755,9 @@
 - Mapping explosion을 방지하기 위한 방법들
 
   - Flattened data type을 사용한다.
-    - 아래 예시와 같이 object 형식의 data를 색인하면, object 내의 data가 sub field로 생성된다.
-    - 즉 foo field의 sub field로 bar, qux field가 생성된다.
-    - 그러나 flattened type으로 색인할 경우 sub field를 생성하지 않고 object 내의 모든 data를 단일 field에 색인하여 전체 field의 개수를 줄일 수 있다.
+    - 아래 예시와 같이 object 형식의 data를 색인하면, object 내의 키 값들이 필드로 생성된다.
+    - 즉 foo field 아래에 bar, qux field가 생성된다.
+    - 그러나 flattened type으로 색인할 경우 추가 field를 생성하지 않고 object 내의 모든 data를 단일 field에 색인하여 전체 field의 개수를 줄일 수 있다.
 
   ```json
   // PUT test
