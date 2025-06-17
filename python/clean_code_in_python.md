@@ -1038,3 +1038,152 @@
 
 
 
+
+
+## 데코레이터와 클린 코드
+
+- 상속보다 구성(composition)
+
+  - 아래와 같은 상황을 해결해야한다.
+    - 특정 패키지에 속한 클래스를 사용하려고 하는데, 해당 클래스의 모든 attribute에는 `resolve_`가 prefix로 붙어있다.
+    - 해당 패키지를 사용하는 코드에서는 패키지 클래스의 attribute들에 접근할 때 `resolve_`를 일일이 붙여서 접근하고싶지 안하.
+  - Mixin을 사용하여 위 문제를 해결할 수 있다.
+    - Mixin을 생성하고, 해당 mixin을 상속 받게 한다.
+
+  ```python
+  from dataclasses import dataclass
+  
+  
+  class BaseResolverMixin:
+      def __getattr__(self, attr: str):
+          if attr.startswith("resolve_"):
+              *_, actual_attr = attr.partition("resolve_")
+          else:
+              actual_attr = attr
+              
+          try:
+              return self.__dict__[actual_attr]
+          except KeyError as e:
+              raise AttributeError from e
+              
+              
+  @dataclass
+  class Customer(BaseResolverMixin):	# 상속
+      customer_id: str
+      name: str
+  
+  
+  customer = Customer("1", "John")
+  print(customer.resolve_customer_id)
+  ```
+
+  - 데코레이터를 사용해도 해결이 가능하다.
+
+  ```python
+  from dataclasses import dataclass
+  
+  
+  def _resolver_method(self, attr):
+      if attr.startswith("resolve_"):
+          *_, actual_attr = attr.partition("resolve_")
+      else:
+          actual_attr = attr
+          
+      try:
+          return self.__dict__[actual_attr]
+      except KeyError as e:
+          raise AttributeError from e
+              
+  def with_resolver(cls):
+      cls.__getattr__ = _resolver_method
+      return cls
+  
+  
+  @dataclass
+  @with_resolver		# 데코레이터
+  class Customer:
+      customer_id: str
+      name: str
+  
+  
+  customer = Customer("1", "John")
+  print(customer.resolve_customer_id)
+  ```
+
+  - 데코레이터를 사용한 방식이 상속을 사용하는 방식보다 낫다.
+    - 데코레이터를 사용한다는 것은 상속 대신에 구성을 사용하는 것이므로, 결합도를 낮출 수 있다.
+    - 또한 위와 같은 상황에서 상속을 사용하는 것은 적절한 해결 방법이 아니다.
+    - 첫 번째로, 상속을 단순히 코드 재사용을 위해서 사용했기 때문이고, 둘 째로 개념적으로 `Customer` 클래스가 `BaaseResolverMixin` 클래스의 하위에 있지도 않기 때문이다.
+  - 위 예시에서 데코레이터가 구성을 활용했다고 볼 수 있는지?
+    - 일반적으로 구성은 `A has a B`와 같이  한 객체가 다른 객체를 가지고 있음을 의미한다.
+    - 그런 면에서 위 예시는 일반적인 구성에 딱 들어맞지는 않지만, `_resolver_method`라는 메서드를 가지게 된다(`Customer has a _resolver_method`)라는 맥락에서는 구성이라고 볼 수 있다.
+    - 즉, 부모 클래스의 메서드를 상속 받는 것이 아니라, 주입을 통해 가지게 되는 구성이라고 볼 수 있다.
+
+
+
+- 데코레이터와 DRY 원칙
+  - 데코레이터를 사용하면 곳에 중복으로 필요한 로직을 한 번만 구현하여 여러 곳에서 재사용하게 할 수 있다.
+  - 다만 데코레이터는 복잡성을 증가시키므로, 아래 내용을 지키면서 사용해야한다.
+    - 처음부터 데코레이터를 만들지 않고, 패턴이 생기고 데코레이터에 대한 추상화가 명확해지면 그 때 리펙터링을 하면서 데코레이터를 만든다.
+    - 데코레이터가 각기 다른 곳에서 적어도 3회 이상 필요한 경우에만 구현한다.
+    - 데코레이터 코드를 최소한으로 유지한다.
+
+
+
+- 데코레이터와 관심사의 분리
+
+  - 아래와 같은 데코레이터가 있다고 가정해보자.
+
+  ```python
+  def traced_function(func):
+      @wraps(func)
+      def wrapped(*args, **kwargs):
+          print(func.__qualname__, "함수 실행")
+          start_time = time.time()
+          result = func(*args, **kwargs)
+          print("함수 실행 시간:", time.time()-start_time)
+       	return result
+      return wrapped
+  ```
+
+  - 위 데코레이터에는 문제가 있다.
+    - 하나 이상의 작업을 수행하고 있다.
+    - 특정 함수가 방금 호출된 것을 기록하고, 실행하는데 걸린 시간도 기록한다.
+    - 따라서 위 코드는 좀 더 구체적이고 제한적인 책임을 지닌 더 작은 데코레이터로 분류되어야한다.
+
+  - 개선
+    - 더 작은 데코레이터로 분리한다.
+
+  ```python
+  def log_execution(func):
+      @wraps(func)
+      def wrapped(*args, **kwargs):
+          print(func.__qualname__, "함수 실행")
+          return func(*args, **kwargs)
+      return wrapped
+  
+  def measure_time(func):
+      @wraps(func)
+      def wrapped(*args, **kwargs):
+          start_time = time.time()
+          result = func(*args, **kwargs)
+          print("함수 실행 시간:", time.time()-start_time)
+          return result
+      return wrapped
+  
+  @mesure_time
+  @log_execution
+  def opertaion(): ...
+  ```
+
+
+
+
+- 좋은 데코레이터 분석
+  - 좋은 데코레이터는 아래와 같은 특성을 갖춰야한다.
+    - 캡슐화: 데코레이터의 내부 구현을 모르더라도 사용이 가능해야한다.
+    - 관심사의 분리: 실제로 하는 일과 장식하는 일의 책임을 명확하게 구분해야한다.
+    - 독립성: 데코레이터는 자신이 장식하는 객체와 최대한 분리되어야한다.
+    - 재사용성: 하나의 함수 인스턴스에만 적용되는 것이 아니라 여러 유형에 적응 가능한 형태가 바람직하다.
+  - 좋은 데코레이터는 깔끔한 인터페이스를 제공하고, 사용자가 내부 동작 원리를 자세히 몰라도 기대하는 바를 정확히 성취하게 해준다.
+
