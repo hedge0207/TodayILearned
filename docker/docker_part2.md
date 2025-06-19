@@ -127,6 +127,17 @@
   ```dockerfile
   COPY <호스트의 파일 경로> <Docker 이미지의 파일 경로>
   ```
+  
+  - 소유권과 권한을 아래와 같이 설정할 수 있다.
+  
+    - 설정하지 않을 경우 기본적으로 소유권은 root,  file의 권한은 334, directory의 권한은 755로 설정된다.\
+    - 단 `--chown`와 `--chmod` 옵션은 Linux container에만 적용되며, Windows container에는 적용되지 않는다.
+  
+  
+  ```dockerfile
+  COPY [--chown=<user>:<group>] [--chmod=<perms>] <src> <dest>
+  COPY [--chown=<user>:<group>] [--chmod=<perms>] ["<src>" "<dest>"]
+  ```
 
 
 
@@ -309,6 +320,41 @@
 
 
 
+- VOLUME 명령
+
+  - JSON 배열 형식 또는 단순 문자열 형식으로 볼륨을 설정한다.
+    - Host driectory는 host의 환경에 따라 달라지므로 지정할 수 없으며, 컨테이너 실행 시점에 동적으로 결정된다.
+
+  ```dockerfile
+  # JSON 배열 형식
+  VOLUME ["/var/log/"]
+  
+  # 단순 문자열 형식
+  VOLUME /var/log
+  
+  # 문자열 형식으로 여러 개 지정
+  VOLUME /var/log /var/db
+  ```
+
+  - 위와 같이 생성된 image로 container를 생성하면 volume이 함께 생성된다.
+    - Volume의 이름을 지정하는 것은 불가능하며, anonymous volume으로 생성된다.
+  - 아래와 같이 소유권을 지정해 줄 경우 볼륨이 설정된 후에도 소유권은 변하지 않는다.
+    - 아래 이미지로 컨테이너 실행 후 `/data`의 소유권을 확인해보면 appuser의 소유인 것을 확인할 수 있다.
+
+  ```dockerfile
+  FROM ubuntu:22.04
+  
+  RUN useradd -u 1001 appuser
+  
+  RUN mkdir /data && chown appuser:appuser /data
+  
+  VOLUME ["/data"]
+  ```
+
+
+
+
+
 - ONBUILD 명령
   - 빌드 완료 후, 다음 빌드에서 실행할 명령을 이미지 안에 설정하기 위한 명령이다.
     - ONBUILD 명령이 포함된 이미지를 빌드한다.
@@ -342,8 +388,6 @@
    cd Python-3.7.3 && \
    ./configure --enable-optimizations
   ```
-
-
 
 
 

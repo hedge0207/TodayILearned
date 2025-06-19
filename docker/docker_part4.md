@@ -135,6 +135,8 @@
 
 
 
+
+
 # Docker volume과 권한, 소유자, 소유 그룹
 
 - Docker container 내에서의 uid와 gid
@@ -142,6 +144,7 @@
   > https://medium.com/@mccode/understanding-how-uid-and-gid-work-in-docker-containers-c37a01d01cf
 
   - 아무런 option을 주지 않을 경우 container 내의 모든 process는 root로 실행된다.
+    - 즉 container를 실행할 때, user를 지정하지 않거나, Dockerfile에 USER를 설정하지 않으면 root로 실행된다.
   - Linux kernel은 모든 process를 실행할 때 프로세스를 실행한 user의 uid와 gid를 검사한다.
     - User name과 group name이 아닌 uid와 gid를 사용한다는 것이 중요하다.
   - Docker container 역시 kernel을 가지고 있으므로 container 내부에서 process 실행시 uid와 gid를 검사한다.
@@ -180,7 +183,7 @@
 
 
 
-- Bind-mount volume의 소유자
+- Bind-mount의 소유자
 
   - Docker compose file
 
@@ -200,87 +203,67 @@
   ```
 
   - Container 내부의 file 소유자
-    - Container 내부에는 서는 bind mount 대상인 file의 유무와 무관하게 host에 있는 file의 소유자, 그룹이 소유자와 소유 그룹이 된다.
+    - Container 내부에서는 bind mount 대상인 file의 유무와 무관하게 host에 있는 file의 소유자, 그룹이 소유자와 소유 그룹이 된다.
     - 예를 들어 host에서 foo라는 사용자가 dir을 만들었다면 container 내부에 `/home/dir`이 원래 있었는지와 무관하게 container 내부의 `/home/dir`의 소유자, 소유 그룹은 foo와 foo의 그룹이 된다.
   - Host machine의 file 소유자
     - Bind mount를 통해 volume을 설정하더라도 소유자는 변경되지 않는다.
     - 예를 들어 위에서 `dir`을 foo라는 사용자가 만들었다면, bind mount를 하더라도 해당 file의 소유자는 foo이다.
     - Host machine에 없는 file을 대상으로 bind mount할 경우 Docker가 해당 file을 생성하는데, 이 때는 root 권한으로 생성된다.
+  - Host machine에 file이 없었을 경우.
+    - Host machine에 bind mount한 파일이 없었을 경우 host machine에는 root 소유로 file이 생성된다.
+    - Container 내부의 file 권한은 bind mount된 host machine file의 소유권을 따르므로 내부의 file도 root 권한으로 변경된다.
+    - 예를 들어 Container 내부에 foo user의 소유인 `/home/foo/test`라는 디렉터리가 있었다고 가정한다.
+    - 이 때, host machine에는 `./non_exist_dir`이라는 경로가 존재하지 않는 상황에서 `docker run -v ./non_exist_dir:/home/foo/test alpine`과 같이 컨테이너를 실행한다.
+    - Host machine에는 root 소유로 `./non_exist_dir` 디렉터리가 생성되고, container 내부의 `/home/foo/test`의 소유권 역시 host machine의 소유권에 따라 root로 변경된다.
+    - 이 경우에도 마찬가지로 container 내부에 bind mount 대상 파일과 무관하게 root 소유권으로 설정된다.
 
 
 
-- 기본 umask 설정
+- Volume의 소유자
 
-  - 예를 들어 아래와 같이 5초 마다 umask 값을 출력하는 python code가 있다고 가정해보자.
+  - Volume의 경우 bind mount와 다르게 동작한다.
+    - Named volume과 anonymous volume 모두 마찬가지다.
+  - 아래와 같은 Dockerfile을 작성하고
+    - UID 2002로 foo 사용자를 생성한다.
+    - foo라는 사용자로 /home/foo/my_dir에 directory를 생성한다.
 
-  ```python
-  # main.py
-  
-  import os
-  import time
-  
-  try:
-      while True:
-          os.system("umask")
-          time.sleep(5)
-  except (KeyboardInterrupt, SystemExit):
-      logger.info("Bye!")
-  ```
-
-  - Dockerfile을 아래와 같이 설정한다.
-    - `.bashrc`은 user의 home directory에 생성되므로, user 추가시 `-m` option을 줘야한다.
-  
   ```dockerfile
-  FROM python:3.8.0
+  FROM alpine:latest
   
-  RUN useradd -m -u 1005 foo
+  RUN adduser -u 2002 -D foo
   
   USER foo
   
-  # .bashrc에 umask 0002 명령어를 추가한다.
-  RUN echo "umask 0002" >> ~/.bashrc
-  
-  COPY ./main.py /main.py
-  
-  ENTRYPOINT ["python", "main.py"]
-  ```
-  
-    - 위 예시의 경우 0002를 출격할 것 같지만, 0002를 출력한다. 즉, 의도한 대로 동작하지 않는다.
-      - 반면에 `docker exec -it <container> /bin/bash`와 같이 입력하여 직접 `python main.py`를 실행시키면 0002가 제대로 출력된다.
-  
-  
-    - 아래와 같이 dockefile을 작성한다.
-      - `umask 0002`와 python script 실행이 한 세션에서 실행될 수 있도록 한다.
-  
-  ```dockerfile
-  FROM python:3.8.0
-  
-  RUN useradd -m -u 1005 foo
-  
-  USER foo
-  
-  COPY ./main.py /main.py
-  
-  ENTRYPOINT ["/bin/bash", "-c", "umask 0002 && python main.py"]
+  RUN mkdir /home/foo/my_dir
   ```
 
-
-
-- Dockerfile에서 `COPY` 명령어 실행시 소유권과 권한을 아래와 같이 설정할 수 있다.
-
-  - 설정하지 않을 경우 기본적으로 소유권은 root,  file의 권한은 334, directory의 권한은 755로 설정된다.\
-  - 단 `--chown`와 `--chmod` 옵션은 linux container에만 적용되며, windows container에는 적용되지 않는다.
+  - Image를 build한다.
 
   ```bash
-  COPY [--chown=<user>:<group>] [--chmod=<perms>] <src> <dest>
-  COPY [--chown=<user>:<group>] [--chmod=<perms>] ["<src>" "<dest>"]
+  $ docker build -t alpine:test .
   ```
 
+  - Container를 생성할 때 아래와 같이 named volume을 설정한다.
+  
+  ```bash
+  $ docker run -v test_vol:/home/foo/my_dir -it alpine:test
+  ```
+  
+  - Host machine에 생성된 `test_vol` 내부의 소유자를 확인하면 아래와 같다.
+    - Container 내에서 foo user의 UID인 2002로 소유자가 설정된 것을 확인할 수 있다.
 
-
-- Docker compose options
-  - tty:true로 주면 docker run 실행시에 -t option을 준 것과 동일하다.
-  - stdin_open:true로 주면 docker run 실행시에 -i option을 준 것과 동일하다.
+  ```bash
+  $ ls -l /var/lib/docker/volumes/test_vol
+  
+  # drwxr-sr-x 2 2002 2002 4096 Jun 18 16:44 _data
+  ```
+  
+  - 만약 container 내에 없는 directory로 volume을 설정할 경우 host와 container 모두 root가 소유자로 설정된다.
+  
+  ```bash
+  # 아래와 같이 container 내에 없는 경로로 volume을 설정하면 host와 container 양쪽 모두에서 root가 소유자로 설정된다.
+  $ docker run -v test_vol:/home/foo/non_exist_dir -it alpine:test
+  ```
 
 
 
@@ -289,6 +272,12 @@
 
 
 # etc
+
+- Docker compose options
+  - tty:true로 주면 docker run 실행시에 -t option을 준 것과 동일하다.
+  - stdin_open:true로 주면 docker run 실행시에 -i option을 준 것과 동일하다.
+
+
 
 - Orphan container
 
@@ -362,91 +351,62 @@
 
 
 
-## Docker Volume 사용시 ownership 문제
+- 기본 umask 설정
 
-- 문제
-  - Docker volume 사용시 container 내부에서 volume으로 설정된 file 혹은 directory(이하 file)의 소유권은, host에서 해당 container를 실행시킨 사람의 uid, gid로 설정된다.
-  - 일부 docker image들은 내부적으로 기본 사용자만 특정 file에 접근하도록 설정되어 있다.
-  - 만일 이러한 file에 volume을 설정할 경우 해당 file의 소유권은 host에서 container를 실행시킨 user의 id와 group id로 설정된다.
-  - 따라서 docker image 상에서 기본 사용자로는 permission 문제로 해당 file에 접근할 수 없게 된다.
+  - 예를 들어 아래와 같이 5초 마다 umask 값을 출력하는 python code가 있다고 가정해보자.
 
-
-
-- 예시
-
-  - Elasticsearch에서 제공하는 logstash image는 `logstash`를 기본 사용자로 하고, logstash 실행시 file 작성이 필요할 경우 `logstash`가 소유하고 있는 file에 작성한다.
-    - 아래와 같이 logstash가 file을 작성하는 data folder는 소유 유저가 `logstash`, 소유 그룹이 `root`로 설정되어 있다.
-
-  ```bash
-  # docker container
-  $ ls -l
-  # ...
-  drwxrwsr-x 1 logstash root  4096 Jan 28  2022 data
-  # ...
-  ```
-
-  - 그런데 위 file에 아래와 같이 volume을 설정할 경우 경우 
-
-  ```yaml
-  version: '3.2'
+  ```python
+  # main.py
   
-  services:
-    logstash:
-      # ...
-      volumes:
-        - ./data:/usr/share/logstash/data
-  	# ...
-  ```
-
-  - 소유권이 container를 실행시킨 host user(아래의 경우 foo)의 user id와 group id가 된다.
-
-  ```bash
-  # host machine
-  $ id
-  uid=1022(foo) gid=1022(foo) groups=1022(foo)
+  import os
+  import time
   
-  # docker container
-  $ ls -l
-  # ...
-  drwxrwsr-x 1 1022 1022  4096 Jan 28  2022 data
-  # ...
+  try:
+      while True:
+          os.system("umask")
+          time.sleep(5)
+  except (KeyboardInterrupt, SystemExit):
+      logger.info("Bye!")
   ```
 
-  - 따라서 `logstash` user는 `1022`라는 uid를 가진 user가 소유한 `data` folder에 쓰기 권한이 사라져 file을 쓸 수 없게 되고, 문제가 발생한다.
-
-
-
-- 해결
-
-  - 불가능한 방식들
-    - 가장 깔끔한 방식은 docker에서 volume을 설정할 때 소유권을 함께 설정하는 기능을 제공하는 것이겠으나, 그런 기능을 지원하지 않는다.
-    - 그렇다고 아래와 같이 docker image를 build할 때 미리 file을 생성해놓고 해당 file의 소유권을 변경해줘도, 결국 container 실행시 volume이 설정되면서 소유권이 덮어씌워지게 된다.
+  - Dockerfile을 아래와 같이 설정한다.
+    - `.bashrc`은 user의 home directory에 생성되므로, user 추가시 `-m` option을 줘야한다.
 
   ```dockerfile
-  FROM docker.elastic.co/logstash/logstash:7.17.0
-  # folder를 생성하고
-  RUN mkdir /usr/share/data/main
-  # 소유권을 변경해도
-  RUN chmod logstash:root /usr/share/data/main
+  FROM python:3.8.0
   
-  # 결국 container 실행시 volume이 설정되면 host의 user 정보로 소유권이 설정된다.
+  RUN useradd -m -u 1005 foo
+  
+  USER foo
+  
+  # .bashrc에 umask 0002 명령어를 추가한다.
+  RUN echo "umask 0002" >> ~/.bashrc
+  
+  COPY ./main.py /main.py
+  
+  ENTRYPOINT ["python", "main.py"]
   ```
 
-  - 해결 방법
-    - 아래와 같이 image 내의 기본 user(아래 예시의 경우 `logstash`)의 uid를 host user의 uid와 맞춰준다.
-    - 상기했듯, container 내부의 소유권은 host user의 uid, guid로 설정되므로, container 내부의 기본 user의 uid만 host user의 uid로 변경해주면 file에 접근이 가능해진다.
-    - 주의할 점은 build 과정에서 build process가 기본 user로 실행되고 있으므로 `usermod` 명령어가 실행이 안 될 수 있다.
-    - 따라서 uid 변경 전에 임시로 다른 user로 변경하는 과정이 필요하다.
+    - 위 예시의 경우 0002를 출격할 것 같지만, 0002를 출력한다. 즉, 의도한 대로 동작하지 않는다.
+      - 반면에 `docker exec -it <container> /bin/bash`와 같이 입력하여 직접 `python main.py`를 실행시키면 0002가 제대로 출력된다.
+
+
+    - 아래와 같이 dockefile을 작성한다.
+      - `umask 0002`와 python script 실행이 한 세션에서 실행될 수 있도록 한다.
 
   ```dockerfile
-  FROM docker.elastic.co/logstash/logstash:7.17.0
-  # 임시로 root로 변경하고
-  USER root
-  # 기본 user의 uid 변경 후
-  RUN usermod -u 1012 logstash
-  # 다시 기본 user로 변경한다.
-  USER logstash
+  FROM python:3.8.0
+  
+  RUN useradd -m -u 1005 foo
+  
+  USER foo
+  
+  COPY ./main.py /main.py
+  
+  ENTRYPOINT ["/bin/bash", "-c", "umask 0002 && python main.py"]
   ```
+
+
 
 
 
@@ -501,23 +461,8 @@
   $ su <사용자 id>
   ```
 
-  
-
-  
-
-  
-
-  
 
 
-
-## docker 컨테이너 내부에서 docker 명령어 사용
-
-- `/var/run/docker.sock`파일을 볼륨을 잡아 컨테이너 내부의 동일 경로에 생성해 주면 된다.
-
-  ```
-  /var/run/docker.sock:/var/run/docker.sock
-  ```
 
 
 
@@ -546,15 +491,18 @@
 - 기존 데이터 복사하기
 
   - 변경하고자 하는 경로에 디렉토리를 생성한 후 기존 docker 데이터를 생성한 디렉토리에 옮긴다.
+    - 주의할 점은 cp 실행시 디렉터리 소유자가 cp를 실행한 사용자로 변경된다는 점이다.
+    - 만약 변경 되어선 안 되는 경우라면 소유자도 함께 변경해야한다.
+  
   - 복사 전에 구동중인 Docker 데몬을 종료한다.
-
+  
   ```bash
   # 새로운 디렉토리 생성
   $ mkdir data
   # Docker 데몬 종료
-  $ systemctl stop docker.servic
+  $ systemctl stop docker.service
   # 데이터 복사
-  $ cp -R /var/lib/docker data
+  $ cp -R -a /var/lib/docker data
   ```
 
 
@@ -568,24 +516,20 @@
   ExecStart=/usr/bin/dockerd --data-root <복사할 디렉터리> -H fd:// --containerd=/run/containerd/containerd.sock
   ```
 
-  - docker 데몬 재실행하기
-
-  ```bash
-  $ systemctl daemon-reload
-  $ systemctl start docker.service
-  ```
-
-
-
-- daemon.json에 "data-root" 추가
-
-  - daemon.json 파일에 아래 내용을 추가한다.
-    - CentOS의 경우 `/etc/docker/daemon.json ` 경로에 있다.
-
-  ```bash
+  - 혹은 daemon.json에 "data-root" 추가해도 된다.
+    - Linux의 경우 `/etc/docker/daemon.json` 경로에 있으며, 없으면 생성하면 된다.
+  
+  ```json
   {
       "data-root": "<복사할 디렉터리>"
   }
+  ```
+  
+  - docker 데몬 재실행하기
+  
+  ```bash
+  $ systemctl daemon-reload
+  $ systemctl start docker.service
   ```
 
 
