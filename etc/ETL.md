@@ -914,7 +914,7 @@
     - 만약 인식이 안 된다면 Kafka connect를 재실행한다.
 
     ```bash
-    curl localhost:8083/connector-plugins
+    $ curl localhost:8083/connector-plugins
     [
         {
             "class": "com.mongodb.kafka.connect.MongoSinkConnector",
@@ -974,6 +974,139 @@
     - `latest`(default): source에 이미 존재하는 data들은 무시하고, connector 실행 시점부터 변경 사항을 broker로 전달한다.
     - `copy_existing`: source에 이미 존재하는 모든 data를 broker로 전달한다.
     - `timestamp`: source에 이미 존재하는 data중 `startup.mode.timestamp.start.at.operation.time`에 설정한 시점부터의 변경 사항을 broker로 전달한다.
+
+
+
+
+
+## SQLServer source connector를 이용한 CDC
+
+- CDC 활성화
+
+  - SQLServer에 CDC를 활성화하기 위해서는 system stored procedure를 활성화해야한다.
+    - System stored procedures는 SQL Server Management Studio(SSMS) 또는 Transact-SQL를 통해 가능하다.
+  - 아래와 같은 것들이 필요하다.
+    - sysadmin에 속한 사용자 계정.
+    - CDC를 활성화하려는 DB의 소유자 계정.
+    - SQL Server Agent가 실행중이어야한다.
+  - SQL Server Agent
+    - SQLServer에서 제공하는 백그라운드 서비스로 job scheduling, 알림, CDC 등의 기능을 지원한다.
+    - Docker container로 실행할 경우 기본으로 비활성화 되어 있어 활성화해야한다.
+  - Docker image pull 받기
+
+  ```bash
+  $ docker pull mcr.microsoft.com/mssql/server
+  ```
+
+  - Container 실행하기
+    - 아래와 같이 docker compose file을 작성하고 container를 실행한다.
+    - `MSSQL_SA_PASSWORD`의 경우 대문자, 소문자, 특수문자, 숫자를 모두 포함하여 8자리 이상으로 설정해야 하며, 그렇지 않을 경우 실행되지 않는다.
+    - 이전 버전에서는 `MSSQL_SA_PASSWORD` 대신 `SA_PASSWORD`로 설정한다.
+    - `MSSQL_AGENT_ENABLED`를 true로 설정해야  SQL Server Agent가 실행된다.
+
+  ```yaml
+  services:
+    sqlserver:
+      image: mcr.microsoft.com/mssql/server:latest
+      container_name: my_sqlserver
+      ports:
+        - 1433:1433
+      volumes:
+        - ./mssql_data:/var/opt/mssql
+      environment:
+        ACCEPT_EULA: Y
+        MSSQL_SA_PASSWORD: MyPW!190
+  ```
+
+  - SQL Server Agent가 실행중인지 확인하기
+
+  ```mssql
+  SELECT dss.[status], dss.[status_desc], dss.[servicename]
+  FROM   sys.dm_server_services dss
+  WHERE  dss.[servicename] LIKE 'SQL Server Agent%';
+  
+  -- 아래와 같이 출력되면 정상 실행중인 것이다.
+  -- 4  |  Running  |  SQL Server Agent (MSSQLSERVER)
+  ```
+
+  - Database 생성
+
+  ```mssql
+  CREATE DATABASE cdc_test;
+  ```
+
+  - Database에 대해 CDC 활성화하기
+
+  ```mssql
+  USE cdc_test
+  GO
+  EXEC sys.sp_cdc_enable_db
+  GO
+  ```
+
+  - Table 생성
+
+  ```mssql
+  CREATE TABLE Product (
+      ProductID INT IDENTITY(1,1) PRIMARY KEY,
+      ProductName NVARCHAR(100) NOT NULL, 
+      Description NVARCHAR(1000) NULL,
+      Price DECIMAL(18,2) NOT NULL,
+      Stock INT NOT NULL,
+      CreatedAt DATETIME2 DEFAULT GETDATE(),
+      UpdatedAt DATETIME2 DEFAULT GETDATE()
+  );
+  ```
+
+  - Table에 CDC 활성화하기
+    - CDC를 활성화하길 원하는 모든 테이블에 아래 과정을 수행해야한다.
+    - CDC를 활성화하는 프로시저를 실행한다.
+    - `source_schema`는 테이블이 속한 스키마의 이름, `source_name`는 활성화할 테이블의 이름, `role_name`는 CDC 데이터를 조회할 수 있는 데이터베이스 역할명, `supports_net_changes`는 net change기능 활성화 여부다.
+    - `role_name`을 NULL로 지정하면,  SELECT 권한이 있는 모든 사용자가 CDC 데이터에 접근이 가능하다.
+    - `supports_net_changes`의 경우 0이면 모든 변경 내역을 추적하고, 1이면 최종 변경값만 추적한다(default: 1)
+    - 아래에서는 `role_name`에 데이터베이스를 생성할 때 자동으로 생성되는  `db_owner` 역할을 사용한다.
+    - `filegroup_name`으로 CDC 데이터를 저장할 파일 그룹의 이름을 지정해주는 것도 가능하다.
+
+  ```mssql
+  USE cdc_test
+  GO
+  
+  EXEC sys.sp_cdc_enable_table
+  @source_schema = N'dbo',
+  @source_name   = N'Product', 
+  @role_name     = NULL,
+  @supports_net_changes = 0
+  GO
+  ```
+
+  - 정상적으로 설정 되었는지 확인하기
+
+  ```mssql
+  USE cdc_test;
+  GO
+  EXEC sys.sp_cdc_help_change_data_capture
+  GO
+  ```
+
+
+
+- Debezium source connector를 사용하여 변경 사항을 Kafka로 전송하기
+
+  - Debezium SQL Server connector를 다운 받은 후 Kafka Connect plugin에 추가한다.
+
+  ```bash
+  $ curl localhost:8083/connector-plugins
+  ```
+
+  
+
+  
+
+
+
+
+
+
 
 
 
