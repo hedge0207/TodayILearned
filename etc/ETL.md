@@ -979,9 +979,9 @@
 
 
 
-## SQLServer source connector를 이용한 CDC
+## SQL Server source connector를 이용한 CDC
 
-- CDC 활성화
+- SQL Server CDC 활성화
 
   - SQLServer에 CDC를 활성화하기 위해서는 system stored procedure를 활성화해야한다.
     - System stored procedures는 SQL Server Management Studio(SSMS) 또는 Transact-SQL를 통해 가능하다.
@@ -1016,6 +1016,7 @@
       environment:
         ACCEPT_EULA: Y
         MSSQL_SA_PASSWORD: MyPW!190
+        MSSQL_AGENT_ENABLED: true
   ```
 
   - SQL Server Agent가 실행중인지 확인하기
@@ -1088,6 +1089,23 @@
   GO
   ```
 
+  - 데이터 추가하기
+
+  ```mssql
+  INSERT INTO Product (ProductName, Description, Price, Stock)
+  VALUES
+    (N'Apple iPhone 15', N'Latest iPhone with advanced features', 1299.00, 50),
+    (N'Samsung Galaxy S24', N'Flagship Samsung smartphone', 1199.99, 40),
+    (N'LG OLED TV', N'4K OLED Smart TV 55-inch', 1799.00, 20),
+    (N'Dyson Vacuum Cleaner', N'Powerful cordless vacuum', 599.00, 35),
+    (N'Apple MacBook Pro', N'16-inch, M3 chip, 16GB RAM', 2899.00, 10),
+    (N'Bose QuietComfort Headphones', N'Noise cancelling, wireless', 399.00, 70),
+    (N'Canon EOS R8 Camera', N'Mirrorless, 24MP, Full-frame', 1499.00, 15),
+    (N'Nintendo Switch OLED', N'Handheld game console', 349.00, 25),
+    (N'Fitbit Versa 4', N'Health & fitness smartwatch', 199.99, 60),
+    (N'Logitech MX Master 3S', N'Advanced wireless mouse', 129.99, 80);
+  ```
+
 
 
 - Debezium source connector를 사용하여 변경 사항을 Kafka로 전송하기
@@ -1096,11 +1114,221 @@
 
   ```bash
   $ curl localhost:8083/connector-plugins
+  
+  # output
+  [
+      {
+          "class": "io.debezium.connector.sqlserver.SqlServerConnector",
+          "type": "source",
+          "version": "2.4.2.Final"
+      },
+      # ...
+  ]
   ```
 
+  - Connector 생성하기
+    - 만약 SQL Server에 encryption을 활성화했다면, `database.encrypt`를 제거하고 `database.ssl.truststore`와 `database.ssl.truststore.password`를 설정해야한다.
+
+  ```bash
+  $ curl -XPOST 'localhost:8083/connectors' \
+  --header 'Content-type: application/json' \
+  --data-raw '{
+      "name": "cdc_test", 
+      "config": {
+          "connector.class": "io.debezium.connector.sqlserver.SqlServerConnector", 
+          "database.hostname": "my_sqlserver", 
+          "database.port": "1433",
+          "database.user": "sa",
+          "database.password": "MyPW!190", 
+          "database.names": "cdc_test", 
+          "topic.prefix": "cdc_test", 
+          "table.include.list": "dbo.Product", 
+          "schema.history.internal.kafka.bootstrap.servers": "my_kafka:9092", 
+          "schema.history.internal.kafka.topic": "cdc_test", 
+          "database.encrypt": false
+      }
+  }'
+  ```
+
+  - 생성 후 connector의 상태를 확인한다.
+
+  ```bash
+  $ curl localhost:8083/connectors/cdc_test/status
+  ```
+
+  - Topic에 데이터가 정상적으로 전송됐는지 확인한다.
+
+  ```json
+  {
+  	"schema": {
+          // ...
+      },
+  	"payload": {
+  		"before": null,
+  		"after": {
+  			"ProductID": 1,
+  			"ProductName": "Apple iPhone 15",
+  			"Description": "Latest iPhone with advanced features",
+  			"Price": "Afts",
+  			"Stock": 50,
+  			"CreatedAt": 1750660552133333300,
+  			"UpdatedAt": 1750660552133333300
+  		},
+  		"source": {
+  			// ...
+  		},
+  		"op": "r",
+  		"ts_ms": 1750662197006,
+  		"transaction": null
+  	}
+  }
+  ```
+
+  - 데이터를 수정한다.
+
+  ```mssql
+  UPDATE Product SET Price = 1999.00 WHERE ProductID = 3;
+  ```
+
+  - 수정 사항이 topic으로 전송되는지 확인한다.
+
+  ```json
+  {
+  	"schema": {
+  		// ...
+      },
+  	"payload": {
+  		"before": {
+  			"ProductID": 3,
+  			"ProductName": "LG OLED TV",
+  			"Description": "4K OLED Smart TV 55-inch",
+  			"Price": "Ar68",
+  			"Stock": 20,
+  			"CreatedAt": 1750660552133333300,
+  			"UpdatedAt": 1750660552133333300
+  		},
+  		"after": {
+  			"ProductID": 3,
+  			"ProductName": "LG OLED TV",
+  			"Description": "4K OLED Smart TV 55-inch",
+  			"Price": "Awzc",
+  			"Stock": 20,
+  			"CreatedAt": 1750660552133333300,
+  			"UpdatedAt": 1750660552133333300
+  		},
+  		"source": {
+              // ...
+          },
+  		"op": "u",
+  		"ts_ms": 1750662285509,
+  		"transaction": null
+  	}
+  }
+  ```
+
+  - 데이터를 삭제한다.
+
+  ```mssql
+  DELETE FROM Product WHERE ProductID = 6;
+  ```
+
+  - 삭제한 행이 topic으로 전송됐는지 확인한다.
+
+  ```json
+  {
+  	"schema": {
+  		// ...
+      },
+  	"payload": {
+  		"before": {
+  			"ProductID": 6,
+  			"ProductName": "Bose QuietComfort Headphones",
+  			"Description": "Noise cancelling, wireless",
+  			"Price": "AJvc",
+  			"Stock": 70,
+  			"CreatedAt": 1750660552133333300,
+  			"UpdatedAt": 1750660552133333300
+  		},
+  		"after": null,
+  		"source": {
+              // ...
+          },
+  		"op": "d",
+  		"ts_ms": 1750662285511,
+  		"transaction": null
+  	}
+  }
+  ```
+
+  - 삭제의 경우 위 메시지와 함께 아래와 같은 메시지가 하나 더 생성된다.
+    - 이 메시지의 경우 value는 없고 key만 있다.
+
+  ```json
+  {
+      "schema": {
+          "type": "struct",
+          "fields": [
+              {
+                  "type": "int32",
+                  "optional": false,
+                  "field": "ProductID"
+              }
+          ],
+          "optional": false,
+          "name": "cdc_test.cdc_test.dbo.Product.Key"
+      },
+      "payload": {
+          "ProductID": 6
+      }
+  }
+  ```
+
+
+
+
+
+
+
+## Oracle source connector를 이용한 CDC
+
+- Oracle에서 CDC 활성화
+
+  - [Oracle container registry](https://container-registry.oracle.com/ords/f?p=113:1:101263856752708:::1:P1_BUSINESS_AREA:3&cs=3GJChFG0N2oCvqqOJdeeLV_4RpOpSHGj_WCBvjqTTbQHofMbFzs39LQO1UcX99ynn03Faxxj1CdmKEeW3bcAr0w)에서 원하는 Oracle DB image를 pull 받는다.
+
+  ```bash
+  $ docker pull container-registry.oracle.com/database/express:21.3.0-xe
+  ```
+
+  - Container 생성하기
+
+  ```yaml
+  services:
+    my_oracle:
+      image: container-registry.oracle.com/database/express:21.3.0-xe
+      container_name: my_oracle
+      ports:
+        - 1521:1521
+      volumes:
+        - ./oracle_data:/opt/oracle/oradata
+      environment:
+        ORACLE_PWD: "password"
+      networks:
+        - cdc_test
+  
+  networks:
+    cdc_test:
+      external: true
+  ```
+
+  - sys 계정으로 sqlplus를 실행한다.
+  
+  
+  
   
 
-  
+
+
+
 
 
 

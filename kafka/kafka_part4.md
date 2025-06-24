@@ -73,8 +73,6 @@
         CONNECT_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
         CONNECT_INTERNAL_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
         CONNECT_INTERNAL_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
-        CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "true"
-        CONNECT_value_CONVERTER_SCHEMAS_ENABLE: "true"
         CONNECT_REST_ADVERTISED_HOST_NAME: "localhost"
         CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
   ```
@@ -142,7 +140,6 @@
         CONNECT_OFFSET_STORAGE_TOPIC: connect-offsets
         CONNECT_STATUS_STORAGE_TOPIC: connect-statuses
   
-        CONNECT_REPLICATION_FACTOR: 1
         CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
         CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
         CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
@@ -151,8 +148,6 @@
         CONNECT_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
         CONNECT_INTERNAL_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
         CONNECT_INTERNAL_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
-        CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "true"
-        CONNECT_value_CONVERTER_SCHEMAS_ENABLE: "true"
         CONNECT_REST_ADVERTISED_HOST_NAME: "connect1"
         CONNECT_PLUGIN_PATH: "/usr/share/java"
     
@@ -170,7 +165,6 @@
         CONNECT_OFFSET_STORAGE_TOPIC: connect-offsets
         CONNECT_STATUS_STORAGE_TOPIC: connect-statuses
   
-        CONNECT_REPLICATION_FACTOR: 1
         CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
         CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
         CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
