@@ -1,15 +1,39 @@
 # Airbyte
 
-- ELT 파이프라인을 보다 간편하게 구축할 수 있도록 해주는 플랫폼이다.
-  - Source와 destination을 생성하고, connection을 설정하면 source에서 destination으로 data를 전송하는 pipeline이 생성된다.
-    - Source와 destination의 경우 Airbyte에서 개발한 것과 community에서 개발한 것을 모두 지원한다.
-  - UI를 통해 생성하는 것도 가능하고, Python client를 사용하여 생성하는 것도 가능하다.
+- Airbyte
+
+  - Airflow 개발자들이 만든 ETL tool이다.
+    - Source system에서 destination system으로 data를 옮기기 위해 사용한다.
+    - 이를 위해서 주기적으로 source로 부터 data를 읽어서 추출된 data들을 destination으로 옮기는 sync run을 수행한다.
+    - Airbyte의 주요 이점중 하나는 수백개의 서로 다른 source들로부터 data를 추출하여 다시 많은 수의 destination으로 load할 수 있다는 점이다.
+    - sync run이 실행되는 주기를 직접 지정할 수도 있지만, Airflow, Dagster, Prefect 등의 orchestrator에게 넘길 수도 있다.
+    - Orchecstrator에게 sync run을 실행하는 scheduling을 맡길 경우 sync run이 실행되기 전에 수행해야 하는 작업이나, sync run 이후에 수행해야 하는 작업을 더 잘 조정할 수 있게 된다.
   - 변환 기능이 풍부하진 않아서, 데이터 변환을 위해서 일반적으로 dbt(Data Build Tool)라 불리는 데이터 변환 도구를 함께 사용한다.
 
+  - CDC 지원
+    - 현재까지는 MySQL, MongoDB, PostgreSQL, MSSQL만 지원한다.
 
 
-- CDC
-  - 현재까지는 MySQL, MongoDB, PostgreSQL, MSSQL만 지원한다.
+
+- Airflow
+  - 일련의 task들을 schedule에 맞춰 실행하도록 하는 tool이다.
+    - 어떤 task들이 다른 task들이 완료된 이후에 실행되어야 할 때 특히 유용하게 사용할 수 있다.
+  - Airflow가 ETL(혹은 ELT) tool인가?
+    - Airflow는 내장 operator과 hook들, 그리고 community에서 관리되는 operator들과 hook들을 제공한다.
+    - 이를 이용하여 많은 종류의 task들을 실행하고 trigger할 수 있다.
+    - 그러나 Airflow는 ochestration에 목적이 있는 tool이지 ETL이 주요 목적인 tool은 아니다.
+    - 물론 Airflow는 여러 task를 scheduling 할 수 있고, Airflow가 scheduling하는 task들이 ETL task일 수는 있다.
+    - 그러나 Airflow 자체는 ETL만을 염두에 두고 만들어지지는 않았다.
+
+
+
+- Airbyte와 Airflow의 차이
+  - 목적
+    - Airbyte는 데이터를 한 시스템에서 다른 시스템으로 옮기는 도구이다.
+    - Airflow는 일련의 작업을 특정한 순서대로 주기적으로 실행하고 스케줄링하는 orchestrator 도구이다.
+  - Airbyte와 Airflow를 함께 사용하는 이유
+    - Airbyte 역시 자체적인 스케줄러를 가지고 있다.
+    - 그럼에도 Airflow와 같은 orchestrator를 사용하는 이유는 Airflow가 Airbyte가 데이터 이동을 실행하기 전후로 실행되야 하는 작업들도 함께 조정해주기 때문이다.
 
 
 

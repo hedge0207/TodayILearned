@@ -1291,12 +1291,12 @@
 
 ## Oracle source connector를 이용한 CDC
 
-- Oracle에서 CDC 활성화
+- Oracle에서 CDC 활성화하기
 
   - [Oracle container registry](https://container-registry.oracle.com/ords/f?p=113:1:101263856752708:::1:P1_BUSINESS_AREA:3&cs=3GJChFG0N2oCvqqOJdeeLV_4RpOpSHGj_WCBvjqTTbQHofMbFzs39LQO1UcX99ynn03Faxxj1CdmKEeW3bcAr0w)에서 원하는 Oracle DB image를 pull 받는다.
 
   ```bash
-  $ docker pull container-registry.oracle.com/database/express:21.3.0-xe
+  $ docker pull container-registry.oracle.com/database/free:23.8.0.0
   ```
 
   - Container 생성하기
@@ -1304,7 +1304,7 @@
   ```yaml
   services:
     my_oracle:
-      image: container-registry.oracle.com/database/express:21.3.0-xe
+      image: container-registry.oracle.com/database/free:23.8.0.0
       container_name: my_oracle
       ports:
         - 1521:1521
@@ -1320,51 +1320,183 @@
       external: true
   ```
 
-  - sys 계정으로 sqlplus를 실행한다.
+  - sqlplus를 실행하고 CDC를 활성화하기 위한 준비 작업을 한다.
+    - Oracle AWS RDS의 경우 추가 작업이 필요한데, 이는 [문서](https://debezium.io/documentation/reference/stable/connectors/oracle.html#setting-up-oracle)참조
   
   
+  ```bash
+  # attach
+  $ docker exec -it my_oracle bash
+  
+  # destination directory 생성
+  $ mkdir /optoracle/oradata/recovery_area
+  
+  # export SID
+  $ export ORACLE_SID=FREE
+  
+  # sqlplus 실행
+  $ sqlplus /nolog
+  
+  # sqlplus에서 아래 명령어 순차 실행
+  CONNECT sys/top_secret AS SYSDBA
+  alter system set db_recovery_file_dest_size = 10G;
+  alter system set db_recovery_file_dest = '/opt/oracle/oradata/recovery_area' scope=spfile;
+  shutdown immediate
+  startup mount
+  alter database archivelog;
+  alter database open;
+  archive log list
+  exit;
+  ```
+  
+  - 모든 DB를 대상으로 기본적인 supplemental logging을 활성화한다.
+    - 아래와 같이 설정해도, PK값 같은 기본적인 정보만 기록할 뿐 구체적인 변경사항을 기록하지는 않는다.
+  
+  ```bash
+  $ sqlplus /nolog
+  
+  # sqlplus에서 아래 명령어 실행
+  CONNECT sys/top_secret AS SYSDBA
+  ALTER DATABASE ADD SUPPLEMENTAL LOG DATA;
+  exit;
+  ```
+  
+  - Destination 확인하기
+    - Destination은 archive log가 저장될 수 있는 경로를 의미하는데, Oracle DB에서 archive log란 데이터베이스의 변경 내용을 담고 있는 redo log 파일을 백업 용도로 별도로 저장해두는 파일이다.
+    - 이때 archive log를 여러 군데에 동시에 저장(백업)할 수 있는데, 이 저장 위치 각각을 destination이라 부르며, 최대 31개까지 설정이 가능하다.
+    - destination은 `LOG_ARCHIVE_DEST_n`(n=1~31) 파라미터로 지정한다.
+    - 아래와 같이 view table을 조회하여 확인이 가능하다.
+  
+  ```sql
+  SELECT * FROM V$ARCHIVE_DEST_STATUS;
+  ```
+  
+  - Debezium에 Destination을 지정할 때는 아래와 같이 하면 된다.
+    - 오직 `STATUS` column의 값이 VALID고, `TYPE` column의 값이 LOCAL인 destination만 지정 가능하다.
+    - Debezium connector에는 `DEST_NAME` column의 값을 넣으면 된다.
+  
+  ```json
+  {
+    "archive.destination.name": "LOG_ARCHIVE_DEST_3"
+  }
+  ```
+  
+  - Connector를 위한 사용자 생성하기
+    - Debezium Oracle connector SYS나 SYSTEM 사용자가 실행한 변경 사항은 탐지하지 않는다.
+  
+  ```sql
+  -- FREE에 table space 생성
+  sqlplus sys/password@//localhost:1521/FREE as sysdba
+    CREATE TABLESPACE logminer_tbs DATAFILE '/opt/oracle/oradata/FREE/logminer_tbs.dbf'
+      SIZE 25M REUSE AUTOEXTEND ON MAXSIZE UNLIMITED;
+    exit;
+  
+  -- FREEPDB1에 table space 생성
+  sqlplus sys/password@//localhost:1521/FREEPDB1 as sysdba
+    CREATE TABLESPACE logminer_tbs DATAFILE '/opt/oracle/oradata/FREE/FREEPDB1/logminer_tbs.dbf'
+      SIZE 25M REUSE AUTOEXTEND ON MAXSIZE UNLIMITED;
+    exit;
+  
+  -- cdcuser 생성
+  CREATE USER c##cdcuser IDENTIFIED BY cdu
+    DEFAULT TABLESPACE logminer_tbs
+    QUOTA UNLIMITED ON logminer_tbs
+    CONTAINER=ALL;
+  
+  -- cdcuser에게 권한 부여
+  GRANT CREATE SESSION TO c##cdcuser CONTAINER=ALL;
+  GRANT SET CONTAINER TO c##cdcuser CONTAINER=ALL;
+  GRANT SELECT ON V_$DATABASE to c##cdcuser CONTAINER=ALL;
+  GRANT FLASHBACK ANY TABLE TO c##cdcuser CONTAINER=ALL;
+  GRANT SELECT ANY TABLE TO c##cdcuser CONTAINER=ALL;
+  GRANT SELECT_CATALOG_ROLE TO c##cdcuser CONTAINER=ALL;
+  GRANT EXECUTE_CATALOG_ROLE TO c##cdcuser CONTAINER=ALL;
+  GRANT SELECT ANY TRANSACTION TO c##cdcuser CONTAINER=ALL;
+  GRANT LOGMINING TO c##cdcuser CONTAINER=ALL;
+  GRANT CREATE TABLE TO c##cdcuser CONTAINER=ALL;
+  GRANT LOCK ANY TABLE TO c##cdcuser CONTAINER=ALL;
+  GRANT CREATE SEQUENCE TO c##cdcuser CONTAINER=ALL;
+  GRANT EXECUTE ON DBMS_LOGMNR TO c##cdcuser CONTAINER=ALL;
+  GRANT EXECUTE ON DBMS_LOGMNR_D TO c##cdcuser CONTAINER=ALL;
+  GRANT SELECT ON V_$LOG TO c##cdcuser CONTAINER=ALL;
+  GRANT SELECT ON V_$LOG_HISTORY TO c##cdcuser CONTAINER=ALL;
+  GRANT SELECT ON V_$LOGMNR_LOGS TO c##cdcuser CONTAINER=ALL;
+  GRANT SELECT ON V_$LOGMNR_CONTENTS TO c##cdcuser CONTAINER=ALL;
+  GRANT SELECT ON V_$LOGMNR_PARAMETERS TO c##cdcuser CONTAINER=ALL;
+  GRANT SELECT ON V_$LOGFILE TO c##cdcuser CONTAINER=ALL;
+  GRANT SELECT ON V_$ARCHIVED_LOG TO c##cdcuser CONTAINER=ALL;
+  GRANT SELECT ON V_$ARCHIVE_DEST_STATUS TO c##cdcuser CONTAINER=ALL;
+  GRANT SELECT ON V_$TRANSACTION TO c##cdcuser CONTAINER=ALL;
+  GRANT SELECT ON V_$MYSTAT TO c##cdcuser CONTAINER=ALL;
+  GRANT SELECT ON V_$STATNAME TO c##cdcuser CONTAINER=ALL;
+  ```
+  
+  - 테이블 생성하기
+  
+  ```sql
+  CONNECT cdcuser;
+  
+  ALTER SESSION SET CONTAINER = FREEPDB1;
+  
+  CREATE TABLE product (
+      product_id   NUMBER PRIMARY KEY,
+      name         VARCHAR2(100) NOT NULL,
+      price        NUMBER(10, 2) NOT NULL,
+      created_at   DATE DEFAULT SYSDATE
+  );
+  ```
+  
+  - 위에서 생성한 테이블에 CDC를 활성화한다.
+    - 모든 테이블에 일괄적으로 설정하는 것도 가능하지만, log의 크기가 지나치게 커질 수 있어 권장하지 않는다.
+  
+  ```bash
+  # sqlplus 실행
+  $ sqlplus /nolog
+  
+  CONNECT sys/password as SYSDBA;
+  ALTER TABLE c##cdcuser.product ADD SUPPLEMENTAL LOG DATA (ALL) COLUMNS;
+  ```
+  
+  - 데이터 삽입하기
+  
+  ```sql
+  INSERT INTO product (product_id, name, price)
+  VALUES (1, '맥북 프로', 3490000);
+  INSERT INTO product (product_id, name, price)
+  VALUES (2, '아이폰 15', 1450000);
+  INSERT INTO product (product_id, name, price)
+  VALUES (3, '에어팟 프로', 329000);
+  ```
+
+
+
+- Debezium source connector를 사용하여 변경 사항을 Kafka로 전송하기
+
+  - Debezium Oracle connector를 다운 받은 후 Kafka Connect plugin에 추가한다.
+    - [링크](https://debezium.io/releases/)에서 원하는 버전을 다운 받는다.
+  - Connector를 생성한다.
+
+  ```bash
+  curl -XPOST 'localhost:8083/connectors' \
+  --header 'Content-type: application/json' \
+  --data-raw '{
+      "name": "oracle_cdc_test",  
+      "config": {
+          "connector.class" : "io.debezium.connector.oracle.OracleConnector",  
+          "database.hostname" : "192.168.1.60",  
+          "database.port" : "1521",  
+          "database.user" : "c##cdcuser",  
+          "database.password" : "cdu",   
+          "database.dbname" : "FREE",  
+          "database.pdb.name" : "FREEPDB1",
+          "table.include.list": "c##cdcuser.product",
+          "topic.prefix" : "oracle_cdc_test",
+          "tasks.max" : "1",
+          "schema.history.internal.kafka.bootstrap.servers" : "my_kafka:9092", 
+          "schema.history.internal.kafka.topic": "oracle_cdc_test"  
+      }
+  }'
+  ```
   
   
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Airbyte
-
-- Airflow
-  - 일련의 task들을 schedule에 맞춰 실행하도록 하는 tool이다.
-    - 어떤 task들이 다른 task들이 완료된 이후에 실행되어야 할 때 특히 유용하게 사용할 수 있다.
-  - Airflow가 ETL(혹은 ELT) tool인가?
-    - Airflow는 내장 operator과 hook들, 그리고 community에서 관리되는 operator들과 hook들을 제공한다.
-    - 이를 이용하여 많은 종류의 task들을 실행하고 trigger할 수 있다.
-    - 그러나 Airflow는 ochestration에 목적이 있는 tool이지 ETL이 주요 목적인 tool은 아니다.
-    - 물론 Airflow는 여러 task를 scheduling 할 수 있고, Airflow가 scheduling하는 task들이 ETL task일 수는 있다.
-    - 그러나 Airflow 자체는 ETL만을 염두에 두고 만들어지지는 않았다.
-
-
-
-- Airbyte
-  - Airflow 개발자들이 만든 ETL tool이다.
-    - Source system에서 destination system으로 data를 옮기기 위해 사용한다.
-    - 이를 위해서 주기적으로 source로 부터 data를 읽어서 추출된 data들을 destination으로 옮기는 sync run을 수행한다.
-    - Airbyte의 주요 이점중 하나는 수백개의 서로 다른 source들로부터 data를 추출하여 다시 많은 수의 destination으로 load할 수 있다는 점이다.
-    - sync run이 실행되는 주기를 직접 지정할 수도 있지만, Airflow, Dagster, Prefect 등의 orchestrator에게 넘길 수도 있다.
-    - Orchecstrator에게 sync run을 실행하는 scheduling을 맡길 경우 sync run이 실행되기 전에 수행해야 하는 작업이나, sync run 이후에 수행해야 하는 작업을 더 잘 조정할 수 있게 된다.
-
-  - Airflow와의 차이
-    - Airbyte와 Airflow 모두 data integration에 사용되고, 기능사응로도 겹치는 부분이 있는 것은 사실이지만 엄연히 다른 tool이다.
-    - Airbyte는 한 system에서 다른 system으로 data를 옮기는 데 사용한다.
-    - Airflow는 주기적으로 실행될 일련의 task들을 스케줄링하고 관리하는 tool이다.
