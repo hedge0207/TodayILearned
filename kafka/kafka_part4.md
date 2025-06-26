@@ -843,7 +843,7 @@
   
       - DB에서 한 번에 읽어올 최대 row의 수를 제한하는 설정이다.
       - 기본값은 100이다.
-      - JDBC의 ffetch size로 사용된다.
+      - JDBC의 fetch size로 사용된다.
       - 주의할 점은 일부 JDBC driver(MySQL, Oracle)는 기본적으로 `batch.max.rows` 설정을 무시하고 전체 데이터를 한 번메 메모리에 로드한다.
       - 따라서 이 값을 설정해도 전체 데이터를 한 번에 조회하고 메모리에 로드해서 OOM이 발생할 수 있다.
       - 그러므로 이 JDBC driver들에는 별도의 설정을 추가해야 하는데, MySQL의 경우 `useCursorFetch`와 `defaultFetchSize`를 설정해줘야한다.
@@ -869,6 +869,20 @@
     - incrementing_column으로 사용하려는 column의 값은 scale이 0이어야한다.
   - incrementing, timestamp
     - incrementing_column, timestamp_column으로 사용하려는 column의 값 중 null이 있으면 안 된다(`validate.non.null` 설정으로 변경 가능하다).
+  - JDBC source connector를 생성할 때, `query`를 설정할 경우  JDBC source connector는 이 SQL을 감싸서 아래와 같이 SQL을 다시 생성한다.
+  
+  ```sql
+  SELECT ... FROM <user_query>;
+  ```
+  
+  - 만약 bulk 이외의 모드를 주면 위 query에 where절을 추가한다.
+  
+  ```sql
+  SELECT ... FROM <user_query> where <columne_name> > ?;
+  ```
+  
+  - 따라서 `incrementing.column.name`, `timestamp.column.name`을 설정할 때는 자신이 입력한 SQL에 포함되어 있는 column name을 그냥 설정하면 안된다.
+    - `query`에 SQL문을 설정할 때 `incrementing.column.name`, `timestamp.column.name`으로 사용할 column에는 alias를 걸고, `incrementing.column.name`, `timestamp.column.name`에도 alias로 설정한 column name을 넣어야한다.
 
 
 
