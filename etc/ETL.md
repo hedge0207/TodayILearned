@@ -125,6 +125,8 @@
 
 
 
+
+
 # CDC
 
 - CDC(Change Data Capture)
@@ -248,6 +250,37 @@
 
 
 
+- DB 종류 별 JDBC source connector와 Debezium connector 사용 가능 여부.
+
+  - SQL Server
+    - DATETIME type에 대해서는 timestamp mode 사용 불가능하다(DATETIME2에는 사용 가능).
+    - CDC를 사용하기 위해서는 SQL server agent가 실행중이어야한다.
+
+
+  - Oracle, SQL Server
+    - Table 단위로 활성화해야 하는데, 모든 table을 대상으로 활성화 하거나 regex 기반 활성화는 불가능한지 확인이 필요하다.
+  - Tibero
+    - JDBC source connector로 조회할 경우 조회 대상 데이터 중 Float type이 포함되어 있을 경우 scale 관련 error가 발생한다(JDBC source connector 수정이 필요하다).
+    - JDBC source connector에 Tibero driver를 별도로 추가해줘야한다.
+
+  | DB             | incrementing | timestamp | CDC  |
+  | -------------- | ------------ | --------- | ---- |
+  | MySQL(MariaDB) | O            | O         | O    |
+  | Oracle         | O            | O         | O    |
+  | Tibero         | O            | O         | ?    |
+  | SQL Server     | O            | O         | O    |
+  | PostgreSQL     | O            | O         | O    |
+
+  - 제약조건
+    - 정수 타입만 설정 가능하다.
+    - 엄격히 증가하는 값이어야한다.
+    - incrementing_column으로 사용하려는 column의 값은 scale이 0이어야한다.
+    - incrementing_column, timestamp_column으로 사용하려는 column의 값 중 null이 있으면 안 된다(`validate.non.null` 설정으로 변경 가능).
+
+
+
+
+
 
 
 ## Debezium PostgreSQL source connector를 이용한 CDC
@@ -340,26 +373,6 @@
       networks:
         - etl
     
-    etl-node:
-      image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-      container_name: etl-node
-      environment:
-        - cluster.name=etl
-        - node.name=etl-node
-        - discovery.type=single-node
-        - bootstrap.memory_lock=true
-        - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
-        - xpack.security.enabled=false
-        - xpack.security.enrollment.enabled=false
-      ulimits:
-        memlock:
-          soft: -1
-          hard: -1
-      ports:
-        - 9206:9200
-      networks:
-        - etl
-    
     etl-zookeeper:
       container_name: etl-zookeeper
       image: confluentinc/cp-zookeeper:latest
@@ -377,7 +390,6 @@
         - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
       volumes:
         - ./debezium-debezium-connector-postgresql-2.2.1:/usr/share/java/debezium-debezium-connector-postgresql-2.2.1
-        - ./confluentinc-kafka-connect-elasticsearch-14.0.12:/usr/share/java/confluentinc-kafka-connect-elasticsearch-14.0.12
         - ./connect-standalone.properties:/etc/kafka/connect-standalone.properties
       ports:
         - 9093:9092
@@ -390,9 +402,9 @@
     etl:
       driver: bridge
   ```
-
+  
   - 아래 명령어로 container를 실행한다.
-
+  
   ```bash
   $ docker compose up -d
   ```
@@ -423,11 +435,6 @@
 
   ```json
   [
-          {
-                  "class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
-                  "type": "sink",
-                  "version": "14.0.12"
-          },
           {
                   "class": "io.debezium.connector.postgresql.PostgresConnector",
                   "type": "source",
@@ -515,36 +522,6 @@
 
 
 
-- Sink connector 생성
-
-  - REST API를 통해 sink connector를 생성한다.
-
-  ```bash
-  $ curl -XPOST 'localhost:8083/connectors' \
-  --header 'Content-type: application/json' \
-  --data-raw '{
-    "name": "bar-connector",  
-    "config": {
-      "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
-      "connection.url": "http://etl-node:9200",
-      "topics":"foo.public.product",
-      "key.ignore":"true"
-    }
-  }'
-  ```
-
-  - Index 확인
-
-  ```bash
-  $ curl localhost:9206/_cat/indices
-  ```
-
-  - Document 확인
-
-  ```bash
-  $ curl localhost:9206/foo.public.product/_search
-  ```
-
 
 
 
@@ -559,7 +536,7 @@
     - 만약 인식이 안 된다면 Kafka connect를 재실행한다.
 
   ```bash
-  curl localhost:8083/connector-plugins
+  $ curl localhost:8083/connector-plugins
   [
       {
         "class": "io.debezium.connector.mysql.MySqlConnector",
@@ -573,8 +550,6 @@
 
 - DB 준비하기
 
-  > PostgreSQL과 달리 별다른 설정이 필요하지 않은 것으로 보인다.
-
   - Table 생성
 
   ```sql
@@ -585,7 +560,7 @@
     PRIMARY KEY (id)
   );
   ```
-
+  
   - Data 삽입
 
   ```bash
@@ -595,7 +570,7 @@
 
 
 
-- 만약 설정해야 할 경우 아래와 같이 하면 된다.
+- CDC 설정
 
   > https://docs.aws.amazon.com/ko_kr/dms/latest/userguide/CHAP_Source.MySQL.html
   
@@ -675,8 +650,8 @@
   
   - 만약 timezone을 설정해야하면 `database.connectionTimeZone`으로 설정한다.
   
-  ```json
-  curl -XPOST 'localhost:8083/connectors' \
+  ```bash
+  $ curl -XPOST 'localhost:8083/connectors' \
   --header 'Content-type: application/json' \
   --data-raw '{
     "name": "mysql-cdc-source-connector",
@@ -1483,7 +1458,7 @@
       "name": "oracle_cdc_test",  
       "config": {
           "connector.class" : "io.debezium.connector.oracle.OracleConnector",  
-          "database.hostname" : "192.168.1.60",  
+          "database.hostname" : "my_oracle",  
           "database.port" : "1521",  
           "database.user" : "c##cdcuser",  
           "database.password" : "cdu",   
@@ -1498,5 +1473,6 @@
   }'
   ```
   
-  
+
+
 

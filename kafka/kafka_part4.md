@@ -862,6 +862,16 @@
 
 
 
+- 제약조건
+  - incrementing
+    - 정수 타입만 설정 가능하다.
+    - 엄격히 증가하는 값이어야한다.
+    - incrementing_column으로 사용하려는 column의 값은 scale이 0이어야한다.
+  - incrementing, timestamp
+    - incrementing_column, timestamp_column으로 사용하려는 column의 값 중 null이 있으면 안 된다(`validate.non.null` 설정으로 변경 가능하다).
+
+
+
 - JDBC connector에 JDBC driver 추가하기
   - JDBC connector에는 기본적으로 다양한 DB에 연결하기 위한 JDBC driver가 내장되어 있다.
     - 그러나 JDBC connector에 포함되어 있지 않은 driver를 추가해야 하는 경우가 있을 수 있다.
