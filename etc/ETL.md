@@ -1331,7 +1331,7 @@
   $ sqlplus /nolog
   
   # sqlplus에서 아래 명령어 실행
-  CONNECT sys/top_secret AS SYSDBA
+  CONNECT sys/password AS SYSDBA
   ALTER DATABASE ADD SUPPLEMENTAL LOG DATA;
   exit;
   ```
@@ -1409,7 +1409,7 @@
   - 테이블 생성하기
   
   ```sql
-  CONNECT cdcuser;
+  CONNECT c##cdcuser/cdu;
   
   ALTER SESSION SET CONTAINER = FREEPDB1;
   
@@ -1428,7 +1428,7 @@
   # sqlplus 실행
   $ sqlplus /nolog
   
-  CONNECT sys/password as SYSDBA;
+  CONNECT sys/password as SYSDBA
   ALTER TABLE c##cdcuser.product ADD SUPPLEMENTAL LOG DATA (ALL) COLUMNS;
   ```
   

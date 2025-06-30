@@ -542,6 +542,127 @@
 
 
 
+### Docker data root 변경 후 Container가 실행되지 않는 문제
+
+- 문제 상황
+
+  - Docker data root를 변경하기 위해 docker daemon을 정지하고, 기존 docker 데이터를 새로운 경로로 복사했다.
+
+  ```bash
+  $ systemctl stop docker.service
+  $ cp -R -a /var/lib/docker /data/docker
+  ```
+
+  - 그 후 `/etc/docker/daemon.json` 파일을 아래와 같이 작성하고
+
+  ```json
+  {
+      "data-root": "/data/docker"
+  }
+  ```
+
+  - Docker daemon을 다시 실행했다.
+
+  ```bash
+  $ systemctl daemon-reload
+  $ systemctl start docker.service
+  ```
+
+  - 일부 컨테이너 중 실행되지 않은 컨테이너들이 있었다.
+    - 예시의 경우 Kafka container가 실행되지 않았으며, 아래와 같은 에러 메시지가 출력되었다.
+
+  ```
+  kafka-1  | Command [/usr/local/bin/dub path /etc/kafka/ writable] FAILED !
+  ```
+
+
+
+- 원인
+
+  - `cp`를 통해 Docker 디렉터리를 복사하면서 소유자 정보를 보존하지 않아 발생한 문제이다.
+  - 소유자 정보를 보존하지 않아 문제가 되는 경우 
+    - 기존 container에서 volume을 사용할 경우 문제가 될 수 있다.
+    - 사용자가 container를 실행하면서 volume을 설정했을 수도 있고, image 중에는 build할 때 Dockerfile에 `VOLUME` 명령어를 사용하여 anonymous volume을 생성하도록 하는 경우도 있다.
+    - Volume뿐 아니라 `<data-root>/vfs/dir` 경로에 있는 모든 파일들의 소유자가 변경되는 것 역시 문제가 된다.
+    - 위 경로는 Docker image의 각 레이어에 대한 실제 파일 구조가 저장되는 곳으로, 이 파일들의 소유자가 변경될 경우 문제가 발생할 수 있다.
+  - 위에서 문제가 됐던 `confluentinc/cp-kafka` image의 경우 build 과정에서 `VOLUME` 명령어를 사용하여 anonymous volume을 생성한다.
+
+  ```bash
+  $ docker history confluentinc/cp-kafka:7.5.3 | grep VOLUME
+  
+  # <missing>      18 months ago   /bin/sh -c #(nop)  VOLUME [/var/lib/kafka/da…   0B
+  ```
+
+  - 문제는 volume을 설정한 container 내부의 directory의 소유자가 root가 아니라는 것이다.
+    - `confluentinc/cp-kafka` image는 내부에서 UID가 1000인 `appuser`를 생성하고, Kafka 실행에 필요한 파일들의 소유자로 등록한다.
+    - Container가 실행되면서 `appuser`가 소유자로 등록된 파일들이 anonymous volume으로 설정되고, host machine에서 volume 파일의 소유자는 appuser의 UID인 1000으로 설정된다.
+    - 그러나 `cp`를 통해 docker 데이터를 복제하면서 소유권을 보존하지 않았기에, 복사본의 소유권은 `cp` 명령어를 실행한 root로 설정된다.
+
+  ```bash
+  # 기존 data root 경로의 volume 소유자(ubuntu 계정의 UID는 1000이다)
+  $ ls -l /var/lib/docker/volumes/0650916823egrgreec03c704dc25be1rh4718de008dd45883f48243a206
+  # drwxrwxr-x 2 ubuntu root 4096 Dec 21  2023 _data
+  
+  # 변경된 data root 경로의 volume 소유자
+  ls -l /mnt/data/docker/volumes/0650916823egrgreec03c704dc25be1rh4718de008dd45883f48243a206
+  # drwxr-xr-x 2 root root 4096 Jun 18 17:48 _data
+  ```
+
+  - 따라서 volume이 설정된 container 내부의 파일들의 소유자가 모두 root로 변경되었고, 프로세스를 실행하는 appuser는 이 파일을 실행할 권한이 없어 에러가 발생하게 된다.
+
+
+
+- 예방 및 해결
+
+  - 예방
+
+    - 소유자 정보 및 권한 정보를 보존하면서 새로운 data root에 기존 data를 이동시켜야한다.
+
+    - `cp`를 사용할 경우 `-a` 옵션을 주어 소유자를 유지하게 해야한다.
+
+  - 해결 방법1. 원본 data root의 백업 파일이 있다면, 해당 파일의 소유자가 유지되도록 다시 복제한다.
+
+    - 가장 확실하고 안전한 해결 방법이다. 
+
+  - 해결 방법2. container를 root user로 실행(비권장)
+
+    - Container를 실행할 때 root user가 container 내부의 프로세스를 실행하도록 변경한다.
+    - 문제는 해결되지만 권장하지 않는 방법이다.
+
+  - 해결 방법3. volume의 소유자 변경 및 image 삭제 후 다시 pull
+
+    - 문제가 되는 volume의 소유자를 모두 container 내의 UID와 일치하게 변경한다.
+    - Image와 관련된 파일들의 소유자도 변경되었으므로, container에서 사용하는 image도 삭제 후 다시 pull하여 컨테이너를 재생성한다.
+
+
+
+- Data root를 외장 디스크로 설정할 경우 문제가 발생할 수 있다.
+
+  - 서버가 재실행 될 때, Docker daemon이 외장 디스크의 마운트보다 먼저 실행되면, Docker daemon은 외장 디스크를 찾을 수 없어 에러가 발생하게 된다.
+  - 아래와 같이 외장 디스크가 마운트된 이후에 docker service를 설정하도록 docker service 파일을 작성한다.
+
+  ```conf
+  [Unit]
+  RequiresMountsFor=/path/to/external_dist
+  ```
+
+  - 그 후 변경된 설정을 적용한다.
+
+  ```bash
+  $ systemctl daemon-reload
+  $ systemctl restart docker
+  ```
+
+  - 사실 data root를 외장 디스크로 설정하지 않는 것이 가장 좋다.
+    - 연결이 끊기는 등의 문제가 발생할 경우 Docker가 예기치 않게 종료될 수 있기 때문이다.
+    - 또한 내장 디스크에 비해 성능이 떨어질 수도 있다.
+
+
+
+
+
+
+
 
 
 
