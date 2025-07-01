@@ -14,6 +14,81 @@
 
 
 
+- Java와 비교할 때 Kotlin은 아래와 같은 이점들이 있다.
+  - 표현력과 간결함
+    - 코틀린의 최신 언어 기법을 사용하면 훨씬 간결한 구문으로 프로그램을 작성할 수 있다.
+    - 같은 로직을 두 언어로 작성해 보면 Kotlin이 훨씬 간결하다는 것을 알 수 있다.
+  - 안전한 코드
+    - Kotlin은 null safety를 지원한다.
+    - 객체지향 프로그래밍에서 객체는 널 상태일 수 있으며, 이때 런타임 오류인 NullPointException이 발생할 수 있다.
+    - 따라서 객체가 널인 상황을 고려해 개발해야 하는데, Kotlin에서는 변수를 nullable과 not null로 구분해서 선언한다.
+    - 이로써 널과 관련된 여러 부분을 컴파일러가 해결해 준다.
+  - 상호 운용성
+    - Kotlin은 Java와 100% 호환된다.
+    - 따라서 Kotlin 프로그램을 작성할 때, Java class나 라이브러리를 활용할 수 있다.
+    - 또한 하나의 앱을 개발할 때 두 언어를 혼용할 수도 있다.
+  - 구조화 동시성(structured concurrency)
+    - Kotlin이 제공하는 coroutine을 사용하면 비동기 프로그래밍을 간소화할 수 있다.
+    - 네트워크 연동이나 DB 갱신과 같은 작업을 할 때 이용하면 프로그램을 조금 더 간단하게 그리고 효율적으로 작성할 수 있다.
+
+
+
+- Kotlin 파일 구성
+
+  - `.kt` 파일의 기본적인 형태는 아래와 같다.
+
+    - `.kt`는 Kotlin 파일의 확장자다.
+
+    - pacakage와 import 구문, 변수, 함수, 클래스 등으로 구성된다.
+
+  ```kotlin
+  package com.example.test
+  
+  import java.text.SimpleDateFormat
+  import java.util.*
+  
+  var data = 10
+  
+  fun formatDate(date: Date): String {
+      val sdformat = SimpleDateFormat("yyyy-mm-dd")
+      return sdformat.format(date)
+  }
+  
+  class User {
+      var name = "John Doe"
+      
+      fun sayHello() {
+          println("name: $name")
+      }
+  }
+  ```
+
+  - package 구문은 이 파일을 컴파일 했을 때 만들어지는 클래스 파일의 위치를 나타낸다.
+    - 소스 파일에서 맨 첫 줄에 한 줄로 선언한다.
+    - pacakge 이름은 kt 파일의 위치와 상관없는 별도의 이름으로도 선언할 수 있다.
+    - 예를 들어 User.kt 파일이 com/example/test에 있더라도 `package foo` 처럼 선언할 수  있으며, 이 경우 컴파일된 클래스 파일은 `foo`폴더에 생성된다.
+    - 어떤 파일에 선언한 멤버(변수, 함수, 클래스)를 다른 코틀린 파일에서 참조할 때 두 파일을 같은 package로 선언했다면 import 없이 사용할 수 있다.
+  - Kotlin은 객체 지향만을 목적으로 한 언어가 아니다.
+    - 따라서 Java와 달리 Kotlin 파일 명과 그 파일에 선언한 클래스명과는 아무런 상관이 없으므로 Kotlin 파일 명을 클래스명과 다르게 선언해도 된다.
+    - 또한 변수, 함수 등을 클래스로 묶지 않고 최상위에 선언하는 것도 가능하다.
+    - 이와 같은 특징에도 불구하고 Java와 호환이 가능한 것인 Kotlin compiler가 이를 적절히 변환해주기 때문이다.
+    - 정확히는 최상위에 선언된 변수와 함수는 자동으로 파일명 + Kt라는 이름의 클래스에 포함되게 된다.
+    - 즉 위 파일을 자바에서 사용할 때는 아래와 같이 사용하면 된다.
+
+  ```java
+  public class TestJava {
+      public static void main(String[] args) {
+          UserKt.setData(20);
+          Userkt.formatDate(new Date());
+          
+          User user = new User();
+          user.sayHello();
+      }
+  }
+  ```
+
+
+
 - 기본적인 용어
 
   > Kotlin 이외의 언어들에서도 통용되는 용어들이다.
@@ -101,31 +176,75 @@
 
   - Type 지정하여 선언하기
     - 변수를 선언할 때 type을 지정하는 것도 가능하다.
-
+    - 대입하는 값에 따라 타입을 유추할 수 있을 때는 생략이 가능하다.
+  
   ```kotlin
   var text: String = "text"
   ```
-
+  
   - 주의 사항
-
+  
     - 변수명은 숫자로 시작할 수 없다.
     - 변수명은 대소문자를 구분한다.
-
+  
     - 오직 같은 type의 값만 재할당이 가능하다.
-
+  
   ```kotlin
   var num = 10
   num = 11		// 같은 type의 값만 재할당 가능
   num = "string" 	// error 발생
   ```
-
-  - Val 변수
-
+  
+  - 초깃값 할당
+    - 최상위에 선언한 변수나 클래스의 멤버 변수는 선언과 동시에 초깃값을 할당해야한다.
+    - 그러나 함수 내부에 선언한 변수는 선언과 동시에 초깃값을 할당하지 않아도 된다.
+    - 값을 할당하지 않으면 type 추론이 불가능하므로, type을 지정해줘야한다.
+  
+  ```kotlin
+  // 최상위 변수
+  val num = 10
+  // 아래와 같이 할당하지 않으면 에러가 발생한다.
+  val num2: Int
+  
+  fun myFun() {
+      val num3: Int
+      num3 = 10
+  }
+  
+  class User {
+      val num4: Int = 10
+      // 아래와 같이 할당하지 않으면 에러가 발생한다.
+      val num5: Int
+  }
+  ```
+  
+  - 초기화 미루기
+    - 경우에 따라 변수를 선언할 때 초깃값을 할당할 수 없는 경우가 있다.
+    - 이 때는 값을 이후에 할당할 것이라고 컴파일러에게 알려 줘야한다.
+    - `lateinit`, `lazy` keyword를 사용한다.
+    - `lateinit`은 var keword로 선언한 변수 중 숫자형 타입 혹은 Boolean 타입이 아닌 변수에만 사용할 수 있다.
+    - `lazy`의 경우 변수 선언문 뒤에 `by lazy {}` 형식으로 선언하며, 소스에서 변수가 최초로 이용되는 순간 중괄호로 묶은 부분이 자동으로 실행되어 그 결과값이 초기값으로 할당된다.
+    - `lazy`의 중괄호 부분을 여러 줄로 작성하면 마지막 줄의 실행 결과가 변수의 초깃값이 된다.
+  
+  ```kotlin
+  lateinit var num: int		// 불가능
+  lateinit val name: String	// 불가능
+  lateinit var name2: String	// 가능
+  
+  val num3: Int {
+      println("in lazy")
+      8
+      10
+  }
+  ```
+  
+  - val 변수
+  
     - 프로그래밍을 하다보면 프로그램 실행 중에 변경되어선 안되는 변수를 사용해야 하는 경우가 있다.
     - 이러한 변수를 일반적으로  constants라 부르며, kotlin에서는 val variables라 부른다.
-
+  
     - 주의할 점은 val variable이 immuatable과 완전한 동의어는 아니라는 점이다.
-
+  
   ```kotlin
   // 재할당은 불가능하지만
   val myMutableList = mutableListOf(1, 2, 3, 4, 5)
@@ -136,11 +255,11 @@
   myMutableList.add(6)
   println(myMutableList) // [1, 2, 3, 4, 5, 6]
   ```
-
+  
   - const 변수
     - `val` 키워드 앞에 `const` 키워드를 추가하면, 해당 변수는 const 변수가 된다.
     - const변수는 컴파일 타임에 정의되어, 런타임에 변경되지 않는다.
-
+  
   ```kotlin
   const val STRING = "Const String"
   
