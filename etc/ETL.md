@@ -255,14 +255,14 @@
   - SQL Server
     - DATETIME type에 대해서는 timestamp mode 사용 불가능하다(DATETIME2에는 사용 가능).
     - CDC를 사용하기 위해서는 SQL server agent가 실행중이어야한다.
-
-
+  
+  
   - Oracle, SQL Server
-    - Table 단위로 활성화해야 하는데, 모든 table을 대상으로 활성화 하거나 regex 기반 활성화는 불가능한지 확인이 필요하다.
+      - Table 단위로 활성화해야 하는데, 모든 table을 대상으로 활성화 하거나 regex 기반 활성화는 불가능한지 확인이 필요하다.
   - Tibero
-    - JDBC source connector로 조회할 경우 조회 대상 데이터 중 Float type이 포함되어 있을 경우 scale 관련 error가 발생한다(JDBC source connector 수정이 필요하다).
-    - JDBC source connector에 Tibero driver를 별도로 추가해줘야한다.
-
+      - JDBC source connector로 조회할 경우 조회 대상 데이터 중 Float type이 포함되어 있을 경우 scale 관련 error가 발생한다(JDBC source connector 수정이 필요하다).
+      - JDBC source connector에 Tibero driver를 별도로 추가해줘야한다.
+  
   | DB             | incrementing | timestamp | CDC  |
   | -------------- | ------------ | --------- | ---- |
   | MySQL(MariaDB) | O            | O         | O    |
@@ -270,7 +270,7 @@
   | Tibero         | O            | O         | ?    |
   | SQL Server     | O            | O         | O    |
   | PostgreSQL     | O            | O         | O    |
-
+  
   - 제약조건
     - 정수 타입만 설정 가능하다.
     - 엄격히 증가하는 값이어야한다.
@@ -278,6 +278,22 @@
     - incrementing_column, timestamp_column으로 사용하려는 column의 값 중 null이 있으면 안 된다(`validate.non.null` 설정으로 변경 가능).
 
 
+
+- Connector, DB별 Boolean 저장 방식
+
+  - Oracle
+    - 23c부터 BOOLEAN 타입이 추가되었으며, 그 전 까지는 NUMBER(1)을 사용했다.
+    - Debezium connector의 경우 BOOLEAN 타입을 인식하지 못하며, BOOLEAN 타입을 제외하고 topic에 저장된다.
+    - JDBC의 경우 NUMBER(1), BOOLEAN 모두 bytes로 topic에 저장된다.
+
+  |            | DB         | JDBC    | CDC   |
+  | ---------- | ---------- | ------- | ----- |
+  | MySQL      | TINYINT(1) | int8    | int16 |
+  | PostgreSQL | BOOLEAN    | boolean | int16 |
+  | Oracle     | BOOLEAN    | bytes   | X     |
+
+  - JDBC connector의 경우 query 옵션을 사용하면 true, false로 반환되도록 설정이 가능할 것 같지만, 잘 되지 않는다.
+    - 원인 확인 필요.
 
 
 
@@ -1407,8 +1423,14 @@
   ```
   
   - 테이블 생성하기
+    - 테이블을 생성한 후에 생성된 테이블에 CDC를 활성화한다.
+    - 모든 테이블에 일괄적으로 설정하는 것도 가능하지만, log의 크기가 지나치게 커질 수 있어 권장하지 않는다.
+  
   
   ```sql
+  # sqlplus 실행
+  $ sqlplus /nolog
+  
   CONNECT c##cdcuser/cdu;
   
   ALTER SESSION SET CONTAINER = FREEPDB1;
@@ -1419,22 +1441,17 @@
       price        NUMBER(10, 2) NOT NULL,
       created_at   DATE DEFAULT SYSDATE
   );
-  ```
   
-  - 위에서 생성한 테이블에 CDC를 활성화한다.
-    - 모든 테이블에 일괄적으로 설정하는 것도 가능하지만, log의 크기가 지나치게 커질 수 있어 권장하지 않는다.
-  
-  ```bash
-  # sqlplus 실행
-  $ sqlplus /nolog
-  
-  CONNECT sys/password as SYSDBA
   ALTER TABLE c##cdcuser.product ADD SUPPLEMENTAL LOG DATA (ALL) COLUMNS;
   ```
   
   - 데이터 삽입하기
+    - 만약 Oracle SQL Developer 등을 사용한다면 반드시 commit을 해줘야한다.
+  
   
   ```sql
+  ALTER SESSION SET CONTAINER = FREEPDB1;
+  
   INSERT INTO product (product_id, name, price)
   VALUES (1, '맥북 프로', 3490000);
   INSERT INTO product (product_id, name, price)
@@ -1475,4 +1492,32 @@
   
 
 
+
+- 만약 동일 테이블을 대상으로 JDBC source  connector를 사용하려 한다면 아래와 같이 하면된다.
+
+  - 설정
+
+  ```bash
+  curl -XPOST 'localhost:8083/connectors' \
+  --header 'Content-type: application/json' \
+  --data-raw '{
+    "name": "test",
+    "config": {
+      "tasks.max": "1",
+      "connector.class": "io.confluent.connect.jdbc.JdbcSourceConnector",
+      "connection.url": "jdbc:oracle:thin:@my_oracle:1521/FREEPDB1",
+      "connection.user": "c##cdcuser",
+      "connection.password": "cdu",
+      "topic.prefix": "test",
+      "mode": "incrementing",
+      "incrementing.column.name": "ID",
+      "query": "SELECT * FROM product"
+    }
+  }'
+  ```
+
+  - 주의할 점은 아래와 같다.
+    - `*.column.name`은 반드시 대문자로 입력해야한다.
+    - `connection.url`을 입력할 때는 SID가 아닌 service name을 사용해야 하며, 접속 주소와 service name(예시의 경우 FREEPDB1) 사이의 구분자는 `:`이 아닌 `/`를 사용한다.
+    - 또한 `incrementing.column.name`으로 사용하려는 column의 scale은 반드시 0이어야한다.
 
