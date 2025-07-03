@@ -50,18 +50,21 @@
 
 - 함수의 parmeter
 
+  - 함수의 매개변수에는 var나 val 키워드를 사용할 수 없다.
+    - val이 자동으로 적용되어, 함수 내에서 매개 변수의 값을 변경할 수 없다.
+
   - `=` 연산자를 사용하여 함수의 parameter에 기본값을 줄 수 있다.
     - 기본값을 주지 않은 parameter보다 뒤에 와야 한다.
-
+  
   ```kotlin
   fun sum(num1: Int = 0, num2: Int = 0): Int = num1 + num2
   ```
-
+  
   -  Named argument
      - 함수 호출시에 argument를 입력할 때, 단순히 parmeter에 정의된 순서대로 넣는 것이 아니라, parameter의 이름으로 넣는 것이 가능하다.
      - 이를 통해 code의 가독성을 높일 수 있다.
      - positional argument와 함께 사용할 경우, positional argument보다 뒤에 사용하거나 순서를 지켜 사용해야 한다.
-
+  
   ```kotlin
   fun calcEndDayAmount(startAmount: Int, ticketPrice: Int, soldTickets: Int) =
           startAmount + ticketPrice * soldTickets
@@ -82,7 +85,7 @@
 
   - 아래와 같이 한 parameter를 다른 parameter의 기본 값으로 주는 것도 가능하다.
     - 그러나, 기본값으로 주려는 parameter가 기본값을 주려는 parameter보다 앞에 있어야 한다.
-
+  
   ```kotlin
   fun sum2(a: Int, b: Int = a) = a + b
    
@@ -92,9 +95,9 @@
   // 아래와 같이 쓸 수는 없다.
   fun sum2(a: Int = b, b: Int = 1) = a + b
   ```
-
   
-
+  
+  
   
 
 

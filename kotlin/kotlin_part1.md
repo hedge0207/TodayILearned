@@ -269,6 +269,20 @@
 
 
 
+- Nullable과 not null
+
+  - Kotlin의 모든 타입은 객체이므로 변수에 null을 대입할 수 있다.
+    - null은  값이 할당되지 않은 상황을 의미한다.
+  - 변수를 선언할 때 nullable 변수인지 아닌지를 구분해서 선언해야한다.
+    - 타입 뒤에 물음표를 추가하면 nullable로 선언하는 것이다.
+
+  ```kotlin
+  var nullableNum: Int? = 10
+  nullableNum = null
+  ```
+
+
+
 - Standard output
 
   - Standard output은 device에 정보를 표시해주는 기본적인 동작이다.
@@ -335,12 +349,16 @@
 
 - 변수의 type
 
+  - Python과 마찬가지로 Kotlin의 모든 값은 타입은 객체다.
+    - 예를 들어 Int의 경우 primitive type이 아닌 클래스이다.
+    - 따라서 아래와 같이 Int로 선언해도 null이 가능한데, 만약 primitive type이었다면 불가능할 것이다.
   - 모든 변수는 type을 가진다.
-  - 변수의 type은 변수가 선언될 때 정해진다.
+    - 변수의 type은 변수가 선언될 때 정해진다.
+
   - Kotlin에는 두 가지 type 지정 방식이 존재한다.
     - 변수에 할당된 값에 따라서 kotlin이 자동적으로 변수의 타입을 정하는 방식(type inference).
     - 변수를 선언할 때 변수의 type을 지정하는 방식.
-
+  
   ```kotlin
   // type inference
   var text = "text"
@@ -348,16 +366,16 @@
   // 직접 지정
   var text: String = "text"
   ```
-
+  
   - 만일 변수의 선언을 먼저 하고, 초기화(값의 할당)은 나중에 해야 할 경우, type inference방식은 사용할 수 없다.
-
+  
   ```kotlin
   val greeting 		// error 발생
   greeting = "hello"
   ```
-
+  
   - Data type의 가장 중요한 기능 중 하나는 변수에 적절하지 않은 값이 할당되는 것을 막아주는 것이다.
-
+  
   ```kotlin
   val n: Int = "abc"	// Type mismatch error 발생
   ```
@@ -696,6 +714,8 @@
   d += 1
   println(d) // -2147483648
   ```
+  
+  - byte는 이진수를 표현하기 위한 타입이다.
 
 
 
@@ -709,6 +729,74 @@
   ```
   
   - kotlin에서는 0과 false가 다르다.
+
+
+
+- Any
+
+  - 모든 타입의 데이터를 할당할 수 있는 타입이다.
+  - Kotlin의 최상위 클래스로 Kotlin의 모든 클래스는 Any의 서브 클래스이다.
+
+  ```kotlin
+  val data1: Any = 10
+  val data2: Any = "John Doe"
+  
+  class Foo
+  val data3: Any = Foo()
+  ```
+
+
+
+- Unit
+
+  - 반환문이 없는 함수를 표현하는 클래스이다.
+    - 다른 타입과 다르게 데이터의 형식이 아닌 특수한 상황을 표현하는 목적으로 사용한다.
+    - 주로 함수의 반환 타입으로 사용하며, 함수에 반환문이 없음을 명시에 나타낼때 사용한다.
+    - 함수를 선언할 때 반환 타입을 생략하면 자동으로 Unit이 적용된다.
+
+  ```kotlin
+  // 아래 두 함수는 동일하다.
+  fun sayHello(): Unit {
+      print("hello!")
+  }
+  
+  fun sayHello() {
+      print("hello!")
+  }
+  ```
+
+  - Unit type으로 선언한 변수에는 Unit 객체만 대입할 수 있다.
+    - 따라서 Unit type 변수를 선언할 수는 있지만 의미는 없다.
+
+  ```kotlin
+  val meaningless_val: Unit = Unit
+  ```
+
+
+
+- Nothing
+
+  - null이나 예외를 반환하는 함수를 표현하는 클래스이다.
+    - Unit과 마찬가지로 데이터의 형식이 아닌 특수한 상황을 표현하는 목적으로 사용한다.
+    - Nothing으로 선언한 변수에는 null만 대입이 가능하다.
+
+  ```kotlin
+  val nullVal: Nothing? = null
+  ```
+
+  - 주로 함수의 반환 타입에 사용한다.
+    - 어떤 함수의 반환 타입이 Nothing이면 반환은 하지만 의미 있는 값은 아니라는 의미이다.
+    - 항상 null만 반환하는 함수나 예외를 던지는 함수의 반환 타입을 Nothing으로 선언한다.
+
+  ```kotlin
+  fun returnNull(): Nothing? {
+      return null
+  }
+  
+  fun throwException(): Nothing {
+      throw Exception()
+  }
+  ```
 
 
 
@@ -852,6 +940,85 @@
   ```kotlin
   val bool = "true".toBoolean()
   ```
+
+
+
+
+
+## collection type
+
+- Array
+
+  - 배열을 표현하는 클래스이다.
+    - Array 클래스의 첫 번째 매개변수는 배열의 크기이며, 두 번째 매개변수는 초깃값을 지정하는 함수이다.
+    - 배열의 타입은 generic으로 표현한다.
+
+  ```kotlin
+  val nums: Array<Int> = Array(3, { 0 })
+  ```
+
+  - 배열의 데이터를 조회하거나 설정할 때는 대괄호를 이용하거나 get()/set() 메서드를 이용하면 된다.
+
+  ```kotlin
+  val nums: Array<Int> = Array(3, { 0 })
+  
+  nums[0] = 1
+  nums[1] = 2
+  nums.set(2, 3)
+  
+  println("${nuns[0]}, ${nums.get(1)}")	// 1, 2
+  ```
+
+  - 기초 타입의 배열
+    - 배열의 타입은 `Array<Int>`처럼 제네릭으로 명시한다.
+    - 만약 배열의 데이터가 기초 타입이라면 Array를 사용하지 않고각 기초 타입의 배열을 나타내는 클래스를 이용할 수도 있다.
+    - `BooleanArray`, `ByteArray`, `CharArray`, `DoubleArray`, `FloatArray`, `IntArray`, `LongArray`, `ShortArray`가 있다.
+
+  ```kotlin
+  val nums: IntArray = IntArray(3 { 0 })
+  ```
+
+  - `arrayOf` 함수를 사용하여 배열을 선언할 때 값을 할당할 수도 있다.
+    - `arrayOf` 함수도 기초 타입을 대상으로 하는 `booleanArrayOf()`, `byteArrayOf()`, `charArrayOf()`, `doubleArrayOf()`, `floatArrayOf()`, `intArrayOf()`, `longArrayOf()`, `shortArrayOf()`가 있다.
+
+  ```kotlin
+  val nums = arrayOf<Int>(1, 2, 3)
+  val nums2 = intArrayOf(1, 2, 3)
+  ```
+
+
+
+- List, Set, Map
+
+  - Collection 인터페이스를 타입으로 표현한 클래스이며 이들을 컬렉션 타입 클래스라 부른다.
+    - List: 순서가 있는 데이터 집합으로 데이터의 중복을 허용한다.
+    - Set: 순서가 없으며 데이터의 중복을 허용하지 않는다.
+    - Map: 키와 값으로 이루어진 테이터 집합으로 순서가 없으며 키의 중복은 허용하지 않는다.
+  - 이들 클래스는 모두 불변 클래스로, 각각의 가변 클래스를 가진다.
+    - MutableList, MutableSet, MutableMap
+    - 불변 클래스는 조회 메서드만 제공할 뿐 수정, 추가 메서드는 제공하지 않는다.
+  - 각 클래스의 인스턴스는 각각의 `*f()` 함수로 생성한다.
+    - 예를 들어 List의 인스턴스는 `listOf()` 함수로, MutableSet의 인스턴스는 `mutableSetOf()` 함수로 생성한다.
+
+  ```kotlin
+  var nums = listOf<Int>(1, 2, 3)
+  ```
+
+  - MutableList는 add, set 메서드를 통해 데이터를 추가하는 것이 가능하다.
+
+  ```kotlin
+  var nums = mutableListOf<Int>(1, 2, 3)
+  nums.add(4)
+  nums.set(0, 5)
+  ```
+
+  - Map 선언할 때 `Pair(<key>, <value>)` 형태로 선언할 수도 있고, `<key> to <value>` 형태로 선언할 수도 있다.
+
+  ```kotlin
+  var map = mapOf<String, String>(Pair("firstName", "John"), "lastName" to "Doe")
+  ```
+
+
 
 
 
@@ -1061,7 +1228,11 @@
 
 
 
-# if expression
+
+
+# 조건문
+
+## if expression
 
 - 조건에 따라 다른 연산을 할 수 있게 해주는 표현식이다.
   - true 혹은 false를 반환하는 boolean 표현식에 따라 다른 연산을 수행한다.
@@ -1135,7 +1306,7 @@
 
 
 
-# when expression
+## when expression
 
 - 여러 조건에 따라 각기 다른 코드가 실행되도록 해주는 표현식이다.
 
@@ -1398,6 +1569,10 @@
       }  
   }
   ```
+
+
+
+
 
 
 
