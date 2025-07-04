@@ -814,6 +814,146 @@
 
 
 
+- Cluster를 구성한 후 slave node에서 아래와 같은 메시지가 반복적으로 출력되는 경우의 해결 방법
+
+  - slave node에서 아래와 같은 메시지가 반복적으로 출력된다면
+
+  ```
+  Retrying with SYNC...
+  MASTER aborted replication with an error: NOAUTH Authentication required.
+  Reconnecting to MASTER 172.21.0.4:6380 after failure
+  MASTER <-> REPLICA sync started
+  Non blocking connect for SYNC fired the event.
+  Master replied to PING, replication can continue...
+  (Non critical) Master does not understand REPLCONF listening-port: -NOAUTH Authentication required.
+  (Non critical) Master does not understand REPLCONF capa: -NOAUTH Authentication required.
+  Partial resynchronization not possible (no cached master)
+  Unexpected reply to PSYNC from master: -NOAUTH Authentication required.
+  ```
+
+  - Master node의 설정에 `requirepass`를 설정했을 것이다.
+    - 이는 Redis에 접근할 때 사용하는 비밀번호를 설정하는 것이다.
+    - Master와 slave 사이의 통신에도 이 값을 사용하는데, slave가 master와 통신할 때 이 값을 알 수 있게 해줘야한다.
+    - 아래와 같이 `masterauth` 설정을 추가하고, master node의 `requirepass`에 설정한 값과 동일한 값을 설정한다.
+
+  ```toml
+  masterauth "my_password"
+  ```
+
+
+
+- Container가 삭제되었다가 재생성 되더라도 기존 cluster가 그대로 재구성되어야 하는 경우
+
+  - Redis cluster 구성을 위해 아래와 같이 두 개의 설정 파일을 준비한다.
+    - 세 대의 서버에서 모두 아래와 동일한 설정 파일 `<server_ip>` 부분만 변경하여 사용한다.
+
+  ```toml
+  # redis1.conf
+  protected-mode yes
+  requirepass "my_password"
+  masterauth "my_password"
+  
+  save 900 1
+  
+  appendonly yes
+  appendfsync everysec
+  
+  maxmemory 30MB
+  maxmemory-policy allkeys-lru
+  
+  port 6380
+  cluster-enabled yes
+  cluster-config-file nodes.conf
+  cluster-node-timeout 3000
+  cluster-announce-ip <server_ip>
+  
+  
+  
+  # redis2.conf
+  protected-mode yes
+  requirepass "my_password"
+  masterauth "my_password"
+  
+  save 900 1
+  
+  appendonly yes
+  appendfsync everysec
+  
+  maxmemory 30MB
+  maxmemory-policy allkeys-lru
+  
+  port 6381
+  cluster-enabled yes
+  cluster-config-file nodes.conf
+  cluster-node-timeout 3000
+  cluster-announce-ip <server_ip>
+  ```
+
+  - 각 서버의 적절한 위치에 cluster의 정보가 저장될 nodes.conf 파일을 생성하고
+
+  ```bash
+  $ touch nodes1.conf nodes2.conf 
+  ```
+
+  - 아래와 같이 Redis node들을 생성한다.
+    - 세 개의 서버에 모두 동일한 docker-compose.yml 파일을 사용한다.
+    - 앞에서 생성한 `nodes*.conf` 파일과 container 내부의 `nodes.conf`파일을 바인딩한다.
+
+  ```yaml
+  services:
+    redis1:
+      image: redis:6.2.6
+      container_name: redis1
+      volumes:
+        - ./redis1.conf:/etc/redis.conf
+        - ./nodes1.conf:/data/nodes.conf
+      command: redis-server /etc/redis.conf
+      restart: always
+      ports:
+        - 6380:6380
+        - 16380:16380
+    
+    redis2:
+      image: redis:6.2.6
+      container_name: redis2
+      volumes:
+        - ./redis2.conf:/etc/redis.conf
+        - ./nodes2.conf:/data/nodes.conf
+      command: redis-server /etc/redis.conf
+      restart: always
+      ports:
+        - 6381:6381
+        - 16381:16381
+  ```
+
+  - Cluster를 생성한다.
+
+  ```bash
+  $ docker exec -it redis1 bash
+  
+  $ $ redis-cli -a my_password --cluster create \
+    <serverA_IP>:6380 \
+    <serverA_IP>:6381 \
+    <serverB_IP>:6380 \
+    <serverB_IP>:6381 \
+    <serverC_IP>:6380 \
+    <serverC_IP>:6381 \
+    --cluster-replicas 1
+  ```
+
+  - Cluster가 구성된 후 container를 삭제하고 다시 생성해도, cluster 정보가 유지된다.
+
+  ```bash
+  $ docker compose down
+  $ docker compose up
+  ```
+
+  
+
+  
+
+
+
 - Docker를 사용하여 한 서버에 여러 대의 node를 띄워 cluseter를 구성할 때의 주의사항
 
   - 운영 환경이 아닌 테스트 환경에서는 한 서버에 여러 노드를 실행해 cluster를 구성해야 하는 경우가 있다.
