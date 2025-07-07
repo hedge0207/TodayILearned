@@ -353,6 +353,8 @@
 
 
 
+
+
 ## Sentinel로 설치
 
 - Sentinel로 사용할 node에 설정해줘야 하는 값들은 아래와 같다.
@@ -764,23 +766,26 @@
   ```
 
   - Slave를 추가한다.
-
+    - `add-node`가 클러스터에 새로운 node를 추가하는 명령어이며, `--cluster-slave`는 slave node로 추가한다는 옵션이다.
+    - 만약 `--cluster-slave`를 주지 않을 경우 master로 추가된다.
+  
+  
   ```bash
   $ redis-cli --cluster add-node redis-slave1:7101 redis1:7001 --cluster-slave
   $ redis-cli --cluster add-node redis-slave2:7102 redis2:7002 --cluster-slave
   $ redis-cli --cluster add-node redis-slave3:7103 redis3:7003 --cluster-slave
   ```
-
+  
   - 정상적으로 추가 됐는지 확인한다.
-
+  
   ```bash
   $ redis-cli -p 7001
   cluster info
   cluster nodes 
   ```
-
+  
   - 아래와 같이 cluster 생성과 동시에 slave를 설정하는 것도 가능하다.
-
+  
   ```bash
   $ redis-cli --cluster create \
     redis1:7001 \
@@ -814,9 +819,34 @@
 
 
 
+- Redis cluster에서 노드 제거하기
+
+  - `del-node` 명령어를 사용한다.
+
+  ```bash
+  $ redis-cli --cluster del-node <명령어를 수행할 노드의 IP>:<명령어를 수행할 노드의 port> <삭제할 노드의 ID>
+  
+  # e.g. serverA에서 6380 port로 실행중인 node에서 ID가 a1a4ae72d5719c2fe9c8504a02e425324646346인 node를 cluster에서 제거하는 작업을 하는 경우 아래와 같이 하면 된다.
+  $ redis-cli --cluster del node <serverA_IP>:6380 a1a4ae72d5719c2fe9c8504a02e425324646346
+  ```
+
+  - 만약 제거하려는 node가 master인 경우 아래와 같이 reshard를 먼저 수행해야한다.
+    - Slave일 경우 하지 않아도 된다.
+
+  ```bash
+  $ redis-cli --cluster reshard <reshard를 수행될 노드의 IP>:<reshard가 수행될 노드의 port>
+  
+  # e.g. 만약 삭제를 위해 reshard를 실행하고자 하는 master node의 IP가 11.22.33.44이고, port가 6380이라면 아래와 같이 하면 된다.
+  $ redis-cli --cluster reshard 11.22.33.44:6380
+  ```
+
+  
+
+
+
 - Cluster를 구성한 후 slave node에서 아래와 같은 메시지가 반복적으로 출력되는 경우의 해결 방법
 
-  - slave node에서 아래와 같은 메시지가 반복적으로 출력된다면
+  - Slave node에서 아래와 같은 메시지가 반복적으로 출력된다면
 
   ```
   Retrying with SYNC...
@@ -837,6 +867,7 @@
     - 아래와 같이 `masterauth` 설정을 추가하고, master node의 `requirepass`에 설정한 값과 동일한 값을 설정한다.
 
   ```toml
+  # master node의 requirepass 값이 "my_password"라면 slave node에 아래 설정을 추가한다.
   masterauth "my_password"
   ```
 
@@ -844,8 +875,10 @@
 
 - Container가 삭제되었다가 재생성 되더라도 기존 cluster가 그대로 재구성되어야 하는 경우
 
+  - Redis cluster에 속한 노드들은 `cluster-config-file`에 설정한 파일에 클러스터의 정보를 작성한다.
+    - 따라서 container가 종료되더라도 이 파일만 유지되면 다시 container를 생성했을 때 기존과 동일한 클러스터를 구성할 수 있다.
   - Redis cluster 구성을 위해 아래와 같이 두 개의 설정 파일을 준비한다.
-    - 세 대의 서버에서 모두 아래와 동일한 설정 파일 `<server_ip>` 부분만 변경하여 사용한다.
+    - 세 대의 서버에서 모두 아래와 동일한 설정 파일을 `<server_ip>` 부분만 변경하여 작성한다.
 
   ```toml
   # redis1.conf
@@ -896,8 +929,8 @@
   ```
 
   - 아래와 같이 Redis node들을 생성한다.
-    - 세 개의 서버에 모두 동일한 docker-compose.yml 파일을 사용한다.
-    - 앞에서 생성한 `nodes*.conf` 파일과 container 내부의 `nodes.conf`파일을 바인딩한다.
+    - 세 개의 서버에 모두 동일한 docker-compose.yml 파일을 작성한다.
+    - 앞에서 생성한 `nodes1...2.conf` 파일과 container 내부의 `nodes.conf`파일을 바인딩한다.
 
   ```yaml
   services:
@@ -931,7 +964,7 @@
   ```bash
   $ docker exec -it redis1 bash
   
-  $ $ redis-cli -a my_password --cluster create \
+  $ redis-cli -a my_password --cluster create \
     <serverA_IP>:6380 \
     <serverA_IP>:6381 \
     <serverB_IP>:6380 \
@@ -947,10 +980,6 @@
   $ docker compose down
   $ docker compose up
   ```
-
-  
-
-  
 
 
 
