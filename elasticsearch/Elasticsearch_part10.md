@@ -1593,6 +1593,13 @@
   GET /_cat/thread_pool/<thread_pool_A>[,<thread_pool_B>,...]
   ```
 
+  - node가 실행된 시점부터 현재까지의 누적 검색량 및 누적 거절량도 볼 수 있다.
+    - Node 재실행시 초기화된다.
+  
+  ```http
+  GET _cat/thread_pool/search*?h=node_name,name,rejected,completed
+  ```
+  
   - Query parameter
     - `format`: JSON, YAML 등의 format을 지정할 수 있다.
     - `h`: 특정 column만 지정해서 확인이 가능하다.
@@ -1600,12 +1607,31 @@
     - `v`: 응답에 head를 포함시킨다.
     - `s`: 정렬한다.
   - `_nodes`를 통해서도 thread pool에 관한 정보를 확인할 수 있다.
-
+    - `{metric}`을 입력하는 부분에 `thread_pool`을 입력하면 된다.
+  
+  
   ```http
   GET _nodes/thread_pool
   ```
-
-
+  
+  - 아래와 같이 filter를 주는 것이 가능하다.
+  
+  ```http
+  GET _nodes?filter_path=nodes.*.thread_pool.search*
+  ```
+  
+  - `_nodes/stats`를 통해서도 확인이 가능하다.
+    - `GET _nodes/thread_pool`이 thread pool의 설정 값을 확인하기 위한 endpoint라면 `_nodes/stats`는 사용량에 대한 통계를 보여준다.
+    - `GET _cat/thread_pool`은 `_nodes/stats`에 비해 간략화된 정보를 보여준다.
+  
+  ```http
+  GET _nodes/stats/thread_pool
+  ```
+  
+  - `_nodes/stats`에도 동일한 필터를 설정할 수 있다.
+  
+  ```http
+  GET _nodes/stats?filter_path=nodes.*.thread_pool.search*
 
 
 
