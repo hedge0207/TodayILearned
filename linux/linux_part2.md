@@ -746,6 +746,232 @@
 
 
 
+# Logrotate
+
+> https://github.com/logrotate/logrotate
+
+- Logrotate
+
+  - 자동으로 log를 rotate, 압축, 삭제해주는 애플리케이션이다.
+  - 설치
+    - 대부분의 Linux에 기본으로 설치되어 있다.
+    - crontab 기반이기에 crontab이 설치되어 있지 않다면 함께 설치된다.
+    - 설치가 완료되면 자동으로 `/etc/cron.daily`에 logrotate가 추가된다.
+
+  ```bash
+  $ apt update
+  $ apt install logrotate
+  ```
+
+  - 버전 확인
+
+  ```bash
+  $ logrotate --version
+  ```
+
+  - Logrotate는 기본적으로 아래 두 곳의 설정 파일을 사용한다.
+    - `/etc/logrotate.conf`: 전역으로 적용될 설정 값들을 설정하는 파일이다.
+    - `/etc/logrotate.d`: 개별 application에 적용될 설정 값들을 설정하는 파일들을 모아두는 디렉터리로, `logrotate.conf`의 설정을 덮어쓸 수 있다. 
+  - 동작 방식
+    - Logrotate는 데몬이 아닌 단발성으로 실행되는 프로그램이다.
+    - crontab에 등록된 logrotate가 하루에 한 번씩 실행된다.
+    - 이 때 각 설정 파일을 읽어서 `size` 이상인 파일이 있거나 `maxsize` 이상인 파일이 있거나 주기 조건을 충족하는 파일들을 찾아 로테이트를 실행하고 종료된다.
+
+
+
+- `/etc/logrotate.conf`의 설정들
+
+  ```ini
+  # see "man logrotate" for details
+  
+  # global options do not affect preceding include directives
+  
+  # rotate log files weekly
+  weekly
+  
+  # use the adm group by default, since this is the owning group
+  # of /var/log/.
+  su root adm
+  
+  # keep 4 weeks worth of backlogs
+  rotate 4
+  
+  # create new (empty) log files after rotating old ones
+  create
+  
+  # use date as a suffix of the rotated file
+  #dateext
+  
+  # uncomment this if you want your log files compressed
+  #compress
+  
+  # packages drop log rotation information into this directory
+  include /etc/logrotate.d
+  
+  # system-specific logs may also be configured here.
+  ```
+
+  - `weekly`
+    - log rotation의 빈도를 나타낸다.
+    - `hourly`, `daily`, `monthly`, `yearly`도 사용 가능하다.
+  - `su root adm`
+    - Logrotate는 root user와 admin group의 권한으로 실행된다. 
+    - 이 설정은 로테이션 된 파일의 소유자와 그룹을 설정하는 명령어이다.
+  - `rotate 4`
+    - 몇 개의 로테이션 파일을 생성할지를 설정한다.
+    - 0으로 설정하면 rotation이 실행됨과 동시에 삭제된다.
+    - -1로 설정할 경우 로테이션된 파일이 `maxage`에 도달하지 않는 한 삭제하지 않는다. 
+  - `create`
+    - 파일을 로테이션한 직후에 원래 파일명과 동일한 파일을 생성한다.
+    - `create mode owner group`(e.g. `create 644 tom qa_team`) 형식으로도 설정이 가능하다.
+  - `dateext`
+    - 만약 이 옵션이 활성화 될 경우 로테이트된 파일명에 날짜가 추가된다.
+    - 만약 활성화 하지 않을 경우에는 로테이트된 파일 뒤에 그냥 숫자가 붙는다.
+  - `compress`
+    - 오래된 파일을 압축할지 여부를 설정하는 것이다.
+    - 활성화 할 경우 기본적으로 gzip 파일로 압축된다.
+  - `include`
+    - 설정 파일들을 읽어올 경로를 설정한다.
+    - 기본값은 `/etc/logrotate.d`이다.
+
+
+
+- `/etc/logrotate.d`의 설정들
+
+  - `/etc/logrotate.conf`에 `include`의 기본 값이 `/etc/logrotate.d`이기에  logrotate는 이 경로에 생성된 파일들을 읽어 실행된다.
+    - 이 경로에는 개별 application들의 로그를 관리하기 위한 파일을 작성하면 되며, 이를 통해 개별 application들의 로그 관리를 모듈화할 수 있다.
+    - 기본적으로 생성되어 있는 파일들이 있으며 아래는 apk의 logrotate 설정 파일(`/etc/logrotate.d/apt`)이다.
+
+  ```ini
+  /var/log/apt/term.log {
+    rotate 12
+    monthly
+    compress
+    missingok
+    notifempty
+  }
+  
+  /var/log/apt/history.log {
+    rotate 12
+    monthly
+    compress
+    missingok
+    notifempty
+  }
+  ```
+
+  - 아래와 같이 복수의 파일에 동일한 설정이 적용되도록 설정하는 것도 가능하며, asterisk를 사용하는 것도 가능하다.
+
+  ```ini
+  /var/log/syslog
+  /var/log/daemon.log
+  /var/log/kern.log
+  /var/log/auth.log
+  /var/log/user.log
+  /var/log/lpr.log
+  /var/log/cron.log
+  /var/log/debug
+  /var/log/messages
+  {
+          rotate 4
+          weekly
+          missingok
+          notifempty
+          compress
+          delaycompress
+          sharedscripts
+          postrotate
+                  /usr/lib/rsyslog/rsyslog-rotate
+          endscript
+  }
+  
+  # asterisk 적용
+  /var/log/mail*.log
+  {
+          rotate 4
+          weekly
+          missingok
+          notifempty
+          compress
+          delaycompress
+          sharedscripts
+          postrotate
+                  /usr/lib/rsyslog/rsyslog-rotate
+          endscript
+  }
+  ```
+
+  - `missingok`
+    - 만약 지정한 로그 파일 중 일부가 없어도 error를 보고하지 않는다.
+
+  - `notifempty`
+    - 로그 파일이 비어있으면 로테이션을 수행하지 않는다.
+  - `delaycompress`
+    - 다음번 로테이션이 수행될 때 까지 로테이트된 파일을 압축하지 않는다.
+    - 이를 통해 직전에 로테이트 된 파일을 압축 해제 없이도 확인할 수 있게 된다.
+  - `sharedscripts`
+    - `prerotate` 또는 `postrotate`에 설정한 script가 한 번만 실행되는 것을 보장하는 옵션이다.
+    - 기본적으로 logrotate는 script를 매 파일마다 실행한다.
+  - `prerotate`, `postrotate`, `endscript`
+    - 로테이션의 실행 전/후에 실행할 script를 지정한다.
+    - `endscript`로 script를 감싸야한다.
+  - `size`
+    - 로테이션이 실행되기 전에 로그 파일이 도달할 수 있는 최대 크기를 bytes, kilobytes, megabytes, gigabytes로 설정한다.
+    - 대상 파일이 이 크기에 도달한 이후 logrotate가 실행되면 로테이션이 실행된다.
+    - `size`를 설정할 경우 주기 설정(`hourly`, `weekly` 등)은 무시되며, 오직 크기 기반으로만 로테이션이 실행된다.
+    - Logrotate가 기본적으로 하루에 한 번만 실행되므로 로그 파일의 크기가 `size`에 도달했다고 그 즉시 로테이션 되는 것이 아님에 주의해야한다.
+  - `minsize`
+    - 로그 파일이 로테이트 되기 위한 최소 크기를 설정한다.
+    - 스케줄에 따라 로테이션 시간이 됐더라도, 이 크기 미만의 로그 파일은 로테이트 되지 않는다.
+  - `maxsize`
+    - 로그 파일이 로테이트 될 크기를 설정한다.
+    - 로그 파일의 크기가 이 설정 값 보다 커지면 로테이션 주기에 도달하지 않더라도 로테이트가 실행된다.
+    - 로그 파일 크기가 일정 크기를 넘어서야 로테이트한다는 점은 `size`와 동일하나 주기 설정도 여전히 적용된다는 차이가 있다.
+    - 즉 `maxsize`와 주기 설정을 함께 줄 경우 주기에 도달하거나, 크기에 도달하면 로테이션이 일어나는 반면 `size`와 주기 설정을 같이 줄 경우 주기 설정은 무시되고 오직 크기 기반으로 로테이션이 발생한다.
+
+
+
+- 명령어
+
+  - Logrotate를 실제로 실행하지 않고, 실행시 예측되는 결과만 확인할 수 있다.
+    - `-d(--debug)` 옵션을 주면 된다.
+    - `/etc/logrotate.conf` 파일을 대상으로 실행할 경우 `/etc/logrotate.d`에 있는 모든 설정 파일을 대상으로 확인 가능하며, `/etc/logrotate.d`에 있는 파일 중 하나만 대상으로 확인하는 것도 가능하다.
+    - 보다 많은 결과를 보려면 `-v(--verbose)` 옵션을 추가로 주면 된다.
+
+  ```bash
+  $ logrotate --debug --verbose </path/to/logrotate_conf_file>
+  ```
+
+  - 강제로 실행하기
+    - `-f(--force)` 옵션을 주면 설정한 조건이 충족되지 않아도 로테이션이 실행된다.
+
+  ```bash
+  $ logrotate --force </path/to/logrotate_conf_file>
+  ```
+
+  - 마지막 로테이션 시점 확인하기
+    - `/var/lib/logrotate/status` 혹은 `/var/lib/logrotate/logrotate.status` 파일을 확인하면 된다.
+
+  ```bash
+  $ cat /var/lib/logrotate/status
+  $ cat /var/lib/logrotate/logrotate.status
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Shorts
 
 - GPG(GNU Privacy Guard)
@@ -807,6 +1033,12 @@
   ```
 
   - `which`로 나오지 않더라도 whereis로 나오는 경우가 있을 수 있다.
+
+
+
+
+
+
 
 
 
