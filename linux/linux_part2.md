@@ -746,6 +746,8 @@
 
 
 
+
+
 # Logrotate
 
 > https://github.com/logrotate/logrotate
@@ -957,6 +959,156 @@
   $ cat /var/lib/logrotate/logrotate.status
 
 
+
+- 로테이션 이후에 로테이션 된 파일에 로그가 적재되는 문제
+
+  - Linux에서 프로세스는 로그를 파일 경로가 아닌 inode로 열어서 유지한다.
+    - 따라서 파일 경로가 변경되더라도 프로세스는 계속해서 변경된 파일에 작성한다.
+    - 예를 들어 아래와 같이 파일에 내용을 쓰는 중간에 파일명을 변경해도 변경된 파일에 계속 작성된다.
+
+  ```python
+  import time
+  import os
+  
+  with open("test.txt", "w") as f:
+      for i in range(10):
+          time.sleep(0.5)
+          f.write(f"{i} - Hello World!\n")
+          if i == 5:
+              os.rename("./test.txt", "./renamed.txt")
+          print(i)
+  ```
+
+  - Logrotate는 로그 파일을 로테이션 할 때 기존 로그 파일의 이름을 변경하고 새로운 파일을 생성한다.
+    - 즉 간소화하면 아래 과정을 거치게 된다.
+
+  ```bash
+  $ mv access.log access.log.1
+  $ touch access.log
+  ```
+
+  - 문제는 로그 파일이 로테이션 되더라도 프로세스는 이를 알 수 없고, 로테이션 된 파일에 계속 로그를 작성한다는 것이다.
+    - 따라서 새로운 로그 파일이 생성 됐음에도, 로그는 계속 로테이션 된 파일에 쌓이게 된다.
+    - 또한 새로운 로그 파일에는 아무 로그도 기록되지 않기 때문에, 크기 기반 로테이션을 실행할 경우 로테이션도 되지 않는다.
+  - 대표적인 예시가 Nginx로, 아래와 같이 nginx.conf 파일을 생성하고
+
+  ```ini
+  events {}
+  
+  http {
+      access_log /var/log/nginx/access.log;
+      error_log  /var/log/nginx/error.log warn;
+  
+      server {
+          listen 80;
+          location / {
+              return 200 'Nginx log test OK';
+              add_header Content-Type text/plain;
+          }
+      }
+  }
+  ```
+
+  - Docker를 통해 Nginx를 실행한 뒤
+
+  ```yaml
+  version: "3.8"
+  
+  services:
+    nginx:
+      image: nginx:latest
+      container_name: nginx-logtest
+      ports:
+        - "8080:80"
+      volumes:
+        - ./nginx.conf:/etc/nginx/nginx.conf:ro
+        - ./logs:/var/log/nginx
+  ```
+
+  - access 로그 생성을 위해 요청을 보낸다.
+
+  ```bash
+  $ curl localhost:8080
+  ```
+
+  - 그 후 아래와 같이 logrotate 설정 파일을 작성하고
+
+  ```ini
+  # /etc/logrotate.d/nginx
+  /root/logs/*.log
+  {
+      daily
+      missingok
+      rotate 14
+      size 25M
+      compress
+      delaycompress
+      create 644 foo foo
+  }
+  ```
+
+  - 아래와 같이 Logrotate를 실행한다.
+
+  ```bash
+  $ logrotate -f /etc/logrotate.d/nginx
+  ```
+
+  - 그 후 access.log 파일과 access.log.1 파일을 확인해본다.
+    - 원래 access.log에 있던 로그가 access.log.1로 이동하여 로테이션이 잘 수행된 것을 확인할 수 있다.
+
+  ```bash
+  $ cat /root/logs/access.log
+  $ cat /root/logs/access.log.1
+  ```
+
+  - 다시 요청을 보내본다.
+
+  ```bash
+  $ curl localhost:8080
+  ```
+
+  - 다시 로그 파일을 확인한다.
+    - 새로운 로그가 `access.log`가 아닌 `access.log.1`에 적재되는 것을 확인할 수 있다.
+
+  ```bash
+  $ cat /root/logs/access.log
+  $ cat /root/logs/access.log.1
+  ```
+
+  - 해결 방법
+    - Logrotate 설정 파일의 `postrotate` 설정으로 로테이션 후 Nginx가 새로 생성된 로그 파일을 reopen하도록 한다.
+    - `[-s /run/nginx.pid] &&`는 `/run/nginx.pid` 파일이 있을 때만 `&&` 뒤의 명령어를 실행하겠다는 조건문이다.
+    - `kill -USR1 $(cat /run/nginx.pid)`는 Nginx 프로세스에게 `USR1` 시그널을 보내는 것으로, 이 시그널은 로그 파일을 reopen하게 한다.
+    - `USR1`은 사용자 정의 시그널 중 1번이라는 뜻으로, Nginx에서는 이 시그널이 로그 파일 reopen으로 정의되어 있다.
+    - 여러 개의 worker process가 실행 중이더라도 master process에만 시그널을 보내면 된다.
+
+  ```ini
+  /home/foo/logs/nginx/*.log {
+      daily
+      size 25M
+      rotate 14
+      compress
+      delaycompress
+      missingok
+      create 644 foo foo
+  
+      postrotate
+          [ -s /run/nginx.pid ] && kill -USR1 $(cat /run/nginx.pid)
+      endscript
+  }
+  ```
+
+  - 만약 Nginx를 Docker container로 실행중일 경우 `postrotate`를 아래와 같이 작성하면 된다.
+
+  ```ini
+  postrotate
+      docker exec nginx-container sh -c 'kill -USR1 $(cat /var/run/nginx.pid)'
+  endscript
+  ```
+
+  - 모든 애플리케이션에서 이러한 문제가 발생하는 것은 아니다.
+    - Rotation 실행 후 reopen을 지원하지 않는 애플리케이션에서만 발생하는 문제다.
+    - 예를 들어 Python logging이나 log4j 등은 rotation될 때 파일을 자동으로 reopen하는 기능이 있다.
 
 
 
