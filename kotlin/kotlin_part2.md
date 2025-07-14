@@ -340,6 +340,20 @@
       }
   }
   ```
+  
+  - Primary constructor의 매개 변수를 var 또는 val 키워드로 선언하면 클래스의 멤버 변수가 된다.
+  
+    - 원래 primary constructor의 매개 변수는 constructor 안에서만 사용할 수 있는 지역 변수이나, 이 방법을 통해 클래스의 멤버 변수로 선언이 가능하다.
+    - Kotlin에서는 함수의 매개 변수를 선언할 때 var나 val을 붙일 수 없으나, 이 경우가 유일한 예외다.
+  
+  
+  ```kotlin
+  class User(val name: String, val count Int) {
+      fun printUserInfo() {
+          println("name: $name, count: %count")
+      }
+  }
+  ```
 
 
 
@@ -742,6 +756,92 @@
   client.passport.number = "2345678"    // val property 내부의 property는 수정이 가능하다.
   println(client.passport.number)       // 2345678
   ```
+
+
+
+- 상속
+
+  - Kotlin의 상속 문법을 위해서는 상속 할 class 앞에 `open` keyword를 붙여야한다.
+    - Kotlin에서 모든 class와 method는 기본적으로 final로 선언된다.
+    - 따라서 class를 상속 가능하게 하기 위해서는 아래와 같이 `open` keyword를 붙여야한다.
+
+  ```kotlin
+  open class Parent {}
+  ```
+
+  - Kotlin의 상속 문법은 아래와 같다.
+    - `:` 뒤에 상속 받을 클래스의 이름을 입력한다.
+
+  ```kotlin
+  class Child: Parent() {}
+  ```
+
+  - 만약 상속 받을 클래스의 constructor에 매개 변수가 있다면, 매개 변수를 전달해야한다.
+
+  ```kotlin
+  open class Parent(name: String) {}
+  
+  class Child(name: String): Super(name) {}
+  ```
+
+
+
+- 오버라이딩
+
+  - 부모 클래스의 메서드를 오버라이딩 하기 위해서는 오버라이딩 할 메서드에 `open` keyword를 붙여야한다.
+    - 앞서 말했듯 모든 메서드는 기본적으로 final로 선언된다.
+    - 따라서 메서드를 오버라이딩 하기 위해서는 `open` keyword를 붙여야한다.
+    - 메서드 뿐 아니라 변수의 오버라이딩 역시 마찬가지다.
+  - 오버라이딩하여 새로 작성한 메서드에는 `override` keyword를 붙여야한다.
+
+  ```kotlin
+  open class Parent() {
+      open var name = "John"
+      open fun sayHello() {
+          println("Hi, I'm $name. I'm a Parent")
+      }
+  }
+  
+  class Child: Parent() {
+      override var name = "Mike"
+      override fun sayHello() {
+          println("Hi, I'm $name. I'm a Child")
+      }
+  }
+  ```
+
+
+
+- 접근제한자(visibility modifier)
+
+  - 클래스의 멤버에 접근할 수 있는 대상을 제한하는 keyword이다.
+    - 접근 제한자를 생략할 경우 public이 된다.
+
+  | 접근제한자 | 최상위에서 사용       | 클래스 멤버에서 사용               |
+  | ---------- | --------------------- | ---------------------------------- |
+  | public     | 모든 파일에서 가능    | 모든 클래스에서 가능               |
+  | internal   | 같은 모듈 내에서 가능 | 같은 모듈 내에서 가능              |
+  | protected  | 사용 불가             | 상속 관계의 하위 클래스에서만 가능 |
+  | private    | 파일 내부에서만 가능  | 클래스 내부에서만 가능             |
+
+  - 예시
+
+  ```kotlin
+  open class Super {
+      var public_num = 1
+      protected var protected_num = 2
+      private var private_num = 3
+  }
+  
+  class Sub: Super() {
+      fun test() {
+          public_num++
+          protected_num++
+          private_num++		// error
+      }
+  }
+  ```
+
 
 
 
