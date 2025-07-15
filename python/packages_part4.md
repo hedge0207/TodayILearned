@@ -1,7 +1,7 @@
 # Locust
 
-- locust
-  - performance testing tool
+- Locust
+  - Performance testing tool
   - open source로 개발되었다.
   - 이름이 locust인 이유는 메뚜기 떼가 농장을 습격하듯 사용자들이 웹 사이트를 습격한다고 하여 붙인 이름이다.
 
@@ -40,9 +40,9 @@
 
 
 
-- locust 실행하기
+- Locust 실행하기
 
-  - fastapi로 아래와 같은 간단한 API를 만든다.
+  - Fastapi로 아래와 같은 간단한 API를 만든다.
 
   ```python
   import uvicorn
@@ -63,7 +63,7 @@
       uvicorn.run(app, host='0.0.0.0', port=8000)
   ```
 
-  - locust로 테스트 시나리오를 작성한다.
+  - Locust로 테스트 시나리오를 작성한다.
     - 테스트 시나리오의 파일 이름은 `locustfile.py`여야한다.
     - 아래 시나리오는 사용자가 `/hello`와 `/world`라는 api에 http requests를 반복적으로 보내는 시나리오이다.
 
@@ -101,7 +101,7 @@
 
 
 
-- locust의 기본적인 동작 과정은 다음과 같다.	
+- Locust의 기본적인 동작 과정은 다음과 같다.	
   - 설정한 사용자 수 만큼 User class의 instance를 생성한다.
   - user instance는 각자의 green thread 안에서 동작을 시작한다.
   - 각 user instance는 task를 선택하고, task를 실행한다.
@@ -123,7 +123,7 @@
 
 - 시뮬레이팅할 사용자 생성하기
 
-  - class 형식으로 시뮬레이팅할 사용자를 생성한다.
+  - Class 형식으로 시뮬레이팅할 사용자를 생성한다.
 
   ```python
   from locust import HttpUser
@@ -142,10 +142,47 @@
   - 이를 통해 `HttpUser`의 attribute인 `client`에 접근할 수 있게 된다.
   - `client`는 `HttpSession`의 instance로, load test 대상 시스템에 HTTP 요청을 보내는 데 사용된다.
     - `HttpSession`은 `requests` 모듈의 `Session`를 상속받는다.
+  
+  - 예시
+    - `HttpUser` 클래스를 상속 받는 사용자 클래스를 생성한다.
+  
+  ```python
+  # locustfile.py
+  from locust import HttpUser, task, between
+  
+  
+  class APITestUser(HttpUser):
+      @task
+      def test_api(self):
+          response = self.client.get("/api/test")
+          if response.status_code == 200:
+              print("Success:", response.json())
+          else:
+              print("Failed:", response.status_code)
+  ```
+  
+  - 아래와 같이 실행한다.
+  
+  ```bash
+  $ locust -f locustfile.py --host http://localhost:8000
+  ```
+  
+  - 만약 request body가 포함된 post 요청을 보내야 할 경우, task를 아래와 같이 작성하면 된다.
+  
+  ```python
+  @task
+  def test_post_api(self):
+      payload = {"key": "value"}
+      headers = {"Content-Type": "application/json"}
+      response = self.client.post("/api/test", json=payload, headers=headers)
+      print(response.status_code)
+  ```
+  
+  
 
 
 
-- validating response
+- Validating response
 
   - 기본적으로 response code가 OK면 request가 성공한 것으로 간주한다.
   - 이를 custom할 수 있다.
@@ -165,23 +202,6 @@
   with self.client.get("/does_not_exist/", catch_response=True) as response:
       if response.status_code == 404:
           response.success()
-  ```
-
-
-
-- JSON 형식으로 request보내고 응답 받아오기
-
-  ```python
-  from json import JSONDecodeError
-  ...
-  with self.client.post("/", json={"foo": 42, "bar": None}, catch_response=True) as response:
-      try:
-          if response.json()["greeting"] != "hello":
-              response.failure("Did not get expected value in greeting")
-      except JSONDecodeError:
-          response.failure("Response could not be decoded as JSON")
-      except KeyError:
-          response.failure("Response did not contain expected key 'greeting'")
   ```
 
 
@@ -222,6 +242,8 @@
           for i in range(10):
               self.client.get("/article?id=%i" % i)
   ```
+
+
 
 
 
@@ -330,7 +352,7 @@
 
 - etc
 
-  - host를 미리 지정할 수 있다.
+  - Host를 미리 지정할 수 있다.
 
   ```python
   class QuickstartUser(HttpUser):
@@ -466,7 +488,7 @@
 
 ## Event
 
-- test시작, 종료시에 실행될 코드 작성하기
+- 테스트 시작, 종료시에 실행될 코드 작성하기
 
   - `@events.test_start.add_listener`, `@events.test_stop.add_listener` decorator를 사용한다.
 
@@ -523,64 +545,65 @@
 
   - 코드
     - tag 등은 Environment를 통해 넣으면 된다.
-
-
+  
   ```python
-import gevent
-from locust import HttpUser, task, between
-from locust.env import Environment
-from locust.stats import stats_printer, stats_history
-from locust.log import setup_logging
-
-setup_logging("INFO", None)
-
-
-class User(HttpUser):
-    wait_time = between(1, 3)
-    host = "https://docs.locust.io"
-
-    @task
-    def my_task(self):
-        self.client.get("/")
-
-    @task
-    def task_404(self):
-        self.client.get("/non-existing-path")
-
-
-# Environment의 instance 생성 후 runner 생성
-env = Environment(user_classes=[User])
-env.create_local_runner()
-
-# web ui 호스트와 포트 설정
-env.create_web_ui("127.0.0.1", 8089)
-
-# 테스트 상태가 print되도록 설정
-gevent.spawn(stats_printer(env.stats))
-
-# 과거 테스트 이력을 저장하도록 설정(chart 등에 사용)
-gevent.spawn(stats_history, env.runner)
-
-# 테스트 시작
-env.runner.start(1, spawn_rate=10)
-
-# 테스트 기간 설정
-gevent.spawn_later(60, lambda: env.runner.quit())
-
-# wait for the greenlets
-env.runner.greenlet.join()
-
-# stop the web server for good measures
-env.web_ui.stop()
-
-# aggs 결과 확인
-print(self.env.stats.total)
-
-# 각 task별 결과 확인
-for task, stats in self.env.stats.entries.items():
-    print(task)
-    print(stats)
+  import gevent
+  from locust import HttpUser, task, between
+  from locust.env import Environment
+  from locust.stats import stats_printer, stats_history
+  from locust.log import setup_logging
+  
+  setup_logging("INFO", None)
+  
+  
+  class User(HttpUser):
+      wait_time = between(1, 3)
+      host = "https://docs.locust.io"
+  
+      @task
+      def my_task(self):
+          self.client.get("/")
+  
+      @task
+      def task_404(self):
+          self.client.get("/non-existing-path")
+  
+  
+  # Environment의 instance 생성 후 runner 생성
+  env = Environment(user_classes=[User])
+  env.create_local_runner()
+  
+  # web ui 호스트와 포트 설정
+  env.create_web_ui("127.0.0.1", 8089)
+  
+  # 테스트 상태가 print되도록 설정
+  gevent.spawn(stats_printer(env.stats))
+  
+  # 과거 테스트 이력을 저장하도록 설정(chart 등에 사용)
+  gevent.spawn(stats_history, env.runner)
+  
+  # 테스트 시작
+  env.runner.start(1, spawn_rate=10)
+  
+  # 테스트 기간 설정
+  gevent.spawn_later(60, lambda: env.runner.quit())
+  
+  # wait for the greenlets
+  env.runner.greenlet.join()
+  
+  # stop the web server for good measures
+  env.web_ui.stop()
+  
+  # aggs 결과 확인
+  print(self.env.stats.total)
+  
+  # 각 task별 결과 확인
+  for task, stats in self.env.stats.entries.items():
+      print(task)
+      print(stats)
   ```
+
+
 
 
 
@@ -737,6 +760,8 @@ for task, stats in self.env.stats.entries.items():
 
 
 
+
+
 ## Worker
 
 - locust는 여러 개의 worker를 생성하여 테스트가 가능하다.
@@ -754,7 +779,7 @@ for task, stats in self.env.stats.entries.items():
 
 - 실행하기
 
-  - master 모드로 실행하기
+  - Master 모드로 실행하기
 
   ```bash
   $ locust --master
@@ -809,6 +834,8 @@ for task, stats in self.env.stats.entries.items():
           ]
           environment.runner.send_message('test_users', users)
   ```
+
+
 
 
 
