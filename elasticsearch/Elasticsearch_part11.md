@@ -525,6 +525,9 @@
   
   # 특정 index의 query cache 확인
   GET <index_name>/_stats/query_cache?human
+  
+  # 특정 index의 query cache와 request cache 확인
+  GET <index_name>/_stats/query_cache,request_cache
   ```
   
   - 기본적으로 활성화되어 있으며, 아래와 같이 변경이 가능하다.
@@ -578,7 +581,6 @@
     }
   }
   ```
-  
   
 
 
@@ -706,26 +708,26 @@
 
   - 전체 클리어
 
-  ```bash
-  $ curl -XPOST "localhost:9200/<인덱스명>/_cache/clear"
+  ```http
+  POST <인덱스명>/_cache/clear
   ```
 
   - Node Query Cache 클리어
 
-  ```bash
-  $ curl -XPOST "localhost:9200/<인덱스명>/_cache/clear?query=true" -H 'Content-type:application/json'
+  ```http
+  POST <인덱스명>/_cache/clear?query=true
   ```
 
   - Shard Request Cache 클리어
 
-  ```bash
-  $ curl -XPOST "localhost:9200/<인덱스명>/_cache/clear?request=true" -H 'Content-type:application/json'
+  ```http
+  POST <인덱스명>/_cache/clear?request=true
   ```
 
   - Field Data Cache 클리어
 
-  ```bash
-  $ curl -XPOST "localhost:9200/<인덱스명>/_cache/clear?fielddata=true" -H 'Content-type:application/json'
+  ```http
+  POST <인덱스명>/_cache/clear?fielddata=true
   ```
 
 
