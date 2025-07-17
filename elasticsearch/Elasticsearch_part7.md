@@ -702,8 +702,14 @@
 # Aggregations
 
 - aggregations
-  - ES에서 데이터의 다양한 연산을 가능하게 해주는 기능
-  - aggregations 또는 aggs로 표기한다.
+  - 문서의 각 field별로 다양한 집계 연산을 가능하게 해주는 기능이다.
+  - Heap memory를 매우 많이 사용하므로 사용에 주의해야한다.
+    - 한 번의 검색에 더 많은 aggregation을 수행할 수록 필요한 자원도 증가하고, 검색 속도도 느려진다.
+  - aggregation cache
+    - 빈번하게 실행되는 aggregations의 결과는 shard request cache에 캐싱된다.
+    - https://www.elastic.co/guide/en/elasticsearch/reference/current/search-shard-routing.html#shard-and-node-preference 참고
+
+  - aggregation 대상 field가 모든 문서에 있는 경우와, 일부 문서에 있는 경우의 aggregation 수행 시간에는 차이가 없는 것으로 보인다.
 
 
 
@@ -712,30 +718,29 @@
   - search API에서 query 문과 같은 수준에 지정자 `aggregations ` 또는 `aggs`를 명시한다.
   - 꼭 query문을 함께 사용할 필요는 없다.
 
-  ```bash
-  $ curl -XGET "localhost:9200/<인덱스명>/_search" -H 'Content-type:application/json' -d'
+  ```json
+  // GET <인덱스명>/_search
   {
     "query": {
-      # [query 문]
+      // ...
     },
     "aggs": {
-      "[사용자가 지정한 aggs 이름]": {
-        "[aggregation 종류(type)]": {
-          # [aggs 문]
+      "<name>": {
+        "<aggs_type>": {
+          // ...
         }
       }
     }
   }
-  '
   ```
-
+  
   - 종류
     - Metric: 수학적 계산을 위한 aggregation
     - Bucket: 필드의 값을 기준으로 문서들을 그룹화해주는 aggregation
     - Pipeline: 문서나 필드가 아닌 다른 aggregation 데이터를 가지고 집계를 해주는 aggregation
   - 응답
     - search API의 응답으로 오는 object 중 `aggregations`라는 key와 묶여서 온다.
-
+  
   ```json
   {
     "took": 78,
@@ -763,48 +768,46 @@
     }
   }
   ```
-
+  
   - aggregations만 응답으로 받기
     - `size`를 0으로 설정하면 aggregations만 응답으로 받을 수 있다.
-
-  ```bash
-  $ curl -XGET "localhost:9200/<인덱스명>/_search" -H 'Content-type:application/json' -d'
+  
+  ```json
+  // GET <인덱스명>/_search
   {
     "size": 0,
     "aggs": {
-      "[사용자가 지정한 aggs 이름]": {
-        "[aggregation 종류(type)]": {
-          # [aggs 문]
+      "<name>": {
+        "<aggs_type>": {
+          // ...
         }
       }
     }
   }
-  '
   ```
-
+  
   - aggregations type도 응답으로 받기
     - aggregations은 기본값으로 aggregation의 이름만 반환한다.
     - type도 함께 반환받기 위해서는 아래와 같이 `typed_keys`를 요청에 포함시키면 된다.
     - `type#aggs 이름` 형태로 이름과 타입을 함께 반환한다.
-
-  ```bash
-  $ curl -XGET "localhost:9200/<인덱스명>/_search?typed_keys" -H 'Content-type:application/json' -d'
+  
+  ```json
+  // GET <인덱스명>/_search?typed_keys
   {
     "size": 0,
     "aggs": {
       "my-aggs": {
-        "histogram": {	# histogram type
+        "histogram": {	// histogram type
           "field":"my-field",
           "interval":1000
         }
       }
     }
   }
-  '
   
-  # 응답
+  // 응답
   {
-    ...
+    // ...
     "aggregations": {
       "histogram#my-agg-name": {                 
         "buckets": []
@@ -819,46 +822,44 @@
 
   - 여러 개의 aggregations 실행하기
 
-  ```bash
-  $ curl -XGET "localhost:9200/<인덱스명>/_search" -H 'Content-type:application/json' -d'
+  ```json
+  // GET <인덱스명>/_search
   {
     "aggs": {
-      "[사용자가 지정한 aggs 이름1]": {
-        "[aggregation 종류(type)]": {
-          # [aggs 문]
+      "<name1>": {
+        "<aggs_type>": {
+          // ...
         }
       },
-      "[사용자가 지정한 aggs 이름2]": {
-        "[aggregation 종류(type)]": {
-          # [aggs 문]
+      "<name2>": {
+        "<aggs_type>": {
+          // ...
         }
       }
     }
   }
-  '
   ```
-
+  
   - sub-aggregations 실행하기
     - Bucket aggregations는 Bucket 혹은 Metric sub-aggregations을 설정 가능하다.
     - 깊이에 제한이 없이 Bucket aggregations이기만 하면 sub-aggregations을 설정 가능하다.
-
-  ```bash
-  $ curl -XGET "localhost:9200/<인덱스명>/_search" -H 'Content-type:application/json' -d'
+  
+  ```json
+  // GET <인덱스명>/_search
   {
     "aggs": {
       "my-bucket-aggs": {
-        "[aggregation 종류(type)]": {
-          # [aggs 문]
+        "<aggs_type>": {
+          // ...
         },
-        "my-sub-aggs": {	# sub-aggregations 설정
-          "[aggregation 종류(type)]": {
-            # [aggs 문]
+        "my-sub-aggs": {	// sub-aggs
+          "<aggs_type>": {
+            // ...
           }
         }
       }
     }
   }
-  '
   ```
 
 
@@ -867,13 +868,13 @@
 
   - `meta` 오브젝트를 사용하여 metadata를 추가하는 것이 가능하다.
 
-  ```bash
-  $ curl -XGET "localhost:9200/<인덱스명>/_search" -H 'Content-type:application/json' -d'
+  ```json
+  // GET <인덱스명>/_search
   {
     "aggs": {
-      "[사용자가 지정한 aggs 이름]": {
-        "[aggregation 종류(type)]": {
-          # [aggs 문]
+      "<aggs_name>": {
+        "<aggs_type>": {
+          // ...
         }
       },
       "meta":{
@@ -881,7 +882,6 @@
       }
     }
   }
-  '
   ```
 
 
@@ -894,8 +894,8 @@
     - 단, script를 사용할 경우 aggregation에 따라 성능에 영향을 줄 수 있다.
   - 예시
 
-  ```bash
-  $ curl -XGET "localhost:9200/<인덱스명>/_search" -H 'Content-type:application/json' -d'
+  ```json
+  // GET <인덱스명>/_search
   {
     "runtime_mappings": {
       "message.length": {
@@ -912,14 +912,7 @@
       }
     }
   }
-  '
   ```
-
-
-
-- aggregation cache
-  - 빈번하게 실행되는 aggregations의 결과는 shard request cache에 캐싱한다.
-  - https://www.elastic.co/guide/en/elasticsearch/reference/current/search-shard-routing.html#shard-and-node-preference 참고
 
 
 
@@ -927,8 +920,8 @@
 
   - nations라는 인덱스에 bulk API를 활용하여 데이터 추가
 
-  ```bash
-  $curl -XPUT "localhost:9200/nations/_bulk?pretty" -H 'Content-type:application/json' -d'
+  ```json
+  // PUT nations/_bulk
   {"index": {"_id": "1"}}
   {"date": "2019-06-01", "continent": "아프리카", "nation": "남아공", "population": 4000}
   {"index": {"_id": "2"}}
@@ -951,6 +944,8 @@
   {"date": "2019-10-01", "continent": "유럽", "nation": "독일", "population": 1271}
   '
   ```
+
+
 
 
 
