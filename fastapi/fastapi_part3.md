@@ -1316,5 +1316,10 @@
 
 
 
+- Gunicorn worker의 적정 개수
+  - [Gunicorn의 공식 문서](https://docs.gunicorn.org/en/stable/design.html#how-many-workers)에는 4-12개의 worker로 초당 수백에서 수천 개의 요청을 처리할 수 있다고 나와있다.
+  - 일반적으로 `(2 x $num_cores) + 1`개의 worker 수를 권장한다.
+  - 지나치게 많은 worker의 개수는 시스템 전체의 throughput을 감소시킬 수 있다.
+
 
 
