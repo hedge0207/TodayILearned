@@ -1256,15 +1256,36 @@
 
 - 컨테이너 log 확인
 
-  - `--details`: log를 보다 상세하게 출력한다.
-  - `-f(--follow)`: log를 출력하고 종료하지 않고, log output을 지속적으로 follow한다.
-  - `--since`, `--until`
-    - Timestamp(e.g. 2023-10-11T10:17:23Z) 혹은 상대적 시간(e.g. 15m)을 받아 해당 시간 부터/까지의 log를 출력한다.
-  - `-t(--timestamps)`: timestamp를 함께 출력한다.
-  - `-n(--tail)`: 가장 최근 log부터 몇 개의 log를 보여줄지를 설정한다.
-
+  - options
+    - `--details`: log를 보다 상세하게 출력한다.
+    - `-f(--follow)`: log를 출력하고 종료하지 않고, log output을 지속적으로 follow한다.
+    - `--since`, `--until`
+      - Timestamp(e.g. 2023-10-11T10:17:23Z) 혹은 상대적 시간(e.g. 15m)을 받아 해당 시간 부터/까지의 log를 출력한다.
+  
+    - `-t(--timestamps)`: timestamp를 함께 출력한다.
+    - `-n(--tail)`: 가장 최근 log부터 몇 개의 log를 보여줄지를 설정한다.
+  
+  
   ```bash
   $ docker logs [options] <container>
+  ```
+  
+  - `docker logs`는 stdout과 stderr을 모두 stdout으로 출력한다.
+    - 따라서 파이프(`|`)를 사용하면 모두 다음 명령어의 표준 입력으로 전달된다.
+    - 그러나, 간혹 파이프 도중에 stderr이 따로 생기는 경우는 별도 전달되어 파이프가 정상 동작하지 않을 수 있다.
+    - 예를 들어 아래와 같이 grep과 함께 사용할 경우 stderr에는 grep이 적용되지 않고, 그대로 출력되는 경우가 있을 수 있다.
+  
+  ```bash
+  $ docker logs <container> | grep "foo"
+  ```
+  
+  - 위와 같은 경우 명시적으로 모든 스트림을 stdout으로 합쳐서 파이프로 전달하면 된다.
+  
+  ```bash
+  $ docker logs <container> 2>&1 | grep "foo"
+  ```
+
+
 
 
 

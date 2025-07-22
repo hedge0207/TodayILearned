@@ -1098,6 +1098,7 @@
     - 기존 task(container)를 정지시키고 변경 사항을 반영한 새로운 task(container)를 생성하는 방식으로 동작한다.
     - `--mount-add`/`--mount-rm`: service 생성시에 미처 추가하지 못한 volume 혹은 bind mount를 추가/삭제 할 수 있다(추가 방식은 create 할 때와 동일하며, 삭제시에는 target_path를 입력하면 된다).
     - `mount-add`시에는 모든 node에 mount하려는 source 파일이 있어야한다.
+    - `--env-add`: 새로운 env를 추가하거나 기존 env를 수정한다(이렇게 추가, 수정 된 환경변수는 Docker deamon이 재실행 돼도 유지된다).
     - 이 외에도 publish할 port의 추가/삭제, network의 추가/삭제 등도 가능하다.
     - `--image` option을 통해 update에 사용할 image를 지정할 수 있다.
     - 기본적으로 task에 영향을 주지 않는 옵션은 task를 재생성하지 않는데, 예를 들어 `--update-parallelism`를 변경하더라도 이는 task에 영향을 주는 setting은 아니므로 task가 재생성되지는 않는다.
