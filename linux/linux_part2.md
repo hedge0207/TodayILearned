@@ -1188,7 +1188,78 @@
 
 
 
+- chroot
 
+  - chroot는 change root의 약자로 Linux 시스템의 root directory(`/`)를 변경하는 것이다.
+    - 특정 프로세스의 루트 디렉터리를 원하는 디렉터리로 변경하는 기능이다.
+    - 특정 프로세스가 제한된 경로로만 접근할 수 있도록 하기 위해 사용한다.
+    - 만약 어떤 사용자에게 SFTP 연결을 허용해 줘야 하는 상황이라고 가정해보자.
+    - 이 때 해당 사용자가 시스템의 전체 경로가 아닌 특정 경로에만 접근할 수 있도록 제한하고자 한다면 chroot 기능을 사용할 수 있다.
+  - chroot jail
+    - chroot를 통해 제한된 환경을 chroot jail이라 부른다.
+    - 위 예시에서 특정 경로로만 접근 가능하도록 설정된 SFTP 환경에 chroot jail에 해당한다.
+  - 형식
+
+  ```bash
+  $ chroot <새 루트 디렉토리> <실행할 명령>
+  ```
+
+  - 제약 사항
+    - 실행에 root 권한이 필요하다.
+    - 명령어를 실행하는 프로세스와 그 자식 프로세스에만 적용된다.
+    - 새로운 루트 디렉터리 안에 필요한 실행 파일과 라이브러리가 있어야 적용된다(다만 일부 예외가 있다).
+    - chroot jail 내부에서 root라면 탈출이 가능하다.
+    - 강력한 보안을 위해 설계된 기능은 아니다.
+
+  - ubuntu 컨테이너 생성하기
+    - 테스트를 위한 ubuntu 컨테이너를 생성한다.
+
+  ```yaml
+  services:
+    ubuntu:
+      image: ubuntu:24.10
+      tty: true
+      stdin_open: true
+      privileged: true
+  ```
+
+  - 컨테이너 내부에서 아래 명령어를 실행한다.
+
+  ```bash
+  # 테스트용 디렉터리 생성
+  $ mkdir -p /opt/chroot-test/{bin,lib}
+  
+  # 필요한 명령 복사
+  $ cp /bin/sh /opt/chroot-test/bin/
+  
+  # 필요한 라이브러리 확인
+  $ ldd /bin/sh
+  
+  # 필요한 라이브러리 복사(상황에 따라 다름, 위 에서 필요한 라이브러리 확인 후 복사)
+  $ cp /lib/x86_64-linux-gnu/libc.so.6 /opt/chroot-test/lib/
+  $ cp /lib64/ld-linux-x86-64.so.2 /opt/chroot-test/lib/
+  
+  # chroot 실행
+  $ chroot /opt/chroot-test /bin/sh
+  ```
+
+  - SFTP 접속시 자동으로 특정 디렉토리만 보도록 chroot 설정하기
+    - SFTP는 OpenSSH 서버(sshd)의 기능 중 하나로, sshd_config 파일에서 사용자별로 ChrootDirectory를 설정하면 해당 사용자는 로그인시에 지정된 디렉터리가 루트로 보이게 된다.
+    - `/etc/ssh/sshd_config`에 아래와 같이 추가한다.
+    - 이 때 주의할 점은 `ChrootDirectory`로 설정하려는 디렉터리는 반드시 루트 소유이며 권한이 755여야 한다는 점이다.
+    - 아래 내용 추가 후 `sudo systemctl restart sshd`를 통해 OpenSSH를 재실행해야한다.
+    - `atmoz/sftp` Docker image에는 이 구조가 자동으로 적용되어 있다.
+
+  ```ini
+  Match User sftpuser
+      ChrootDirectory /home/sftpuser/jail
+      ForceCommand internal-sftp
+  ```
+
+  - 위 예시에서 `ChrootDirectory`로 설정한 경로(`/home/sftpuser/jail`)에 SFTP가 없음에도 동작하는 이유
+    - 위에서 chroot로 설정한 경로에는 반드시 명령어의 실행 파일과 명령어 실행을 위한 라이브러리들이 있어야 한다고 했다.
+    - 그러나, 위의 경우 SFTP의 실행 파일이나 라이브러리가 새로운 루트 경로에 없음에도 적용된다.
+    - 이는 OpenSSH의 SFTP 모드는 별도의 실행 파일이 필요 없는 `internal-sftp` 방식을 사용하기 때문이다.
 
 
 
