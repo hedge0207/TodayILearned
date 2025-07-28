@@ -297,6 +297,15 @@
 
 
 
+- Debezium
+  - Red Hat 주도로 개발된 오픈 소스 CDC 플랫폼이다.
+    - Log based CDC를 위한 다양한 소프트웨어를 제공한다.
+    - Apache License 2.0 하에 배포되는 오픈소스 소프트웨어로 무료로 사용이 가능하다.
+    - MySQL, PostgreSQL, Oracle 등 다양한 RDBMS에 사용이 가능하다.
+  - Kafka Connect 기반의 connector로 동작한다.
+
+
+
 
 
 ## Debezium PostgreSQL source connector를 이용한 CDC
@@ -637,7 +646,7 @@
     - 이는 binlog를 순차적으로 읽어야 하기에 있는 제약으로, 여러 task가 동시에 읽을 경우 순차적으로 읽는 것이 보장되지 않을 수 있기 때문이다.
 
   ```bash
-  curl -XPOST 'localhost:8083/connectors' \
+  $ curl -XPOST 'localhost:8083/connectors' \
   --header 'Content-type: application/json' \
   --data-raw '{
     "name": "mysql-cdc-source-connector",
@@ -881,6 +890,28 @@
   ```
 
 
+
+- Topics
+  - MySQL Debezium connector를 실행하면 아래와 같은 세 개의 topic이 생성된다.
+    - Schema history topic
+    - Schema change topic
+    - Data change topic
+  - Schema history topic
+    - DB의 schema가 변경되는 경우가 있을 수도 있다.
+    - 따라서 connector는 data에 변경이 일어났을 당시의 schema에 대해 알 필요가 있다.
+    - 스키마 변경 이후 발생하는 이벤트를 올바르게 처리하기 위해, MySQL은 행 수준 변경(row-level)뿐 아니라 DB에 적용된 DDL문도 함께 기록한다.
+    - 커넥터는 binlog에서 이러한 DDL 문을 만나면, 이를 파싱하여 각 테이블의 스키마를 메모리 내 구조로 업데이트한다.
+    - 그리고 스키마를 사용하여 insert, update, delete가 발생했을 당시의 테이블 구조를 식별하고, 그에 맞는 변경 이벤트를 생성한다.
+    - 또한 커넥터는 별도의 Kafka 토픽(스키마 히스토리 토픽)에 모든 DDL 문과 해당 DDL 문이 binlog에 나타난 위치(position)를 함께 기록한다.
+    - 이를 저장하는 토픽이 schema history topic이다.
+    - 커넥터가 장애(crash)가 발생하거나 정상 종료 후 재시작할 때는 특정 binlog 위치(즉, 특정 시점)에서부터 binlog를 다시 읽기 시작한다.
+    -  이때, 커넥터는 Kafka의 스키마 히스토리 토픽을 읽어들이고, binlog 시작 위치까지의 모든 DDL 문을 파싱하여 해당 시점의 테이블 구조를 복원한다.
+    -  Connector 내부에서 사용할 목적으로 적재하는 것으로, 사용자 consumer에서 사용하도록 설계된 것이 아니다.
+    -  이 토픽은 절대 파티셔닝 해서는 안 되며, 전역적으로 순서가 유지되어야 한다.
+  - Schema change topic
+    - 테이블에 적용된 schema의 변경을 기록하기 위한 topic이다.
+    - `topic.prefix`에 설정한 값으로 topic 이름이 설정된다.
+    - Schema history topic이 connector 내부적으로 사용하기 위해 설계된 것이라면, schema change topic은 사용자가 만든 consumer에서 사용하기 위해 설계된 것이다.
 
 
 

@@ -840,7 +840,6 @@
       - Connector에서 사용할 DB dialect을 설정한다.
       - 아무 값도 주지 않을 경우 빈 문자열(`""`)이 설정되며, 이 경우 `connection.url`에 설정된 JDBC URL 값에서 DB를 확인하고 dialect을 결정한다.
   - `batch.max.rows`
-  
       - DB에서 한 번에 읽어올 최대 row의 수를 제한하는 설정이다.
       - 기본값은 100이다.
       - JDBC의 fetch size로 사용된다.
@@ -893,8 +892,6 @@
     - 예를 들어 Tibero에 연결해야 하는 경우 Tibero에 연결하기 위한 JDBC driver가 JDBC connector에 포함되어있지 않으므로, 추가를 해줘야한다.
   - `<JDBC_connector_dir>/lib` 내부에 JDBC driver를 추가하면 된다.
     - 추가한 후에는 Kafka Connect를 재실행해야한다.
-
-
 
 
 
