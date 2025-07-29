@@ -1185,8 +1185,9 @@
   - uvicorn 역시 process manager로 사용하는 것이 가능하다.
 
     - 그러나 worker process들을 관리하는 능력이 아직까지는 gunicorn에 비해 제한적이므로 gunicorn을 process manager로 사용하는 것이 더 낫다.
-    - 그러나 최근 버전에서는 uvicorn에도 여러 관리 기능이 추가되어, uvicorn만 사용해도 무방하다.
-
+    - 그러나 최근 버전에서는 uvicorn에도 여러 관리 기능이 추가되어, uvicorn만 사용하는 경우도 있다.
+    - 실제로 tiangolo가 관리하던 [uvicorn-gunicorn-fastapi-docker](https://github.com/tiangolo/uvicorn-gunicorn-fastapi-docker)의 README를 확인해보면, 해당 repo가 deprecate되었으며, 그 이유로 uvicorn에 worker를 관리하는 기능이 추가되어 더 이상 gunicorn이 필요 없게 되었음을 들고있다.
+  
   ```bash
   $ uvicorn main:app --host 0.0.0.0 --port 8080 --workers 4
   ```
@@ -1322,4 +1323,92 @@
   - 지나치게 많은 worker의 개수는 시스템 전체의 throughput을 감소시킬 수 있다.
 
 
+
+- Gunicron의 timeout 설정
+
+  - Gunicorn에는 `--timeout`이라는 설정이 있다.
+    - 공식 문서에 따르면 worker가 아무 응답도 하지 않고 `--timeout` 이상 slient 상태에 있을 경우 worker를 죽이고 재실행하는 설정이다.
+    - 기본 값은 30s이며, 기본 값으로 사용하는 것을 권장한다.
+  - 그러나 uvicorn + gunicorn으로 실행할 경우 해당 설정이 적용되지 않는다.
+    - 예를 들어 아래와 같이 FastAPI로 API를 생성하고
+
+  ```python
+  import time
+  from fastapi import FastAPI
+  
+  app = FastAPI()
+  
+  @app.get("/slow")
+  def slow_handler():
+      st = time.time()
+      time.sleep(10)
+      return {"processing_time": time.time()-st}
+  ```
+
+  - 아래와 같이 uvicorn + gunicorn으로 FastAPI app을 실행한다.
+    - 이 때 `--timeout`을 5초로 설정한다.
+
+  ```bash
+  $ gunicorn main:app \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --bind 0.0.0.0:8000 \
+    --timeout 5
+  ```
+
+  - 이후 위 endpoint로 요청을 보내면, timeout으로 설정한 5초 이상 걸렸음에도 timeout이 발생하지 않고 정상 처리되는 것을 확인할 수 있다.
+
+  ```bash
+  $ curl http://localhost:8000/slow    
+  
+  # {"processing_time":10.00494909286499}
+  ```
+
+  - 아래와 같이 비동기로 처리하도록 변경해도, 같은 결과를 확인할 수 있다.
+
+  ```python
+  import time
+  import asyncio
+  from fastapi import FastAPI
+  
+  app = FastAPI()
+  
+  @app.get("/slow")
+  async def slow_handler():
+      st = time.time()
+      await asyncio.sleep(10)
+      return {"processing_time": time.time()-st}
+  ```
+
+  - 반면에 아래와 같이 gunicorn만을 사용하는 application을 생성하고
+
+  ```python
+  import time
+  
+  def app(environ, start_response):
+      time.sleep(10)
+      status = '200 OK'
+      headers = [('Content-Type', 'text/plain')]
+      start_response(status, headers)
+      return [b'Hello, world']
+  ```
+
+  - 같은 `--timeout`을 설정하여 실행한 후
+
+  ```bash
+  $ gunicorn main:app --bind 0.0.0.0:8000 --timeout 5
+  ```
+
+  - 요청을 보내면 timeout이 발생하는 것을 확인할 수 있다.
+
+  ```bash
+  $ curl http://localhost:8000
+  ```
+
+  - Uvicorn + Gunicorn일 때 gunicorn의 `--timeout`이 적용되지 않는 이유
+    - Uvicorn의 event loop로 동작한다.
+    - Event loop가 실행되는 한 Gunicorn은 event loop가 실행되고 있으므로 silent 상태가 아니라고 판단한다.
+    - 따라서 응답 시간이 timeout을 넘어가도 정상 응답을 반환하게 된다.
+  - `graceful_timeout`
+    - Worker가 restart signal을 받은 이후 이 설정 값 이상의 시간이 흐를 경우 graceful restart를 취소하고 강제 종료시킨다.
+    - 기본값은 30초이다.
 
