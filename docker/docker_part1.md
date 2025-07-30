@@ -1270,20 +1270,36 @@
   $ docker logs [options] <container>
   ```
   
-  - `docker logs`는 stdout과 stderr을 모두 stdout으로 출력한다.
-    - 따라서 파이프(`|`)를 사용하면 모두 다음 명령어의 표준 입력으로 전달된다.
-    - 그러나, 간혹 파이프 도중에 stderr이 따로 생기는 경우는 별도 전달되어 파이프가 정상 동작하지 않을 수 있다.
-    - 예를 들어 아래와 같이 grep과 함께 사용할 경우 stderr에는 grep이 적용되지 않고, 그대로 출력되는 경우가 있을 수 있다.
-  
-  ```bash
-  $ docker logs <container> | grep "foo"
-  ```
-  
-  - 위와 같은 경우 명시적으로 모든 스트림을 stdout으로 합쳐서 파이프로 전달하면 된다.
+  - `docker logs`는 컨테이너의 stdout은 자신의 stdout으로, stderr는 자신의 stderr으로 출력한다.
+    - `grep`은 오직 파이프(`|`)를 통해 전달 된 stdout 만을 대상으로 한다.
+    - 따라서 stderr을 대상으로도 grep을 수행하려면 아래와 같이 모든 스트림을 stdout으로 합쳐서 파이프로 전달하면 된다.
   
   ```bash
   $ docker logs <container> 2>&1 | grep "foo"
   ```
+  
+  - 만약 stdout과 stderr을 하나의 파일에 작성하고 싶다면 아래와 같이 하면 된다.
+    - `<log_file_name>`을 먼저 리디렉션 하는 이유는 아래와 같다.
+    - `>`는 오직 stdout만 리디렉션 한다(`2>`와 같이 사용해야 stderr을 리디렉션 한다).
+    - 따라서 `docker logs <container> 2>&1 > <log_file_name>`과 같이 리디렉션 할 경우 stdout만 파일로 리디렉션 되어 작성되고, stderr은 터미널에 출력된다.
+    - `2>&1`이 평가되는 시점에는 아직 stdout이 터미널을 향하고 있기 때문으로, 따라서 stdout과 합쳐진 stderr또한 터미널을 향하게 된다.
+    - 그런데 `> <log_file_name>`가 평가되면서 이 중 stdout만 파일에 작성되고, stderr은 터미널에 출력되게 된다.
+    - 반면 아래와 같이 작성하면 stdout을 파일로 리디렉션하고, stderr을 이미 리디렉션 된 stdout(즉 파일)로 보낸다.
+    - 그 결과 stdout과 stderr이 모두 파일에 작성된다.
+  
+  ```bash
+  $ docker logs <container> > <log_file_name> 2>&1
+  ```
+  
+  - bash의 경우 아래와 같이 작성하는 것도 가능하다.
+    - `&>`는 stdout과 stderr을 모두 리디렉션 하는 것으로, bash에서만 사용 가능하다.
+    - 단 이는 백그라운드 실행과 헷갈릴 수 있고, bash 이외에는 사용이 불가능하므로 가급적 위 방식으로 사용하는 것이 좋다.
+  
+  ```bash
+  $ docker logs my_container &> docker.log
+  ```
+  
+  
 
 
 
