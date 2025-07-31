@@ -409,7 +409,7 @@
 - 마무리
   - VMPlayer를 실행시키고 Server_A의 CD/DVD설정을 변경한다.
     - connect at power on 체크 해제
-    - Use phsical driver 체크
+    - Use physical driver 체크
   - 설정 완료 된 Server_A를 스냅숏하기
     - 실행 중인 VMPlayer를 모두 종료한다.
     - VMPro를 실행한다.
