@@ -945,6 +945,12 @@
   # 3
   $ docker logs my_container > docker.log 2>&1
   ```
+  
+  - 아래와 같이 프로세스 별 파일 디스크립터의 정보를 확인할 수 있다.
+  
+  ```bash
+  $ ls -l /proc/<PID>/fd
+  ```
 
 
 

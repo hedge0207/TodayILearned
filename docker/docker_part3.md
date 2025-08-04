@@ -1,6 +1,6 @@
 # Logging
 
-- Docker container는 다양한 log를 남긴다.
+- Docker container log
 
   - 아래 명령어를 통해서 container의 log를 확인할 수 있다.
     - `--follow` 옵션을 주면 새로 추가되는 log도 지속적으로 출력한다.
@@ -13,10 +13,93 @@
   $ docker logs <container 식별자>
   ```
 
+  - `--since`와 `--until`의 형식
+    - Timestamp 형식으로 입력하거나(e.g. 2013-01-02T13:23:37Z).
+    - 상대적 시간을 입력하는 것이 가능하다(e.g. 30m).
+  
   - Docker logging driver(log drvier)
     - Docker v1.6에서 추가되었다.
     - Docker는 log를 확인할 수 있도록 다양한 logging mechanism을 지원하는데, 이를 logging driver라 부른다.
     - 기본적으로 Docker는 log를 JSON 형태로 저장하는 `json-file` logging driver를 사용한다.
+  - Docker log의 동작 방식
+    - Docker는 container의 main process의 stdout과 stderr의 스트림을 전용 파이프로 연결하고, 해당 파이를 통해 로그를 수집하여 이를 파일로 저장한다.
+    - 따라서 stdout과 stderr의 스트림을 변경할 경우 docker가 stdout과 stderr에 연결한 파이프가 로그를 수집하지 못 하게 된다.
+    - 대부분의 경우 main process가 생성한 sub process의 stdout과 stderr도 캡쳐된다.
+    - Linux에서는 대부분의 경우 sub process가 main process의 파일 디스크립터를 상속하기 때문이다.
+    - 따라서 서브 프로세스가 별도로 redirection하지 않는 이상 sub process의 stdout/stderr도 캡쳐된다.
+    - 로그 파일의 저장 위치는 별도로 설정하지 않을 경우 `/var/lib/docker/containers/<container_id>`이다.
+  
+  - 아래와 같이 Docker container 내에서 메인 프로세스(PID 1)의 파일 디스크립터를 확인할 수 있다.
+    - 확인해보면 stdout(1), stderr(2)이 Docker log pipe로 연결되어 있는 것을 확인할 수 있다.
+  
+  ```bash
+  $ ls -l /proc/1/fd
+  
+  # output
+  0 -> /dev/null
+  1 -> pipe:[xxx] (Docker 로그 파이프)
+  2 -> pipe:[xxx] (Docker 로그 파이프)
+  ```
+
+
+
+- Docker logging 예시
+
+  - entrypoint.sh
+    - `bash`를 통해 서브 프로세스를 실행하며, 하나의 서브 프로세스는 stdout/stderr을 그대로 사용하고, 다른 하나의 서브 프로세스는 stdout/stderr을 redirection한다.
+
+  ```bash
+  #!/bin/bash
+  
+  echo "[MAIN] stdout message"
+  echo "[MAIN] stderr message" >&2
+  
+  # 서브 프로세스 1: 부모 프로세스의 stdout/stderr 사용 (Docker가 캡처 가능)
+  bash -c 'echo "[SUBPROCESS] stdout to parent"; echo "[SUBPROCESS] stderr to parent" >&2' &
+  
+  # 서브 프로세스 2: stdout을 파일로 리디렉션 (Docker가 캡처 불가)
+  bash -c 'echo "[SUBPROCESS FILE] goes to file" > /tmp/subprocess.log' &
+  
+  # 서브 프로세스 종료까지 대기
+  sleep 3
+  ```
+
+  - Dockerfile
+
+  ```dockerfile
+  FROM ubuntu:22.04
+  
+  RUN apt-get update && apt-get install -y --no-install-recommends \
+      bash \
+      coreutils \
+      procps \
+      && rm -rf /var/lib/apt/lists/*
+  
+  # 실행 스크립트 복사
+  COPY entrypoint.sh /entrypoint.sh
+  RUN chmod +x /entrypoint.sh
+  
+  CMD ["/entrypoint.sh"]
+  ```
+
+  - Image 빌드 및 실행
+
+  ```bash
+  $ docker build -t logging-test .
+  $ docker run --name logging-test logging-test:latest
+  ```
+
+  - 출력
+    - File로 redirection한 stdout은 출력되지 않는다.
+
+  ```
+  [MAIN] stdout message
+  [MAIN] stderr message
+  [SUBPROCESS] stdout to parent
+  [SUBPROCESS] stderr to parent
+  ```
+
+
 
 
 
@@ -87,6 +170,8 @@
   ```bash
   $ docker run --log-opt mode=non-blocking --log-opt max-buffer-size=4m
   ```
+
+
 
 
 
