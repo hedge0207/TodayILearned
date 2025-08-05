@@ -1408,6 +1408,52 @@
     - Uvicorn의 event loop로 동작한다.
     - Event loop가 실행되는 한 Gunicorn은 event loop가 실행되고 있으므로 silent 상태가 아니라고 판단한다.
     - 따라서 응답 시간이 timeout을 넘어가도 정상 응답을 반환하게 된다.
+  - 단, 비동기 endpoint로 선언하고 blocking할 경우에는 slient 상태로 판단하고 worker를 재실행한다.
+    - 즉, `--timeout` 설정이 제대로 적용된다.
+    - `--timeout`을 5초로 설정한 뒤 `/slow` endpoint로 요청을 전송하면, 5초가 지난 뒤 worker가 재실행 되는 것을 확인할 수 있다.
+  
+  ```python
+  import time
+  from fastapi import FastAPI
+  
+  app = FastAPI()
+  
+  @app.get("/slow")
+  async def slow_handler():
+      st = time.time()
+      time.sleep(10)
+      return {"processing_time": time.time()-st}
+  ```
+  
+  - 비동기 함수일 때 worker가 slient 상태인지를 판단하는 기준은 worker가 event loop에 제어권을 반납하는지 여부이다.
+    - 만약 시간이 오래 걸린다고 하더라도 event loop에 제어권을 반납한다면 slient 상태로 판단하지 않는다.
+    - 따라서 위에서 async + non blocking 으로 테스트 했을 때 timeout이 발생하지 않은 것이다.
+    - 또한 위에서 async + blocking 예시에서는 worker가 제어권을 반환하지 못 하므로 timeout이 발생한 것이다.
+    - 아래 두 endpoint는 모두 동일한 횟수를 반복하면서 매 회기 매다 0초를 기다린다.
+    - 그런데, `/slow-async`의 경우에는 `await asyncio.sleep()`으로 제어권을 지속적으로 반납하고, `/slow-sync`는 제어권을 반납하지 않는다.
+    - 결과적으로 `/slow-async`는 timeout이 발생하지 않고, `/slow-sync`는 timeout이 발생한다.
+  
+  ```python
+  @app.get("/slow-async")
+  async def slow():
+      st = time.time()
+      for _ in range(10_000_000):
+          await asyncio.sleep(0)
+      return {"response_time": time.time()-st}
+  
+  
+  @app.get("/slow-sync")
+  async def slow():
+      st = time.time()
+      for _ in range(10_000_000):
+          time.sleep(0)
+      return {"response_time": time.time()-st}
+  ```
+  
+  - 동기 함수일 때는 worker가 slient 상태인지 여부를 판단하는 기준이 모호하다.
+    - Uvicorn과 같은 ASGI 환경에서는 동기 함수일 경우 timeout이 사실상 발생하지 않는다고 봐야 한다.
+    - 따라서 이 경우 gunicorn의 `--timeout` 설정이 아닌 timeout을 위한 다른 방법을 찾아봐야 한다.
+  
   - `graceful_timeout`
     - Worker가 restart signal을 받은 이후 이 설정 값 이상의 시간이 흐를 경우 graceful restart를 취소하고 강제 종료시킨다.
     - 기본값은 30초이다.
