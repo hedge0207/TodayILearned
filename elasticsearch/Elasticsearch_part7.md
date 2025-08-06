@@ -74,15 +74,15 @@
     - `lang`을 따로 지정해 주지 않으면 기본값으로 Painless가 들어가게 된다.
     - Painless script에는 하나 이상의 선언문이 있어야 한다.
 
-  ```bash
-  # 데이터 삽입
-  $ curl -XPUT "localhost:9200/script_test/_doc/1" -H "Content-type:application/json" -d '
+  ```json
+  // 데이터 삽입
+  // PUT script_test/_doc/1
   {
   	"my_field":5
-  }' 
+  }
   
-  # 스크립트 작성
-  $ curl -XGET "localhost:9200/script_test/_search" -H "Content-type:application/json" -d '
+  // 스크립트 작성
+  // GET script_test/_search
   {
     "script_fields": {
       "my_doubled_field": {
@@ -94,11 +94,11 @@
         }
       }
     }
-  }'
+  }
   
-  # 응답
+  // response
   {
-  	# (...)
+  	// (...)
   	"hits" : [
         {
           "_index" : "scripts_practice",
@@ -336,12 +336,12 @@
     - 검색 시에 반환 되는 `math_score`와 `verbal_score` 값을 더한 값으로 검색 결과를 정렬하고자 한다.
     - 아래 request에는 스크립트가 포함되어 있으므로 느려지게 된다.
 
-  ```bash
-  $ curl -XGET "localhost:9200/my_index/_search" -H "Content-type:application/json" -d '
+  ```json
+  // GET my_index/_search
   {
     "query": {
       "term": {
-        "name": "maru"	# name filed가 maru인 문서 검색
+        "name": "maru"	// name filed가 maru인 문서 검색
       }
     },
     "sort": [
@@ -355,7 +355,7 @@
         }
       }
     ]
-  }'
+  }
   ```
 
   - 검색 속도 향상시키기
@@ -363,19 +363,19 @@
     - 일반적으로는 아래와 같이 ingest 시에 스크립트를 활용하는 방식을 사용한다.
     - ingest time을 증가시키긴 하지만 검색 속도는 증가헤 된다.
 
-  ```bash
-  # math_score 와 verbal_score의 합계를 저장할 새로운 필드를 추가한다.
-  $ curl -XPUT "localhost:9200/my_index/_mapping" -H "Content-type:application/json" -d '
+  ```json
+  // math_score 와 verbal_score의 합계를 저장할 새로운 필드를 추가한다.
+  // PUT my_index/_mapping
   {
     "properties":{
     	"total_score":{
     		"type":"long"
     	}
     }
-  }'
+  }
   
-  # ingest pipeline을 활용하여 math_score 와 verbal_score의 합계를 계산하고, 이를 total_score 필드에 인덱싱한다.
-  $ curl -XPUT "localhost:9200/_ingest/pipeline/my_index_pipeline" -H "Content-type:application/json" -d '
+  // ingest pipeline을 활용하여 math_score 와 verbal_score의 합계를 계산하고, 이를 total_score 필드에 인덱싱한다.
+  // PUT _ingest/pipeline/my_index_pipeline
   {
     "description": "Calculates the total test score",
     "processors": [
@@ -385,10 +385,10 @@
         }
       }
     ]
-  }'
+  }
   
-  # 이미 있는 문서들을 업데이트 하기 위해서 reindex한다.
-  $ curl -XPUT "localhost:9200/_reindex" -H "Content-type:application/json" -d '
+  // 이미 있는 문서들을 업데이트 하기 위해서 reindex한다.
+  // PUT _reindex
   {
     "source": {
       "index": "my_index"
@@ -399,15 +399,15 @@
     }
   }
   
-  # pipeline을 활용하여 새로운 문서를 인덱싱한다.
-  $ curl -XPUT "localhost:9200/my_index/_doc/?pipeline=my_index_pipeline" -H "Content-type:application/json" -d '
+  // pipeline을 활용하여 새로운 문서를 인덱싱한다.
+  // PUT my_index/_doc/?pipeline=my_index_pipeline
   {
     "name": "maru",
     "hobby": "swimming"
-  }'
+  }
   
-  # 검색하기
-  $ curl -XGET "localhost:9200/my_index/_search" -H "Content-type:application/json" -d '
+  // 검색하기
+  // GET my_index/_search
   {
     "query": {
       "term": {
@@ -421,7 +421,7 @@
         }
       }
     ]
-  }'
+  }
   ```
 
 
@@ -458,9 +458,9 @@
   - Painless 스크립트에서 dissect 패턴 사용하기
     - Painless execute API의 field contexts를 사용하거나 스크립트를 포함하는 runtime 필드를 생성함으로써 스크립트를 테스트 해 볼 수 있다.
 
-  ```bash
-  # 인덱스 생성
-  $ curl -XPUT "localhost:9200/my_index" -H "Content-type:application/json" -d '
+  ```json
+  // 인덱스 생성
+  // PUT my_index
   {
     "mappings": {
       "properties": {
@@ -469,13 +469,13 @@
         }
       }
     }
-  }'
+  }
   
-  # Painless execute API를 활용하여 스크립트 테스트하기
-  $ curl -XPOST "localhost:9200/_scripts/painless/_execute" -H "Content-type:application/json" -d '
+  // Painless execute API를 활용하여 스크립트 테스트하기
+  // POST _scripts/painless/_execute
   {
     "script": {
-      # dissect 패턴 정의
+      // dissect 패턴 정의
       "source": """
         String response=dissect('%{clientip} %{ident} %{auth} [%{@timestamp}] "%{verb} %{request} HTTP/%{httpversion}" %{response} %{size}').extract(doc["message"].value)?.response;
           if (response != null) emit(Integer.parseInt(response)); 
@@ -488,15 +488,15 @@
         "message": """247.37.0.0 - - [30/Apr/2020:14:31:22 -0500] "GET /images/hm_nbg.jpg HTTP/1.0" 304 0"""
       }
     }
-  }'
+  }
   ```
 
   - dissect 패턴과 스크립트를 런타임 필드에서 사용하기
     - disscet 패턴을 런타임 필드에 추가할 수 있다.
 
-  ```bash
-  # 인덱스 생성하기
-  $ curl -XPUT "localhost:9200/my_index" -H "Content-type:application/json" -d '
+  ```json
+  // 인덱스 생성하기
+  // PUT my_index
   {
     "mappings": {
       "properties": {
@@ -509,13 +509,13 @@
         }
       }
     }
-  }'
+  }
   
-  # 런타임 필드 생성
-  $ curl -XPUT "localhost:9200/my_index/_mappings" -H "Content-type:application/json" -d '
+  // 런타임 필드 생성
+  // PUT my_index/_mappings
   {
     "runtime": {
-    	# http.response라는 런타임 필드 생성
+    	// http.response라는 런타임 필드 생성
       "http.response": {
         "type": "long",
         "script": """
@@ -524,10 +524,10 @@
         """
       }
     }
-  }'
+  }
   
-  # 데이터 추가
-  $ curl -XPOST "localhost:9200/my_index/_bulk?refresh=true" -H "Content-type:application/json" -d '
+  // 데이터 추가
+  // POST my_index/_bulk?refresh=true
   {"index":{}}
   {"timestamp":"2020-04-30T14:30:17-05:00","message":"40.135.0.0 - - [30/Apr/2020:14:30:17 -0500] \"GET /images/hm_bg.jpg HTTP/1.0\" 200 24736"}
   {"index":{}}
@@ -541,10 +541,10 @@
   {"index":{}}
   {"timestamp":"2020-04-30T14:31:27-05:00","message":"252.0.0.0 - - [30/Apr/2020:14:31:27 -0500] \"GET /images/hm_bg.jpg HTTP/1.0\" 200 24736"}
   {"index":{}}
-  {"timestamp":"2020-04-30T14:31:28-05:00","message":"not a valid apache log"}'
+  {"timestamp":"2020-04-30T14:31:28-05:00","message":"not a valid apache log"}
   
-  # 확인하기
-  $ curl -XGET "localhost:9200/my-index/_search" -H "Content-type:application/json" -d '
+  // 확인하기
+  // GET my-index/_search
   {
     "query": {
       "match": {
@@ -552,13 +552,13 @@
       }
     },
     "fields" : ["http.response"]
-  }'
+  }
   ```
 
   - search request에 런타임 필드 정의하기
 
-  ```bash
-  $ curl -XGET "localhost:9200/my-index/_search" -H "Content-type:application/json" -d '
+  ```json
+  // GET my-index/_search
   {
     "runtime_mappings": {
       "http.response": {
@@ -575,7 +575,7 @@
       }
     },
     "fields" : ["http.response"]
-  }'
+  }
   ```
 
 
@@ -607,12 +607,12 @@
     - Painless execute API의 field contexts를 사용하거나 스크립트를 포함하는 runtime 필드를 생성함으로써 스크립트를 테스트 해 볼 수 있다.
   
   ```bash
-  # 아래와 같은 apache log에서 ip를 추출한다고 가정
+  // 아래와 같은 apache log에서 ip를 추출한다고 가정
   "timestamp":"2020-04-30T14:30:17-05:00","message":"40.135.0.0 - -
   [30/Apr/2020:14:30:17 -0500] \"GET /images/hm_bg.jpg HTTP/1.0\" 200 24736"
   
-  # 테스트 인덱스 생성
-  $ curl -XPUT "localhost:9200/my-index" -H "Content-type:application/json" -d '
+  // 테스트 인덱스 생성
+  // PUT my-index
   {
     "mappings": {
       "properties": {
@@ -625,10 +625,10 @@
         }
       }
     }
-  }'
+  }
   
-  # 테스트 데이터 인덱싱
-  $ curl -XPOST "localhost:9200/my-index/_bulk" -H "Content-type:application/json" -d '
+  // 테스트 데이터 인덱싱
+  // POST my-index/_bulk
   {"index":{}}
   {"timestamp":"2020-04-30T14:30:17-05:00","message":"40.135.0.0 - - [30/Apr/2020:14:30:17 -0500] \"GET /images/hm_bg.jpg HTTP/1.0\" 200 24736"}
   {"index":{}}
@@ -642,16 +642,16 @@
   {"index":{}}
   {"timestamp":"2020-04-30T14:31:27-05:00","message":"252.0.0.0 - - [30/Apr/2020:14:31:27 -0500] \"GET /images/hm_bg.jpg HTTP/1.0\" 200 24736"}
   {"index":{}}
-  {"timestamp":"2020-04-30T14:31:28-05:00","message":"not a valid apache log"}'
+  {"timestamp":"2020-04-30T14:31:28-05:00","message":"not a valid apache log"}
   
-  # %{COMMONAPACHELOG} 문법과 Painless 스크립트를 결합하여 런타임 필드 생성.
-  $ curl -XPUT "localhost:9200/my-index/_mappings" -H "Content-type:application/json" -d '
+  // %{COMMONAPACHELOG} 문법과 Painless 스크립트를 결합하여 런타임 필드 생성.
+  // PUT my-index/_mappings
   {
     "runtime": {
       "http.clientip": {
         "type": "ip",
         "script": """
-        	# 만일 일치하는 패턴이 있을 경우 IP주소를 emit하고. 없을 경우 field value를 반환한다.
+        	// 만일 일치하는 패턴이 있을 경우 IP주소를 emit하고. 없을 경우 field value를 반환한다.
           String clientip=grok('%{COMMONAPACHELOG}').extract(doc["message"].value)?.clientip;
           if (clientip != null) emit(clientip);
         """
@@ -659,8 +659,8 @@
     }
   }
   
-  # 검색
-  $ curl -XGET "localhost:9200/my-index/_mappings" -H "Content-type:application/json" -d '
+  // 검색
+  // GET "localhost:9200/my-index/_mappings
   {
     "query": {
       "match": {
@@ -668,14 +668,14 @@
       }
     },
     "fields" : ["http.clientip"]
-  }'
+  }
   ```
   
   - search request에 런타임 필드 정의하기
     - 위 방식과 결과는 같다.
   
-  ```bash
-  $ curl -XGET "localhost:9200/my-index/_search" -H "Content-type:application/json" -d '
+  ```json
+  // GET my-index/_search
   {
     "runtime_mappings": {
       "http.clientip": {
@@ -692,7 +692,7 @@
       }
     },
     "fields" : ["http.clientip"]
-  }'
+  }
   ```
 
 
@@ -1335,16 +1335,128 @@
 
 
 
-- 필터링
-  - 어떤 버킷이 생성될지 필터링하는 것이 가능하다.
-    - `include`와 `declude` 파라미터를 사용한다.
-    - 정규표현식 문자열이나 배열을 값으로 사용 가능하다.
+- Field를 가진 문서 수량에 따른 성능 차이가 존재하는가
+
+  - Elasticsearch의 aggregation은 `doc_values` 기반의 column-store 형태를 사용하여 대상 field가 존재하는 문서만 순회하여 집계한다.
+    - 따라서 대상 field를 가진 문서가 많을 수록 aggregation이 더 오래 걸릴 것이라는 추론이 가능하다.
+  - 테스트를 위한 데이터를 색인한다.
+    - 총 세 개의 필드를 사용하는데, 한 필드는 모든 문서에 색인하고, 다른 한 필드는 문서의 절반에만 색인하고, 남은 하나의 필드는 전체 문서 중 10%에만 색인한다.
+
+  ```python
+  import random
   
-  - 정규표현식으로 필터링하기
+  from elasticsearch import Elasticsearch, helpers
   
-  ```bash
+  
+  blood_types = ["A" ,"B", "AB", "O"]
+  
+  INDEX_NAME = "aggs_test"
+  
+  for i in range(10_000):
+      docs = []
+      for _ in range(1_000):
+          blood_type = random.choice(blood_types)
+          doc = {
+              "_index": INDEX_NAME,
+              "_source":{
+                  "blood_type_100_percent": blood_type
+              }
+          }
+          if i < 5000:
+              doc["_source"]["blood_type_50_percent"] = blood_type
+          if i < 1000:
+              doc["_source"]["blood_type_10_percent"] = blood_type
+          docs.append(doc)
+      res = helpers.bulk(Elasticsearch("http://localhost:9200"), docs)
   ```
+
+  - 그 후 아래와 같이 테스트를 진행한다.
+    - 검색 API의 `profile` 기능을 사용해, 각 aggregation에 얼마의 시간이 소요 되었는지를 확인한다.
+
+  ```python
+  from elasticsearch import Elasticsearch
   
+  
+  es_client = Elasticsearch("http://localhost:9200")
+  
+  N = 10000
+  INDEX_NAME = "aggs_test"
+  aggs = {
+      "hendred_percent": {
+          "terms": {
+              "field": "blood_type_100_percent.keyword"
+          }
+      },
+      "fifty_percent": {
+          "terms": {
+              "field": "blood_type_50_percent.keyword"
+          }
+      },
+      "ten_percent": {
+          "terms": {
+              "field": "blood_type_10_percent.keyword"
+          }
+      }
+  }
+  
+  times = {aggs_name:0 for aggs_name in aggs.keys()}
+  for i in range(N):
+      res = es_client.search(index=INDEX_NAME, aggs=aggs, size=0, profile=True)    
+      for aggs_profile in res["profile"]["shards"][0]["aggregations"]:
+          times[aggs_profile["description"]] += aggs_profile["time_in_nanos"]
+  
+  for aggs_name, times in times.items():
+      print(f"{aggs_name}: {times/N}")
+  ```
+
+  - 결과는 아래와 같다.
+
+  ```python
+  hendred_percent: 72129.1568
+  fifty_percent: 33362.1624
+  ten_percent: 18174.3895
+  ```
+
+  - 결론
+    - 더 많은 문서에 색인되어 있을 수록 시간이 더 오래 걸리는 것을 확인할 수 있다.
+    - 다만, 이는 aggregation만 놓고 봤을 때 그렇다는 것이지 전체 검색에 걸리는 시간에는 큰 차이가 없을 수 있다.
+    - 위 예시에서 사용한 시간 단위는 ns로, 전체 문서에 있을 경우와 10% 문서에 있을 경우에 시간 차이는 ms로 환산해도 0.06ms 정도의 차이가 날 뿐이다.
+    - 아래와 같이 aggregation에걸리는 시긴이 아닌 전체 검색 시간을 기준으로 측정하면, 큰 차이가 나지 않는다.
+
+  ```python
+  from elasticsearch import Elasticsearch
+  
+  
+  es_client = Elasticsearch("http://localhost:9200")
+  
+  N = 1
+  INDEX_NAME = "aggs_test"
+  N = 10_000
+  for field in ["blood_type_100_percent.keyword", "blood_type_50_percent.keyword", "blood_type_10_percent.keyword"]:
+      aggs = {
+          "blood_type":{
+              "terms":{
+                  "field":field
+              }
+          }
+      }
+      time_ms = 0
+      for _ in range(N):
+          res = es_client.search(index=INDEX_NAME, aggs=aggs, size=0)
+          time_ms += res["took"]
+      print(f"{field}: {time_ms/N}")
+      
+  
+  """
+  blood_type_100_percent.keyword: 0.016
+  blood_type_50_percent.keyword: 0.0156
+  blood_type_10_percent.keyword: 0.0168
+  """
+  ```
+
+
+
+
 
 
 
