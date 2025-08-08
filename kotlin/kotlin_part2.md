@@ -101,16 +101,175 @@
 
 - 람다 함수
 
-  - 익명 함수를 정의하는 기법이다.
-    - 주로 함수를 간단하게 정의할 때 이용하며, 람다식이라고도 한다.
-    - 람다 함수는 `fun` keyword로 선언하지 않으며, 이름이 없다.
-  - 람다 함수 문법
-    - `{}`로 표현한다.
-    - 함수 본문의 마지막 표현식이 함수의 반환값이 된다.
+  - 람다 함수는 이름이 없으므로 함수명으로 호출할 수 없다.
+    - 그러므로 보통 람다 함수를 변수에 대입해 사용한다.
+    - 혹은 선언하자마자 사용하는 방식을 사용한다.
 
   ```kotlin
-  {<params> -> <body>}
+  // 선언과 동시에 사용
+  {num1: Int, num2: Int -> num1 + num2} (1, 2)
   ```
+
+  - 매개변수 없는 람다 함수
+    - 함수에 매개 변수가 항상 있어야 하는 것은 아니다.
+    - 람다 함수애서 화살표 왼쪽을 비워두면 매개 변수 없는 람다 함수가 된다.
+    - 매개 변수가 없을 때는 화살표를 생략해도 된다.
+
+  ```kotlin
+  // 매개 변수 없는 람다 함수
+  {-> println("lambda function call")}
+  
+  // 화살표 생략
+  {println("lambda function call without arrow")}
+  ```
+
+  - 매개 변수가 1개인 람다 함수는 아래와 같이 작성할 수도 있다.
+    - 람다 함수의 중괄호 안에 화살표가 없으므로 매개 변수가 없는 것처럼 보이지만 람다 함수 앞의 `(Int) -> Unit`이 매개 변수가 1개인 람다 함수임을 나타낸다.
+    - 이처럼 람다 함수의 매개 변수가 1개일 때는 중괄호 안에서 매개 변수 선언을 생략하고 `it` 키워드로 매개 변수를 이용할 수 있다.
+    - 람다 함수에서 `it`을 이용해 매개 변수를 사용하는 것은 해당 매개 변수가의 타입을 식별할 수 있을 때만 가능하다.
+    - 아래 예시에서는 매개 변수의 타입을 Int로 선언했으므로 `it`이 가리키는 데이터가 Int 타입임을 알 수 있다.
+
+  ```kotlin
+  // 아래와 같은 매개 변수가 하나인 람다 함수는
+  {num: Int -> println(num)}
+  
+  // 아래와 같이 작성할 수도 있다.
+  (Int) -> Unit = {println(it)}
+  ```
+
+  - 람다 함수의 반환
+    - 람다 함수도 함수이므로 자신을 호출한 곳에 결과값을 반환해야 할 때가 있따.
+    - 그러나 람다 함수에서는 `return` 키워드를 사용할 수 없으며, 본문의 마지막 줄의 실행 결과가 반환값이 된다.
+
+  ```kotlin
+  val some = {num1: Int, num2: Int -> num1 * num2}
+  println(some(1, 2))		// 3
+  ```
+
+  - 람다 함수와 소괄호 생략
+    - 람다를 마지막 인자로 넘길 때 그 람다를 괄호 밖으로 뺄 수 있으며, 이 때 소괄호를 생략 가능하다.
+
+  ```kotlin
+  // 아래 함수는
+  fun repeatTask(times: Int, task: () -> Unit) {
+      for (i in 1..times) {
+          task()
+      }
+  }
+  
+  // 아래와 같이 호출이 가능하다.
+  repeatTask(3) {
+      println("Hello")
+  }
+  
+  // 소괄호를 생략하지 않을 경우, 아래와 같이 호출한다.
+  // 일반적인 호출 방식
+  repeatTask(3, {
+      println("Hello")
+  })
+  ```
+
+
+
+- 함수 타입과 고차 함수
+
+  - 변수에 함수를 대입하려면 함수 타입으로 선언해야 한다.
+    - 변수는 타입을 가지며 타입을 유추할 수 있을 때를 제외하고는 생략할 수 없기 때문이다.
+    - 함수 타입이란 함수를 선언할 때 나타내는 매개 변수와 반환 타입을 의미한다.
+    - 예를 들어 아래의 plus 함수는 Int 타입 매개 변수 2개를 받아서 Int 타입 값을 반환하는 함수이다.
+    - 이를 `(Int, Int) -> Int`로 표현할 수 있다.
+    - 함수를 대입할 변수를 선언할 때 이러한 함수 타입을 선언하고 그에 맞는 함수를 대입해야 한다.
+
+  ```kotlin
+  fun plus(num1: Int, num2: Int): Int {
+      return num1 + num2
+  }
+  
+  // 함수 대입
+  val plus: (Int, Int) -> Int = {num1: Int, num2: Int -> num1 + num2}
+  ```
+
+  - 타입 별칭
+    - 함수 타입을 `typealias`를 이용해 선언할 수 있다.
+    - `typealias`는 타입의 별칭을 선언하는 키워드로 함수 타입뿐만 아니라 데이터 타입을 선언할 때도 사용할 수 있다.
+    - 예를 들어 정수를 표현하는 Kotlin의 타입은 Int인데, typealias를 이용해 정수를 표현하여 새로운 별칭을 선언할 수 있다.
+
+  ```kotlin
+  typealias MyInt = Int
+  val num: MyInt = 1
+  ```
+
+  - 타입 별칭은 변수보다 함수 타입을 선언하는 데 주로 사용한다.
+    - 아래와 같이 타입 별칭을 사용하면 함수 타입을 보다 깔끔하게 표현할 수 있다.
+    - 위와 동일한 함수를 대입할 때, 타입 별칭을 사용하면 코드가 보다 깔끔해진다.
+
+  ```kotlin
+  val MyFunType = (Int, Int) -> Int
+  
+  val plus: MyFunType = {num1: Int, num2: Int -> num1 + num2}
+  ```
+
+  - 매개 변수 타입 생략
+    - 매개 변수의 타입을 유추할 수 있는 경우에는 매개 변수의 타입을 선언하지 않아도 오류가 발생하지 않는다.
+    - 예를 들어 아래의 경우 `plus` 함수를 `MyFunType` 타입으로 선언했으므로 매개 변수의 타입일 유추할 수 있어 타입을 생략해도 된다.
+
+  ```kotlin
+  val MyFunType = (Int, Int) -> Int
+  
+  val plus: MyFunType = {num1, num2 -> num1 + num2}
+  ```
+
+  - 타입 유추에 따른 타입 생략은 typealias를 사용할 때뿐만 아니라 타입을 유추할 수 있는 상황이면 어디서든 통한다.
+
+  ```kotlin
+  val plus: (Int, Int) -> Int = {num1, num2 -> num1 + num2}
+  ```
+
+  - 함수의 타입을 유추할 수 있다면 변수를 선언할 때 타입을 생략할 수도 있다.
+    - 이 변수에 대입한 함수를 보면 타입을 유추할 수 있으므로 굳이 변수 선언부에 타입을 명시하지 않아도 된다.
+
+  ```kotlin
+  val plus = {num1: Int, num2: Int -> num1 + num2}
+  ```
+
+
+
+- 고차 함수(High order function)
+
+  - 함수를 매개 변수로 전달 받거나 반환하는 함수를 의미한다.
+    - 일반적으로 함수의 매개 변수나 반환값은 데이터지만, 데이터가 아닌 함수를 매개 변수나 반환값으로 이용하는 함수를 고차 함수라 한다.
+    - 함수를 매개 변수나 반환값으로 사용할 수 있는 이유는 함수를 변수에 대입할 수 있기 때문이다.
+    - 아래 예시에서 `filterStrings` 함수는 `{ it.length > 5 }`라는 람다 함수를  `condition`이라는 매개 변수로 받는 고차함수이다.
+
+  ```kotlin
+  // 함수를 매개 변수로 받는 고차 함수
+  fun filterStrings(strings: List<String>, condition: (String) -> Boolean): List<String> {
+      return strings.filter(condition)
+  }
+  
+  // 함수를 반환하는 고차 함수
+  fun makeLengthChecker(length: Int): (String) -> Boolean {
+      return { input: String -> input.length > length }
+  }
+  
+  fun main() {
+      val words = listOf("apple", "banana", "kiwi", "grape")
+      val longWords = filterStrings(words) { it.length > 5 }
+      println(longWords) // [banana]
+      
+      val checkLongerThan5 = makeLengthChecker(5)
+      val checkLongerThan2 = makeLengthChecker(2)
+  
+      println(checkLongerThan5("apple"))   // false (5 is not > 5)
+      println(checkLongerThan5("banana"))  // true  (6 > 5)
+      println(checkLongerThan2("hi"))      // false
+  }
+  ```
+
+  - 일급 객체(first-class citizen, first-class object)
+    - Kotlin에서 함수는 일급 객체이다.
+    - 일급 객체란 프로그래밍 언어에서 특정 "무언가"를 다른 일반적인 값들과 동일한 방식으로 다룰 수 있는 경우를 의미한다.
+    - Kotlin에서 함수는 일급 객체이기에 함수를 변수에 대입할 수 있고, 따라서 함수를 매개 변수나 함수의 반환 값으로 사용할 수 있는 것이다.
 
 
 

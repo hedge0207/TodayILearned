@@ -283,6 +283,53 @@
 
 
 
+- 널 안정성
+
+  - Null이란 객체가 선언되었지만 초기화되지 않은 상태를 의미한다.
+    - 객체는 데이터가 저장된 주소를 참조하므로 흔히 참조 변수라고 한다.
+    - 데이터가 메모리에 저장되면 어디에 저장 됐는지 알아야 이용할 수 있는데 이때 해당 메모리 위치를 식별하는 것이 주소이다.
+    - 객체에는 주소가 저장되며, 이 주소로 메모리에 접근해서 데이터를 이용한다.
+    - 그런데 null은 객체가 주소를 가지지 못한 상태를 나타낸다.
+  - 널 안정성이란 NullPointException이 발생하지 않도록 코드를 작성하는 것을 의미한다.
+    - 널인 상태의 객체를 이용하면 널인 상태의 객체를 이용할 수 없다는 의미의 NullPointException이 발생한다.
+    - 아래와 같이 개발자가 NullPointException이 발생하지 않도록 코드를 작성하는 방식으로 방지할 수 있다.
+    - 그러나 이렇게 할 경우 객체가 null인지 일일이 점검하는 코드를 작성해야 하므로 비효율적이며, 실수할 가능성도 높다.
+
+  ```kotlin
+  var name: String? = null
+  val length = if (name == null) {  // null인지 확인
+      0
+  } else {
+      name.length
+  }
+  println(length)		// 0
+  ```
+
+  - Kotlin은 널 안정성 연산자를 제공한다.
+    - Kotlin에서는 변수 타입을 nullable과 not null로 구분하며, 변수를 선언할 때 타입 뒤에 `?`를 붙이면 nullable한 타입이 된다.
+    - null 값을 가진 변수의 멤버에 접근할 때 `?.` 연산자를 사용하면 NullPointException을 피할 수 있다.
+    - `?.` 연산자는 변수가 null이면 null을 반환하고, null이 아닐 경우 멤버에 접근한다.
+    - Nullable인 변수의 멤버에 접근할 때는 반드시 `?.`를 사용해야 하며, nullable인 변수라면 값이 null이 아니라도 error가 발생한다.
+
+  ```kotlin
+  var name: String? = null
+  println(data?.length)		// null
+  ```
+
+  - 엘비스 연산자
+    - `?.` 연산자는 변수가 null이면 null을 반환한다.
+    - 엘비스 연산자를 사용하면, 변수가 null일 때 특정 값을 대입하거나 특정 구문을 실행시킬 수 있다.
+
+  ```kotlin
+  var name: String? = "John"
+  println(name?.length)		// 4
+  
+  name = null
+  println(name.length ?: -1)	// -1
+  ```
+
+
+
 - Standard output
 
   - Standard output은 device에 정보를 표시해주는 기본적인 동작이다.
