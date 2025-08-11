@@ -401,3 +401,243 @@
 
   - `<TextView>`는 화면에 문자열을 출력하는 역할을 한다.
 
+
+
+
+
+
+
+# 뷰를 이용한 화면 구성
+
+## 화면을 구성하는 방법
+
+- 액티비티 뷰 구조
+  - 안드로이드 앱의 기본 구조는 컴포넌트를 기반으로 한다.
+    - 즉 안드로이드 앱은 액티비티, 서비스, 브로드캐스트 리시버, 콘텐츠 프로바이더와 같은 컴포넌트를 조합해서 만든다.
+    - 이 중에서 화면을 출력하는 컴포넌트는 액티비티뿐이므로, 앱에서 화면을 출력하고 싶다면 액티비티를 만들어야 한다.
+  - 뷰 클래스
+    - 액티비티는 화면을 출력하는 컴포넌트일 뿐이지 그 자체가 화면은 아니다.
+    - 별도로 화면 구성을 하지 않고 단순히 액티비티만 실행하면 텅 빈 흰색 화면만 보인다.
+    - 화면에 내용을 표시하려면 뷰 클래스를 이용해 구성해야한다.
+    - 예를 들어 화면에 문자열을 출력하려면 TextView 클래스를 사용하고, 이미지를 출력하려면 ImageView 클래스를 이용한다.
+    - 이런 클래스들을 뷰 클래스라 한다.
+  - 액티비티에서 뷰로 화면을 구성하는 방법은 2가지이다.
+    - 액티비티 코드로 작성하는 방법과 레이아웃 XML 파일로 작성하는 방법이다.
+    - 액티비티 코드로 작성하는 방법은 화면을 구성하는 뷰 클래스를 액티비티 코드애서 직접 생성한다.
+
+
+
+- 뷰 클래스의 기본 구조
+  - 뷰 객체의 계층 구조
+    - 액티비티 화면을 구성할 때 사용하는 클래스는 모두 `View`의 하위 클래스이다.
+    - 이 때문에 화면 구성과 과련된 클래스를 통칭하여 뷰 클래스라고 부른다.
+  - `ViewGroup`
+    - `View`의 하위 클래스지만 자체 UI는 없어서 화면에 출력해도 아무것도 나오지 않는다.
+    - 다른 뷰 여러 개를 묶어서 제어할 목적으로 사용하며, 일반적으로 컨테이너 기능을 담당한다고 이야기한다.
+    - 직접 사용하지는 않고, `ViewGroup`을 상속 받는 레이아웃 클래스(`LinearLayout`, `RelativeLayour` 등)를 사용한다.
+
+
+
+- 레이아웃 클래스
+
+  - 아래와 같이 작성한 레이아웃 XML 파일을 액티비티 화면에 출력해도 아무것도 나오지 않는다.
+    - `ViewGroup` 클래스의 자식 클래스들은 화면에 출력할 용도가 아니라 다른 뷰 객체 여러 개를 담아서 한꺼번에 제어할 목적으로 사용하는 것이기 때문이다.
+    - 레이아웃을 이용해 뷰 객체를 계층으로 묶으면 한거번에 출력하거나 정렬하는 등 편하게 제어할 수 있다.
+
+  ```xml
+  <LinearLayout xmlns:android="http;//schemas.android.com/apk/res/android"
+        android:layout_widht="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="verical">
+  </LinearLayout>
+  ```
+
+  - 아래와 같이 레이아웃 클래스에 다른 뷰를 포함시켜 화면을 구성한다.
+    - 버튼 객체를 생성하고 이 객체를 `LinearLayout`에 추가한다.
+
+  ```xml
+  <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:orientation="vertical">
+      <Button
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:text="확인"/>
+  </LinearLayout>
+  ```
+
+  - 레이아웃 중첩
+    - 레이아웃 객체를 중첩해서 복잡하게 구성할 수도 있다.
+    - 이처럼 객체를 계층 구조로 만들어 이용하는 패턴을 컴포지트 패턴 또는 문서 객체 모델(document object model)이라 한다.
+
+  ```xml
+  <?xml version="1.0" encoding="utf-8"?>
+  <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:orientation="vertical">
+      <Button
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:layout_marginTop="16dp"
+          android:text="버튼1"/>
+      <LinearLayout
+          android:layout_width="match_parent"
+          android:layout_height="match_parent"
+          android:orientation="horizontal">
+          <Button
+              android:layout_width="wrap_content"
+              android:layout_height="wrap_content"
+              android:text="버튼2"/>
+  	</LinearLayout>
+  </LinearLayout>
+  ```
+
+
+
+- 레이아웃 XML의 뷰를 코드에서 사용하기
+
+  - 화면 구성을 위와 같이 레이아웃 XML 파일에 작성하고, 액티비티에서 `setContetView()` 함수로 XML 파일을 지정하면 화면을 출력한다.
+
+  ```kotlin
+  class MainActivity: AppCompatActivity() {
+      override fun onCreate(savedInstanceState: Bundle?) {
+          super.onCreate(savedInstanceState)
+          setContentView(R.layout.activity_main)
+      }
+  }
+  ```
+
+  - 식별자 부여하기
+    - 때로는 XML에 선언한 객체를 코드에서 사용해야 할 때가 있는데, 이를 위해서는 각 개체에 식별자를 부여하고, 코드에서 그 식별자로 객체를 얻어 와야 한다.
+    - 식별자를 부여하기 위해 사용하는 속성이 `id`로,  `android:id="@+id/<identifier>"` 형태로 추가하면 된다.
+    - 식별자는 앱에서 유일해야 한다.
+    - XML 속성 값이 `@`로 시작하면 R.java 파일을 의미하는 것으로, 식별자를 설정하면 R.java 파일에 식별자가 상수 변수로 추가된다.
+    - 식별자의 이름은 일반적으로 `<type>_<purpose>` 형태로 명명한다.
+
+  ```xml
+  <TextView
+  	android:id="@+id/text_title"
+      android:layour_witdh="wrap_content"
+      android:layout_height="wrap_content"
+      android:text="Hello World!" />
+  ```
+
+  - 코드에서 식별자로 객체 가져오기
+    - R.java 파일의 상수 변수를 통해 객체를 가져온다.
+    - `findViewById()`함수를 사용하면 된다.
+
+  ```kotlin
+  setContentView(R.layout.activity_main)
+  val textView: TextView = findViewById(R.id.text_title)
+  ```
+
+  - 뷰 객체의 타입을 제네릭으로 명시하는 것도 가능하다.
+
+  ```kotlin
+  setContentView(R.layout.activity_main)
+  val textView = findViewById<TextView>(R.id.text_title)
+  ```
+
+
+
+- 뷰의 크기 설정
+
+  - 뷰의 크기를 설정하는 속성은 두 가지가 있다.
+    - `layout_width`: 뷰의 가로 길이
+    - `layout_height`: 뷰의 세로 길이
+  - 이 속성들에는 아래 세 가지 중 하나를 설정할 수 있다.
+    - 수치: `100px`처럼 수치로 지정할 수 있다. 수치는 px, dp 등의 단위를 사용하고, 수치를 생략하는 것은 불가능하다.
+    - `match_parent`: 부모의 크기 전체를 의미한다.
+    - `wrap_content`: 자신의 컨텐츠를 화면에 출력할 수 있는 적절한 크기를 의미한다.
+
+  ```xml
+  <TextView
+      android:layour_witdh="100px"
+      android:layout_height="wrap_content"
+      android:text="Hello World!" />
+  ```
+
+
+
+- 뷰의 간격 설정
+
+  - 뷰의 간격은 아래 두 속성으로 설정한다.
+    - `margin`: 뷰와 뷰 사이의 간격을 설정한다.
+    - `padding`: 뷰와 컨텐츠 테두리 사이의 간격을 설정한다.
+    - 모든 방향에 동일한 간격이 설정된다.
+  - 만약 각 방향 별로 다른 간격을 적용하고 싶다면 아래 속성을 설정해야한다.
+    - `margin`: `layout_marginTop`, `layout_marginBottom`, `layout_marginLeft`, `layout_marginRight`
+    - `padding`: `paddingTop`, `paddingBottom`, `paddingLeft`, `paddingRight`
+
+  ```xml
+  <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:orientation="horizontal"
+      android:padding="16dp">
+      <Button
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:layout_marginTop="16dp"
+          android:layout_paddingBottom="50dp"
+          android:text="확인"/>
+      <Button
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:layout_marginLeft="16dp"
+          android:layout_paddingBottom="50dp"
+          android:text="취소"/>
+  </LinearLayout>
+  ```
+
+
+
+- 뷰의 표시 여부 설정
+
+  - `visibility` 속성은 뷰가 화면에 출력되어야 하는지 여부를 설정한다.
+    - `visible`: 뷰가 화면에 출력된다(기본값).
+    - `invisible`: 뷰가 화면에 출력되지 않지만 자리는 차지한다.
+    - `gone`: 뷰가 화면에 출력되지 않으며 자리도 차지하지 않는다.
+    - `visibility`를 `invisible`이나 `gone`으로 설정하는 것은 주로 특정 조건일 때만 보이게 처리하기 위함이다.
+
+  ```xml
+  <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:orientation="horizontal"
+      android:padding="16dp">
+      <Button
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:text="확인",
+          android:visibility="visible"/>
+      <Button
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:text="invisible"
+          android:visibility="invisible"/>
+      <Button
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:text="gone"
+          android:visibility="gone"/>
+  </LinearLayout>
+  ```
+
+  - XML이 아닌 코드에서 뷰의 visibility 속성을 조정하려면 뷰의 visibility 속성 값을 설정해주면 된다.
+    - `View.VISIBLE`, `View.INVISIBLE` 중 하나로 설정한다.
+
+  ```kotlin
+  visibleBtn.setOnClickListener {
+      targetView.visibility = View.VISIBLE
+  }
+  
+  invisibleBtn.setOnClickListener {
+      targetView.visibility = View.INVISIBLE
+  }
+  ```
+
+
+
