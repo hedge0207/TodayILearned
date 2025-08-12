@@ -641,3 +641,175 @@
 
 
 
+
+
+## 기본적인 뷰의 종류
+
+- `TextView`
+
+  - 문자열을 화면에 출력하는 뷰이다.
+
+  ```xml
+  <TextView
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:text="hello world"
+      android:textColor="#CFCFCE"
+      android:textSize="20sp"
+      android:textStyle="bold" />
+  ```
+
+  - `android:text`
+    - `TextView`에 출력할 문자열을 지정한다.
+    - 문자열을 대입해도 되고, `android:text="@string/hello"` 처럼 문자열 리소스를 지정해도 된다.
+  - `android:textColor`
+    - 문자열의 색상을 지정한다.
+    - 값은 16진수 RGB 형식을 사용한다.
+  - `android:textSize`
+    - 문자열의 크기를 지정한다.
+    - 값은 숫자를 사용하고, 단위는 px, dp, sp 등을 사용하며 생략이 불가능하다.
+  - `android:textStyle`
+    - 문자열의 스타일을 지정한다.
+    - 값은 `bold`, `italic`, `normal` 중 하나를 사용한다.
+
+  - `android:autoLink`
+    - `TextView`에 출력할 문자열을 분석해 특정 형태의 문자열에 자동 링크를 추가한다.
+    - `web`, `phone`, `email` 등을 사용할 수 있으며 여러 개를 함께 설정하려면 `|` 기호로 연결한다.
+
+  ```xml
+  <TextView
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:text="https://github.com/hedge0207"
+      android:autoLink="web" /> 
+  ```
+
+  - `android:maxLines`
+    - `TextView`는 긴 문자열을 자동으로 줄바꿈하는데, 때로는 문자열이 특정 줄까지만 나오도록 해야 할 때가 있다.
+    - 이 때 사용하는 속성으로, 설정된 숫자 만큼의 행까지만 출력된다.
+
+  - `android:ellipsize`
+    - `maxLines` 속성을 사용할 때 출력되지 않은 문자열이 더 있다는 것을 표시하기 위해 줄임표를 넣을 때 사용한다.
+    - `end`, `middle`, `start` 중 하나의 값을 설정하면 된다.
+    - `start`, `middle`의 경우 `singleLine="true"`를 통해 문자열으 한 줄로 출력하도록 설정했을 때만 적용된다.
+
+  ```xml
+  <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:orientation="vertical">
+      <TextView
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:text="@string/long_text"
+          android:singleLine="true"
+          android:ellipsize="middle"/>
+      <TextView
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:text="@string/long_text"
+          android:maxLines="3"
+          android:ellipsize="end"/>
+  </LinearLayout>
+  ```
+
+
+
+- `ImageView`
+
+  - 이미지를 화면에 출력하는 뷰이다.
+  - `android:src`
+    - `ImageView`에 출력할 이미지를 설정한다.
+    - 리소스 이미지, 파일 이미지, 네트워크 이미지 등을 출력할 수 있다.
+
+  ```xml
+  <ImageView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:src="@drawable/test"/>
+  ```
+
+  - `android:maxWidth`, `android:maxHeight`, `android:adjustViewBounds`
+    - `ImageView`가 출력하는 이미지의 최대 크기를 지정한다.
+    - 뷰의 크기는 `layout_widht`, `layout_height`로 설정하지만 이 속성은 크기가 고정되어 있어 뷰에 넣을 이미지 크기가 다양하다면 이미지와 뷰의 크기가 맞지 않는 상황이 발생할 수 있따.
+    - 또한 이미지가 클 때 위 두 속성의 값을 `wrap_content`로 설정하면 뷰의 크기가 지나치게 커지는 문제가 있다.
+    - 이럴 때 이 속성들을 이용해 크기를 조절할 수 있다.
+
+  ```xml
+  <ImageView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:maxWidth="100dp"
+      android:maxHeight="100dp"
+      android:adjustViewBounds="true"
+      android:src="@drawable/test"/>
+  ```
+
+  - `android:backgound`
+    - 전체 뷰 중 이미지가 차지하지 않은 공간의 색을 설정한다.
+    - 값은 16진수 RGB 형식을 사용한다.
+
+
+
+- 버튼, 체크박스, 라디오 버튼
+
+  - `Button`
+    - 사용자 이벤트를 처리한다.
+
+  ```xml
+  <Button
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:text="확인"/>
+  ```
+
+  - `CheckBox`
+    - 다중 선택을 제공한다.
+    - 한 화면에 여러 개개 나오더라도 다중 선택을 제공하므로 서로 영향을 미치지 않는다.
+    - 즉 하나의 체크박스가 선택되었어도 다른 체크박스를 선택할 수 있다.
+
+  ```xml
+  <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:orientation="vertical">
+      <CheckBox
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:text="check1"/>
+      <CheckBox
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:text="check2"/>
+  </LinearLayout>
+  ```
+
+  - `RadioGroup`, `RadioButton`
+    - 단일 선택을 제공한다.
+    - 화면에 여러 개가 나오면 하나만 선택할 수 있으므로 여러 개를 묶어서 처리해야 한다.
+    - 이를 위해 `RadioGroup`과 함께 사용하며, 그룹으로 묶은 라디오 버튼 중 하나만 선택이 가능하다.
+
+  ```xml
+  <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:orientation="vertical">
+      <RadioGroup
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content">
+          <RadioButton
+              android:layout_width="wrap_content"
+              android:layout_height="wrap_content"
+              android:text="radio1"/>
+          <RadioButton
+              android:layout_width="wrap_content"
+              android:layout_height="wrap_content"
+              android:text="radio1"/>
+      </RadioGroup>
+  </LinearLayout>
+  ```
+
+
+
+
+
