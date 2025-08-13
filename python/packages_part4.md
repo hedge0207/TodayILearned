@@ -1255,6 +1255,130 @@
 
 
 
+
+
+# JSON, UJSON, ORJSON
+
+- Python의 내장  `json` 패키지는 느리다.
+  - Python의 내장  `json` 패키지는 Python으로 구현되어 있다.
+  - 크기가 작거나 단순한 구조의 JSON 데이터를 다룰 때는 큰 문제가 되지 않을 수 있지만, 크기가 크거나, 깊이가 깊은 JSON 데이터를 다룰 때는 낮은 성능이 발목을 잡을 수 있다.
+    - 사실 대부분의 Python 웹, 데이터 애플리케이션은 JSON 직렬화/역직렬화의 성능이 전체 처리량과 지연에 직접적인 영향을 준다.
+  - Python 내장  `json` 패키지의 낮은 성능을 보완하기 위해 `ujson`, `orjson` 등의 패키지가 등장했다.
+
+
+
+- 세 패키지의 비교
+
+  - ujson의 경우 과거에 널리 사용됐으나, orjson의 등장 이후로 orjson에 밀리는 추세이다.
+  - 셋 중 성능상으로 가장 우수한 것은 `orjson`이다.
+
+  | 항목                      | `json`         | `ujson`        | `orjson`                   |
+  | ------------------------- | -------------- | -------------- | -------------------------- |
+  | 구현                      | Python+C       | C              | Rust                       |
+  | 성능(일반적 경향)         | 가장 느림      | 중간           | 가장 빠름                  |
+  | `dumps()` 반환            | `str`          | `str`          | `bytes`                    |
+  | `loads()` 입력            | `str`          | `str`          | `bytes`/`str`              |
+  | `datetime/UUID` 기본 지원 | X(커스텀 필요) | X              | O(기본 지원, 옵션 다양)    |
+  | Numpy 직렬화              | X              | X              | O(옵션)                    |
+  | 옵션/기능                 | 표준 위주      | 단순           | 풍부(정렬/들여쓰기/UTC 등) |
+  | 표준 준수                 | 엄격           | 구현 차이 주의 | 엄격(기본 NaN 비허용 등)   |
+
+  - 직렬화, 역직렬화
+
+  ```python
+  import json, ujson, orjson
+  
+  
+  data = {"a": 1, "b": [1, 2, 3]}
+  
+  # 표준 json
+  s1: str   = json.dumps(data)
+  d1: dict  = json.loads(s1)
+  
+  # ujson
+  s2: str   = ujson.dumps(data)
+  d2: dict  = ujson.loads(s2)
+  
+  # orjson: dumps → bytes 반환
+  b3: bytes = orjson.dumps(data)
+  d3: dict  = orjson.loads(b3)  # bytes/str 모두 가능
+  ```
+
+  - 벤치 마크
+
+  ```python
+  import time, json, ujson, orjson, statistics as st
+  
+  N = 2000
+  obj = {
+      "ints": list(range(1000)),
+      "floats": [i/10 for i in range(1000)],
+      "text": "한글과 emoji 😄" * 100,
+      "nested": [{"i": i, "ok": True, "arr": list(range(50))} for i in range(200)],
+  }
+  
+  def bench(name, dumps, loads):
+      t1=[]
+      for _ in range(N):
+          t0 = time.perf_counter()
+          s  = dumps(obj)
+          e1 = time.perf_counter()
+          _  = loads(s)
+          e2 = time.perf_counter()
+          t1.append((e1-t0, e2-e1))
+      enc = [x for x,_ in t1]; dec=[y for _,y in t1]
+      print(f"{name:8} enc(ms)={st.median(enc)*1e3:.2f} dec(ms)={st.median(dec)*1e3:.2f}")
+  
+  bench("json",   lambda o: json.dumps(o),   lambda b: json.loads(b))
+  bench("ujson",  lambda o: ujson.dumps(o),  lambda b: ujson.loads(b))
+  bench("orjson", lambda o: orjson.dumps(o), lambda b: orjson.loads(b))
+  
+  
+  """
+  json     enc(ms)=0.52 dec(ms)=0.48
+  ujson    enc(ms)=0.32 dec(ms)=0.18
+  orjson   enc(ms)=0.07 dec(ms)=0.10
+  """
+  ```
+
+
+
+- FastAPI는 성능이 중요할 경우 `ORJSONResponse`를 사용할 것을 권장한다.
+
+  > https://fastapi.tiangolo.com/advanced/custom-response/#use-orjsonresponse
+
+  - Response가 클 경우 `Response` 객체를 바로 반환하는 것이 dictionary를 반환하는 것 보다 빠르다.
+    - 이는 FastAPI가 기본적으로 응답의 모든 요소가 JSON으로 직렬화하는 것이 가능한지를 검사하기 때문이다.
+    - 이 과정에서 [JSON Compatible Encoder](https://fastapi.tiangolo.com/tutorial/encoder/#json-compatible-encoder)(``jsonable_encoder``)가 사용된다.
+    - 이러한 동작 덕분에 데이터베이스 모델과 같은 임의의 객체도 반환할 수 있는 것이다.
+    - 그러나 반환하려는 데이터를 JSON으로 직렬화할 수 있다는 것이 확실하다면 해당 데이터를 응답 클래스에 직접 전달해 FastAPI가 응답 클래스로 넘기기 전에 반환 값을 `jsonable_encoder`에 통과시키면서 발생하는 추가 오버헤드를 피할 수 있다.
+
+  - `ORJSONResponse`를 사용하기 위해서는 `orjson` 패키지가 설치되어 있어야한다.
+
+  ```bash
+  $ pip install orjson
+  ```
+
+  - 아래와 같이 사용하면 된다.
+
+  ```python
+  from fastapi import FastAPI
+  from fastapi.responses import ORJSONResponse
+  
+  app = FastAPI()
+  
+  
+  @app.get("/items/", response_class=ORJSONResponse)
+  async def read_items():
+      return ORJSONResponse([{"item_id": "Foo"}])
+  ```
+
+
+
+
+
+
+
 # fcntl, filelock
 
 - fcntl
