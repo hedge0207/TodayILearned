@@ -811,5 +811,140 @@
 
 
 
+- `EditText`
+
+  - 사용자가 글을 입력할 수 있는 뷰
+  - `android:lines`, `android:maxLines` 속성
+    - `EditText`는 한 줄 입력 크기로 출력되었다가 사용자가 엔터를 누르면 여러 줄 입력 크기가 된다.
+    - `android:lines`는 처음부터 여러 줄 입력 크기로 나오게 하는 속성이며, 설정된 것에서 더 늘어나지 않는다.
+    - `android:maxLines`는 처음에는 한 줄 입력 크기로 출력되다, 사용자가 엔터를 입력하면 최대 설정한 크기까지 늘어난다.
+  - `android:inputType`
+    - 글을 입력할 때 올라오는 키보드를 지정하는 속성이다.
+    - 예를 들어 키보드로 한 줄 입력을 강제하고 싶거나 키보드를 전화번호 입력 모드로 지정하고 싶을 때 사용한다.
+    - 따로 설정하지 않으면 기본적으로 문자 입력 모드로 키보드가 올라온다.
+
+  | 속성값               | 설명                                                         |
+  | -------------------- | ------------------------------------------------------------ |
+  | none                 | 모든 문자 입력이 가능하며, 줄바꿈이 가능하다.                |
+  | text                 | 문자열 한 줄 입력.                                           |
+  | textCapCharacters    | 대문자 입력 모드.                                            |
+  | textCapWords         | 각 단어의 첫 글자 입력 시 키보드가 자동으로 대문자 입력 모드. |
+  | TextCapSentences     | 각 문단의 첫 글자 입력 시 키보드가 자동으로 대문자 입력 모드. |
+  | textMultiLine        | 여러 줄 입력 가능.                                           |
+  | textNoSuggestions    | 단어 입력 시 키보드의 추천 단어를 보여주지 않음.             |
+  | textUri              | URI 입력 모드.                                               |
+  | textEmailAddress     | 이메일 주소 입력 모드                                        |
+  | textPassword         | 비밀번호 입력 모드로 입력한 문자를 점으로 표시. 키보드는 영문자와 숫자, 특수 키만 표시 |
+  | textVisibilePassword | textPassword와 같으며, 입력한 문자를 표시해준다는 차이가 있다. |
+  | number               | 숫자 입력 모드.                                              |
+  | numberSigned         | number와 같으며 부호 키인 마이너스 입력 가능.                |
+  | numberDecimal        | number와 같으며 소숫점 입력 가능.                            |
+  | numberPassword       | 숫자 키만 입력 가능하며, 점으로 표시된다.                    |
+  | phone                | 전화번호 입력 모드                                           |
+
+
+
+
+
+## 뷰 바인딩
+
+- 뷰 바인딩(view binding)
+
+  - 레이아웃 XML 파일에 선언한 뷰 객체를 코드에서 쉽게 이용하는 방법이다.
+
+    - 안드로이드는 UI를 구성할 때 대부분 레이아웃 XML 파일을 이용한다.
+    - 레이아웃 XML에 등록한 뷰는 `findViewByID()` 함수를 통해 사용할 수 있다.
+    - 그런데, 모든 뷰를 이렇게 관리하면 번거로울 수 있다.
+    - 따라서 안드로이드는 액티비티에서 `findViewById()` 함수를 이용하지 않고 레이아웃 XML 파일에 드록된 뷰 객체를 사용할 수 있는 기능을 제공한다.
+
+    - 초기에는 butterknife라는 라이브러리를 사용해야 했으나, 이제 라이브러리 없이도 가능하다.
+    - Kotlin Android Extensions도 같은 목적을 가진 다른 기법이나, 2021년 지원이 종료됐다.
+
+  - 예를 들어 아래와 같이 작성한 레이아웃 XML이 있다고 가정해보자.
+
+    - 아래에서 선언한 뷰 3개를 코드에서 id값으로 얻어서 사용할 수도 있다.
+    - 그런데 뷰 바인딩 기법을 사용하면 코드에서 훨씬 간편하게 뷰 객체를 이용할 수 있다.
+
+  ```xml
+  <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:orientation="vertical">
+      <Button
+          android:id="@+id/visibileBtn"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:text="visibile"/>
+      <TextView
+          android:id="@+id/targetView"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:text="@string/main_desc"
+          android:textSize="17dp"
+           />
+      <TextView
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:text="hello world"
+          android:background="@FF0000"
+          android:textColor="#FFFFFF"/>
+      <Button
+          android:id="@id+id/invisibileBtn"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:text="invisible"/>
+  </LinearLayout>
+  ```
+
+  - 뷰 바인딩을 사용하려면 build.gradle 파일에 아래와 같이 선언해야한다.
+    - 아래와 같이 설정하면 레이아웃 XML 파일에 등록된 뷰 객체를 포함하는 클래스가 자동으로 생성된다.
+    - 즉 코드에서 뷰를 선언하고 `findViewById()` 함수를 호출하지 않아도 이를 구현한 클래스가 자동으로 생성되므로 이 클래스를 이용해 뷰를 사용하기만 하면 된다.
+
+  ```groovy
+  android {
+      viewBinding.isEnabled = true
+  }
+  ```
+
+  - 자동으로 만들어지는 클래스의 이름은 레이아웃 XML 파일명을 따른다.
+    - 첫 글자를 대문자로 하고 밑줄은 빼고 뒤에 오는 단어를 대문자로 만든 후 Binding을 추가한다.
+    - e.g. `activity_main.xml` - `ActivitiyMainBinding`
+  - 자동으로 만들어진 클래스의 `inflate()` 함수를 호출하면 바인딩 객체를 얻을 수 있다.
+    - 이때 인자로 `layoutInflater`를 전달한다.
+    - 그리고 바인딩 객체의 root 프로퍼티에는 XML의 루트 태그 객체가 자동으로 등록되므로 액티비티 화면 출력은 `setContentView()` 함수에 `binding.root`를 전달하면 된다.
+    - 바인딩 객체에 등록된 뷰 객체명은 XML 파일에 등록한 뷰의 id 값을 따른다.
+
+  ```kotlin
+  class MainActivity : AppCompatActivity() {
+      override fun onCreate(savedInstanceState: Bundle?) {
+          super.onCreate(savedInstanceSTate)
+          
+          // 바인딩 객체 획득
+          val binding = ActivityMainBinding.inflate(layoutInflater)
+          
+          // 액티비티 화면 출력
+          setContentView(binding.root)
+          
+          // 뷰 객체 사용
+          binding.visibleBtn.setOnClickListener {
+              binding.targetView.visibility = View.VISIBLE
+          }
+          binding.invisibleBtn.setOnClickListener {
+              binding.targetView.visibility = View.INVISIBLE
+          }
+      }
+  }
+  ```
+
+  - `tools:viewBindingIgnore`
+    - 뷰 바인딩을 사용하면 레이아웃 XML 하나당 바인딩 클래스가 자동으로 만들어진다.
+    - 이 때 어떤 레이아웃 XML 파일은 바인딩 클래스를 만들 필요가 없을 수도 있따.
+    - 이때는 XML 파일의 루트 태그에 `tools:viewBindingIgnore=true` 속성을 추가하면 XML 파일을 위한 바인딩 클래스를 만들지 않는다.
+
+  ```xml
+  <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+      tools:viewBindingIgnore=true>
+  ```
+
 
 
