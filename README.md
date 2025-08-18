@@ -149,6 +149,12 @@
 <br/>
 <br/>
 
+## IT_Essential_part7
+- 정규 표현식(Regular Expression)
+
+<br/>
+<br/>
+
 ## Operating_System_part1
 - 운영체제 개요
 
@@ -368,6 +374,9 @@
 <br/>
 
 # ITPL
+<br/>
+<br/>
+
 ## Introduction_To_Programming_Language_part1
 - Syntax and Semantic
 
@@ -401,18 +410,14 @@
 ## Introduction_To_Programming_Language_part4
 - Garbage Collection
 
+- Lazy Evaluation
+
 <br/>
 <br/>
 
 ## Introduction_To_Programming_Language_part5
-- Lazy Evaluation
-
 - Continuations
 
-<br/>
-<br/>
-
-## Introduction_To_Programming_Language_part6
 - First-Class Continuation
 
 <br/>
@@ -739,8 +744,6 @@
 
 - 순열과 조합, 부분집합
 
-- 탐욕 알고리즘
-
 - 다이나믹 프로그래밍
 
 - Divide and Conquer
@@ -800,10 +803,15 @@
 <br/>
 
 # android
+<br/>
+<br/>
+
 ## android_part1
 - 앱 실행 및 출시
 
 - 안드로이드 앱의 기본 구조
+
+- 뷰를 이용한 화면 구성
 
 <br/>
 <br/>
@@ -1381,6 +1389,10 @@
 
 - elasticsearch-dsl
 
+- 동작 과정
+
+- Errors
+
 - ETC
 
 <br/>
@@ -1411,10 +1423,6 @@
 
 - Lucene Anaylzer 동작 과정
 
-<br/>
-<br/>
-
-## Python_Elasticsearch
 <br/>
 <br/>
 
@@ -1527,8 +1535,6 @@
 - 사전지식
 
 - CDC
-
-- Airbyte
 
 <br/>
 <br/>
@@ -2224,6 +2230,9 @@
 <br/>
 
 # kotlin
+<br/>
+<br/>
+
 ## kotlin_part1
 - Kotlin 개요
 
@@ -2231,9 +2240,7 @@
 
 - 연산자
 
-- if expression
-
-- when expression
+- 조건문
 
 - 반복문
 
@@ -2249,6 +2256,10 @@
 
 - Class
 
+<br/>
+<br/>
+
+## kotlin_part3
 -  Error
 
 - packages
@@ -2260,6 +2271,9 @@
 <br/>
 
 # linux
+<br/>
+<br/>
+
 ## linux_command
 - 리눅스 기본 명령어
 
@@ -2290,6 +2304,8 @@
 - systemd
 
 - umask
+
+- Logrotate
 
 - Shorts
 
@@ -2410,29 +2426,11 @@
 ## packages_part4
 - Locust
 
-- Environment의 instance 생성 후 runner 생성
-
-- web ui 호스트와 포트 설정
-
-- 테스트 상태가 print되도록 설정
-
-- 과거 테스트 이력을 저장하도록 설정(chart 등에 사용)
-
-- 테스트 시작
-
-- 테스트 기간 설정
-
-- wait for the greenlets
-
-- stop the web server for good measures
-
-- aggs 결과 확인
-
-- 각 task별 결과 확인
-
 - contextlib
 
 - contextvars
+
+- JSON, UJSON, ORJSON
 
 - fcntl, filelock
 
