@@ -1,6 +1,146 @@
 # Response
 
-## Response 관련 옵션들
+- `jsonable_encoder`
+
+  - FastAPI는 path opearation function의 반환 값을 `jsonable_encoder`를 통해 JSON으로 변환한다.
+    - 이는 path operation function의 반환 값이 Pydandict model, dict, list, str 등일 경우 `response_class`와 무관하게 항상 실행된다.
+    - 단, `Response`를 직접 반환하면 실행되지 않는다.
+    - 그리고 이렇게 변환한 값으로 `JSONResponse`를 생성해 클라이언트로 반환한다.
+  - JSON Compatible Encoder
+    - Pydantic model과 같은 객체를 받아 JSON과 호환 가능한 데이터로 변환해주는 encoder이다.
+    - 아래와 같이 사용하면 된다.
+    - 결과물은 Python dictionary가 되며, datetime과 같이 JSON이 지원하지 않는 타입은 str이 된다.
+
+  ```python
+  from datetime import datetime
+  
+  from fastapi import FastAPI
+  from fastapi.encoders import jsonable_encoder
+  from pydantic import BaseModel
+  
+  fake_db = {}
+  
+  
+  class Item(BaseModel):
+      title: str
+      timestamp: datetime
+      description: str | None = None
+  
+  
+  app = FastAPI()
+  
+  
+  @app.put("/items/{id}")
+  def update_item(id: str, item: Item):
+      json_compatible_item_data = jsonable_encoder(item)
+      fake_db[id] = json_compatible_item_data
+  ```
+
+
+
+- `response_model`
+
+  - Type annotation을 사용하여 path operation function에 반환 타입을 지정하면 reponse model을 설정할 수 있다.
+
+  ```python
+  from fastapi import FastAPI
+  from pydantic import BaseModel
+  
+  
+  app = FastAPI()
+  
+  
+  class Item(BaseModel):
+      name: str
+      price: float
+  
+  
+  @app.post("/items/")
+  async def create_item(item: Item) -> Item:
+      return item
+  
+  
+  @app.get("/items/")
+  async def read_items() -> list[Item]:
+      return [
+          Item(name="Portal Gun", price=42.0),
+          Item(name="Plumbus", price=32.0)
+      ]
+  ```
+
+  - 아래와 같이 decorator에 `response_model`을 지정해도 반환할 데이터의 타입을 설정할 수 있다.
+
+  ```python
+  from typing import Any
+  
+  from fastapi import FastAPI
+  from pydantic import BaseModel
+  
+  
+  app = FastAPI()
+  
+  
+  class Item(BaseModel):
+      name: str
+      price: float
+  
+  
+  @app.post("/items/", response_model=Item)
+  async def create_item(item: Item) -> Any:
+      return item
+  
+  
+  @app.get("/items/", response_model=list[Item])
+  async def read_items() -> Any:
+      return [
+          {"name": "Portal Gun", "price": 42.0},
+          {"name": "Plumbus", "price": 32.0}
+      ]
+  ```
+
+  - FastAPI는 위와 같이 설정한 response model 정보로 아래 작업을 수행한다.
+    - 반환 데이터의 validation을 수행한다.
+    - OpenAPI에 response에 대한 JSON schema를 추가해 자동으로 문서화한다.
+    - 반환 데이터를 제한하고 필터링하여 원치 않는 정보가 반환되는 것을 방지한다.
+
+  ```python
+  # 예를 들어 아래와 같이 유효하지 않은 타입(float 타입인 price에 string을 대입)을 반환하려 하면, ResponseValidationError가 발생한다.
+  @app.get("/items-validation-test/", response_model=list[Item])
+  async def items_validation_test() -> Any:
+      return [
+          {"name": "Portal Gun", "price": "foo"}
+      ]
+  
+  # 반환 데이터 제한 및 필터링
+  # 사전에 model(Item)에 정의되지 않은 foo는 반환되지 않는다.
+  @app.get("/items-limit-test/", response_model=list[Item])
+  async def items_limit_test() -> Any:
+      return [
+          {"name": "Portal Gun", "price": 42.0},
+          {"name": "Plumbus", "price": 32.0, "foo":"bar"}
+      ]
+  ```
+
+  - Type annotation을 사용하는 방식과 `response_model` parameter를 사용하는 방식의 결과는 동일하다.
+    - 그럼에도 두 방식을 모두 지원하는 이유는, 함수의 반환 타입과 응답의 반환 타입을 다르게 하고 싶은 경우가 있을 수 있기 때문이다.
+    - 예를 들어 아래와 같이 실제 path operation function의 반환값은 `ItemDetail`이지만, API의 반환값은 `Item`으로 설정하고 싶은 경우가 있을 수 있다.
+    - 이러한 동작 방식에서 알 수 있듯이, 둘 모두를 선언할 경우 response의 타입은 `response_model` parameter로 선언한 타입에 우선권이 있다.
+
+  ```python
+  @app.get("/items/", response_model=list[Item])
+  async def read_items() -> list[ItemDetail]:
+      return [
+          {"name": "Portal Gun", "price": 42.0, "description": "Interesting gun"},
+          {"name": "Plumbus", "price": 32.0, "description": "Weird product"}
+      ]
+  ```
+
+  - Response model로 선언할 수 있는 type들은 아래와 같다.
+    - Pydantic model.
+    - list dictionary.
+    - str, int, bool 등
+
+
 
 - `response_model_exclude_unset`
 
