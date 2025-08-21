@@ -235,6 +235,219 @@
 
 
 
+- `Response`를 직접 반환하기
+
+  - 아래와 같이 `fastapi.responses.Response`와 그 자식 클래스들을 직접 반환할 수 있다.
+    - 직접 반환할 경우 FastAPI가 수행하는 JSON 변환 과정 및 validation을 수행하지 않는다.
+    - 만약 validation을 수행한다면 아래 `/portal` 로 요청을 보낼 경우 `ResponseValidationError`가 발생해야 하지만 , 발생하지 않는다. 
+
+  ```py
+  from fastapi import FastAPI
+  from fastapi.responses import JSONResponse
+  from pydantic import BaseModel
+  
+  
+  app = FastAPI()
+  
+  
+  class Item(BaseModel):
+      name: str
+      price: float
+  
+  
+  @app.get("/portal", response_model=Item)
+  async def get_portal(teleport: bool = False):
+      return JSONResponse(content={"message": "Here's your interdimensional portal."})
+  ```
+
+  - `fastapi.responses.Response`와 그 자식 클래스들을 type annotation을 통해 반환 타입으로 설정할 수 있다.
+    - 단, `Response`의 경우 오직 typa annotation으로만 설정이 가능하며 `response_model` parameter로는 설정할 수 없다.
+
+  ```python
+  from fastapi import FastAPI, Response
+  from fastapi.responses import JSONResponse, RedirectResponse
+  
+  
+  app = FastAPI()
+  
+  
+  @app.get("/portal")
+  async def get_portal(teleport: bool = False) -> Response:
+      if teleport:
+          return RedirectResponse(url="https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+      return JSONResponse(content={"message": "Here's your interdimensional portal."})
+  ```
+
+  - Type annotation으로 `Response`를 지정하는 것 만으로는 runtime 동작이 바뀌지 않는다.
+    - 단순히 문서화, 타입 체킹 등에 이점이 있을 뿐이다.
+    - 예를 들어 아래 예시와 같이 type annotation을 통해 `RedirectResponse`를 지정하더라도, 실제 `RedirectResponse`를 반환하는 것은 아니며, dict를 반환한다.
+    - 만약 FastAPI의 유효성 검사, 직렬화를 우회하고자 한다면 뒤에서 살펴볼 것 처럼 `response_model`을 None으로 설정하거나, `Response`를 직접 반환해야한다.
+
+  ```python
+  from fastapi import FastAPI, Response
+  from fastapi.responses import RedirectResponse
+  
+  app = FastAPI()
+  
+  
+  @app.get("/portal")
+  async def get_portal(teleport: bool = False) -> RedirectResponse:
+      return {"message": "Here's your interdimensional portal."}
+  ```
+
+  - 유효하지 않은 type annotation
+    - 아래와 같은  type annotation은 유효하지 않으므로, application이 정상 실행되지 않는다.
+    - 유효하지 않은 이유는, FastAPI는 type annotation을 기반으로 Pydantic response model을 생성하는데, 아래와 같은 타입(`Response | dict`)은 유효한 Pydantic type이 아니므로 실행시에 에러가 발생하게 된다.
+
+  ```python
+  from fastapi import FastAPI, Response
+  from fastapi.responses import RedirectResponse
+  
+  
+  app = FastAPI()
+  
+  
+  @app.get("/portal")
+  async def get_portal(teleport: bool = False) -> Response | dict:
+      if teleport:
+          return RedirectResponse(url="https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+      return {"message": "Here's your interdimensional portal."}
+  ```
+
+  - Response model 비활성화 하기
+    - `response_model` parameter를 None으로 설정하면 `response_model`을 설정했을 때 실행되는 validation, 문서화, 반환 값 제한 등이 실행되지 않는다.
+    - Pydantic에 의한 validation이 실행되지 않으므로, 위에서 본 것과 달리 Pydantic에서 유효하지 않은 type을 사용하는 것도 가능하다.
+
+  ```python
+  from fastapi import FastAPI, Response
+  from fastapi.responses import RedirectResponse
+  
+  app = FastAPI()
+  
+  
+  @app.get("/portal", response_model=None)
+  async def get_portal(teleport: bool = False) -> Response | dict:
+      if teleport:
+          return RedirectResponse(url="https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+      return {"message": "Here's your interdimensional portal."}
+  ```
+
+
+
+- `response_class`
+
+  - FastAPI는 기본적으로 `JSONResponse` class를 사용하여 응답을 생성한다.
+    - 사용자가 path operation function에 설정한 반환값을 `jsonable_encoder`를 사용하여 JSON으로 변환한다.
+    - 그 후 그 값을 `JSONResponse`의 content에 넣어 `JSONResponse` 객체를 생성한다.
+    - 단, 만약 사용자가 Response 객체를 직접 생성하여 반환하면, 위 과정을 거치지 않는다(이는 `response_model`을 설정했다 해도 마찬가지다).
+  - `response_class`를 설정하면 기본 `JSONResponse`가 아닌 다른 class를 사용하도록 변경할 수 있다.
+    - `Response`의 자식 클래스만 설정 가능하다.
+    - 이 경우 path operation function의 반환 값을 content로하는 `Response`(혹은 그 자식 class)의 객체를 생성한다.
+    - FastAPI(Starlette)는 `HTMLResponse`, `ORJSONResponse`, `StreamResponse` 등의 다양한 class를 제공한다.
+  - `APIRouter` 객체를 생성하거나, `FastAPI` 객체를 생성할 때 `default_response_class`를 설정하여 다수의 endpoint에 적용되도록 할 수 있다.
+
+  ```python
+  from fastapi import FastAPI
+  from fastapi.responses import ORJSONResponse
+  
+  app = FastAPI(default_response_class=ORJSONResponse)
+  
+  
+  @app.get("/items/")
+  async def read_items():
+      return [{"item_id": "Foo"}]
+  ```
+
+  - `Response`를 상속 받는 class를 생성하여, custom response class를 생성하는 것도 가능하다.
+    - 핵심은 `Response.render()` 메서드를 오버라이드 하는 것이다.
+    - `Response.render()` 메서드는 bytes를 반환해야한다.
+
+  ```python
+  from typing import Any
+  
+  import orjson
+  from fastapi import FastAPI, Response
+  
+  app = FastAPI()
+  
+  
+  class CustomORJSONResponse(Response):
+      media_type = "application/json"
+  
+      def render(self, content: Any) -> bytes:
+          assert orjson is not None, "orjson must be installed"
+          return orjson.dumps(content, option=orjson.OPT_INDENT_2)
+  
+  
+  @app.get("/", response_class=CustomORJSONResponse)
+  async def main():
+      return {"message": "Hello World"}
+  ```
+
+
+
+- `Response`를 직접 반환하면 TPS를 증가시킬 수 있다.
+
+  - `fastapi.encoders.jsonable_encoder`는 생각보다 처리 시간이 오래 걸린다.
+    - 이는 반환해야 하는 데이터의 크기, 깊이에 따라 증가한다.
+    - 단 건을 처리할 때는 빠르게 처리되는 것 처럼 보이지만, 대량의 데이터를 처리해야 할 때는 `jsonable_encoder`가 병목이 될 수 있다.
+  - 따라서 `jsonable_encoder`를 사용하지 않도록 `Response`(혹은 그 sub class)를 직접 반환하면 전체 처리 시간을 줄일 수 있다.
+    - 이는 비동기 처리일 때도 마찬가지로, 비동기 처리로 빠르게 I/O bound 작업을 처리한다 하더라도,  `jsonable_encoder`가 동기적으로 실행되며 이벤트 루프가 다시 재개 되지 못 한 상태로 `jsonable_encoder`의 실행이 완료되기를 대기하게 된다.
+    - 따라서 전체 처리 시간이 증가하며, TPS가 감소하게 된다.
+  - `jsonable_encoder`가 실행되지 않게 하기 위해서는 `Response`를 직접 반환해야한다.
+    - 아래 application을 locust 등의 부하 테스트 툴로 부하를 테스트를 실행하면 각 endpoint별로 큰 차이가 나는 것을 확인할 수 있다.
+
+  ```python
+  import os
+  import orjson
+  from fastapi import FastAPI, Response
+  from fastapi.responses import ORJSONResponse, JSONResponse
+  
+  app = FastAPI()
+  
+  def make_payload(n_items: int = 3000, text_repeat: int = 30):
+      return {
+          "ok": True,
+          "items": [
+              {
+                  "id": i,
+                  "price": i * 1.1,
+                  "tags": list(range(50)),
+                  "text": ("한글과 emoji 😄" * text_repeat),
+              }
+              for i in range(n_items)
+          ],
+      }
+  
+  N = 100
+  R = 10
+  
+  # jsonable_encoder 실행
+  @app.get("/a", response_class=ORJSONResponse)
+  async def route_a():
+      data = make_payload(N, R)
+      return data
+  
+  # jsonable_encoder 우회
+  @app.get("/b")
+  async def route_b():
+      data = make_payload(N, R)
+      return ORJSONResponse(data)
+  
+  # jsonable_encoder 우회 + 직렬화 직접 실행
+  @app.get("/c")
+  async def route_c():
+      data = make_payload(N, R)
+      b = orjson.dumps(data)  # bytes
+      return Response(content=b, media_type="application/json")
+  ```
+
+  - 다만, `response_model`을 통한 validation 또한 거치지 않으므로 주의해야한다.
+
+
+
+
+
 
 
 ## StreamingResponse
