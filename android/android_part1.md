@@ -948,3 +948,77 @@
 
 
 
+
+
+## 실습 - 비밀번호 화면 만들기
+
+- 새 모듈 만들기
+
+  - 문자열 리소스를 등록한다.
+    - `res/values/strings.xml`파일에 아래와 같이 추가한다.
+
+  ```xml
+  <resources>
+      <string name="app_name">PasswordPractice</string>
+      <string name="main_desc">
+          현재 비밀번호를 확인해주세요.
+      </string>
+      <string name="password_txt">비밀번호를 잊으셨나요?</string>
+  </resources>
+  ```
+
+  - 레이아웃 XML 파일(res/layout/activity_main.xml)을 작성한다.
+
+  ```xml
+  <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+      xmlns:app="http://schemas.android.com/apk/res-auto"
+      xmlns:tools="http://schemas.android.com/tools"
+      android:id="@+id/main"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      tools:context=".MainActivity"
+      android:orientation="vertical"
+      android:padding="16dp">
+  
+      <TextView
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:text="@string/main_desc"
+          android:textSize="17dp"
+           />
+      <TextView
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:text="kkang104@gmail.com"
+          android:layout_marginTop="10dp"
+          android:textColor="#CFCFCE"/>
+  
+      <View
+          android:layout_width="match_parent"
+          android:layout_height="1dp"
+          android:layout_marginTop="10dp"
+          android:background="#D4D4D3"/>
+  
+      <EditText
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:hint="비밀번호"
+          android:inputType="textPassword"/>
+      <TextView
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:layout_marginTop="10dp"
+          android:text="@string/password_txt"/>
+  
+      <Button
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:layout_marginTop="16dp"
+          android:text="확인"/>
+  </LinearLayout>
+  ```
+
+  - Android studio에서 run을 실행한다.
+
+
+
