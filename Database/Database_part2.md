@@ -233,3 +233,181 @@
   - 시간에 따라 변하는 내용
     - 데이터 웨어하우스는 데이터 간의 시간적 관계나 동향을 분석해 의사 결정에 반영할 수 있도록 현재와 과거 데이터를 함께 유지
     - 각 시점의 데이터를 의미하는 스냅샷을 주기적으로 유지
+
+
+
+
+
+
+
+# Index
+
+- Index
+
+  - DB는 데이터를 page 혹은 block이라 불리는 단위로 저장한다.
+    - 하나의 page의 크기는 작게는 수 KB에서 크게는 수 MB 정도이며, 이는 설정에 따라 달라질 수 있다.
+    - DB는 이러한 page에 데이터를 저장하고, page 단위로 데이터를 읽는다.
+  - Index를 사용하면 보다 빠른 속도로 테이블의 데이터를 조회할 수 있다.
+    - Index는 query 성능 향상에 필수적이다.
+    - Index에는 크게 clustered index와 non clustered index라는 두 가지 유형이 존재한다.
+    - B+ Tree, hash, bitmap 등 다양한 자료구조로 구현된다.
+    - 테이블에 삽입, 수정, 삭제가 발생할 때 마다 자료구조에서 데이터의 위치를 조정하게 된다.
+  - Clustered index
+    - 테이블에 저장되는 데이터의 물리적인 순서를 결정한다.
+    - 예를 들어 id라는 컬럼이 clustered index라면 해당 테이블의 데이터가 디스크에 저장될 때 id값의 순서대로 저장된다.
+    - 따라서 매우 빠른 조회가 가능하다.
+    - 일반적으로 하나의 테이블은 하나의 clustered index만을 가질 수 있으며, 보통 primary key가 clustered index가 된다.
+  - Non clustered index
+    - 테이블에 저장되는 데이터의 물리적인 순서를 결정하지는 않는다.
+    - 하나의 테이블에 여러 개의 non clustered index를 설정할 수 있다.
+    - 테이블이 아닌 별도의 자료 구조에 저장된다.
+    - 실제 record를 저장하지는 않고, 키 값 + 실제 record의 위치를 가리키는 pointer를 저장한다.
+  - 두 유형의 index의 저장 방식의 차이
+    - 만약 index를 B+tree로 구현했다고 가정할 때, 두 유형의 index에는 아래와 같은 차이가 있다.
+    - Clustered index의 경우 B+tree의 leaf node에는 실제 record가 순서대로 저장된다.
+    - Non clustered index의 경우 B+tree의 leaf node에 key 값 + page를 가리키는 pointer가 저장된다.
+  - Index가 있을 때와 없을 때의 조회 성능 차이 확인해보기
+    - Index가 있을 때가 없을 때에 비해 월등히 빠른 속도로 조회되는 것을 확인할 수 있다.
+
+  ```python
+  import time
+  import random
+  from sqlalchemy import create_engine, text
+  
+  
+  DB_URL = "mysql+pymysql://user:password@localhost:3306/test"
+  engine = create_engine(DB_URL, future=True)
+  
+  def setup():
+      with engine.begin() as conn:
+          conn.execute(text("""
+              CREATE TABLE test_idx (
+                  id INT AUTO_INCREMENT PRIMARY KEY,
+                  customer_id INT NOT NULL,
+                  note VARCHAR(50)
+              ) ENGINE=InnoDB
+          """))
+  
+          rows = [{"customer_id": random.randint(1, 10000), "note": "test"} for _ in range(100000)]
+          conn.execute(text("INSERT INTO test_idx (customer_id, note) VALUES (:customer_id, :note)"), rows)
+  
+  def time_query(sql, params):
+      n = 1000
+      total = 0
+      with engine.begin() as conn:
+          for _ in range(n):
+              t0 = time.perf_counter()
+              conn.execute(text(sql), params).all()
+              t1 = time.perf_counter()
+              total += t1 - t0
+      return total / n
+  
+  def benchmark():
+      sql = "SELECT * FROM test_idx WHERE customer_id = :cid"
+      params = {"cid": 1234}
+  
+      no_idx_time = time_query(sql, params)
+      print(f"No index: {no_idx_time:.4f} sec")
+  
+      with engine.begin() as conn:
+          conn.execute(text("CREATE INDEX idx_customer ON test_idx(customer_id)"))
+  
+      idx_time = time_query(sql, params)
+      print(f"With index: {idx_time:.4f} sec")
+  
+  if __name__ == "__main__":
+      setup()
+      benchmark()
+  
+  """
+  No index: 0.0312 sec
+  With index: 0.0072 sec
+  """
+  ```
+
+  - Index는 join의 성능에도 영향을 미친다.
+
+  ```python
+  import time
+  from sqlalchemy import create_engine, text
+  
+  
+  DB_URL = "mysql+pymysql://user:password@localhost:3306/test"
+  engine = create_engine(DB_URL, future=True)
+  
+  def setup():
+      n = 100000
+      with engine.begin() as conn:
+          conn.execute(text("DROP TABLE IF EXISTS orders"))
+          conn.execute(text("DROP TABLE IF EXISTS customers"))
+  
+          conn.execute(text("""
+              CREATE TABLE customers (
+                  id INT AUTO_INCREMENT PRIMARY KEY,
+                  name VARCHAR(50)
+              ) ENGINE=InnoDB
+          """))
+  
+          conn.execute(
+              text("INSERT INTO customers (name) VALUES (:name)"),
+              [{"name": f"customer_{i}"} for i in range(n)]
+          )
+  
+          conn.execute(text("""
+              CREATE TABLE orders (
+                  id INT AUTO_INCREMENT PRIMARY KEY,
+                  customer_id INT NOT NULL,
+                  amount INT NOT NULL
+              ) ENGINE=InnoDB
+          """))
+  
+          conn.execute(
+              text("INSERT INTO orders (customer_id, amount) VALUES (:cid, :amt)"),
+              [{"cid": (i % n) + 1, "amt": i % 1000} for i in range(n)]
+          )
+  
+  def time_query(sql, params=None):
+      if params is None:
+          params = {}
+      
+      n = 100
+      total = 0
+      with engine.begin() as conn:
+          for _ in range(n):
+              t0 = time.perf_counter()
+              conn.execute(text(sql), params).all()
+              t1 = time.perf_counter()
+              total += t1-t0
+      return total / n
+  
+  def benchmark():
+      sql = """
+      SELECT o.id, o.amount, c.name
+      FROM orders o
+      JOIN customers c ON c.id = o.customer_id
+      WHERE c.id BETWEEN 500 AND 1500
+      """
+      t_no_index = time_query(sql)
+      print(f"No index on orders.customer_id: {t_no_index:.4f} sec")
+  
+      with engine.begin() as conn:
+          conn.execute(text("CREATE INDEX idx_orders_customer ON orders(customer_id)"))
+  
+      t_with_index = time_query(sql)
+      print(f"With index on orders.customer_id: {t_with_index:.4f} sec")
+  
+  if __name__ == "__main__":
+      setup()
+      benchmark()
+  
+      
+  """
+  No index on orders.customer_id: 0.0369 sec
+  With index on orders.customer_id: 0.0198 sec
+  """
+  ```
+
+  - Index는 다양한 type에 설정이 가능하지만, 보다 효율적인 type이 있으며, 제약 조건이 있는 type도 있다.
+    - 일반적으로 cardinality가 높을수록 index가 효율적이다(Boolean 같은 type의 경우 값이 2개 뿐이므로 효율성이 떨어진다).
+    - 문자열의 경우 DB에 따라 앞에서 부터 몇 자 까지를 index로 사용할지 설정해야 한다.
+
