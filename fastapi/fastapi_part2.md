@@ -442,7 +442,101 @@
       return Response(content=b, media_type="application/json")
   ```
 
-  - 다만, `response_model`을 통한 validation 또한 거치지 않으므로 주의해야한다.
+
+
+
+- `Response`를 직접 반환할 때의 주의사항
+
+  - `response_model`을 통한 validation을 거치지 않는다.
+    - 당연하게도 `Response` 객체를 직접 반환하면 `response_model`을 통한 유효성 검사를 거치지 않는다.
+    - 예를 들어 아래와 같이 `response_model`에 `Doc`을 설정하고, `Response` 객체를 직접 반환하더라도, `response_model`이 적용되지 않아 int를 반환하려 했던 `pages`에 str 타입의 값이 반환된다.
+    - 따라서 별도의 유효성 검사 과정을 추가해야한다.
+
+  ```python
+  from fastapi.responses import JSONResponse
+  from fastapi import FastAPI
+  from pydantic import BaseModel, Field
+  
+  
+  app = FastAPI()
+  
+  class Doc(BaseModel):
+      title: str = Field(alias="title_")
+      pages: int
+      description: str | None = None
+  
+  @app.get("/test", response_model=Doc)
+  def update_item():
+      return JSONResponse(content={
+          "title": "Hello World!",
+          "pages": "foo"
+      })
+  ```
+
+  - `response_model_*` 관련 설정이 적용되지 않는다.
+    - 예를 들어 아래와 같이 `response_model`에 `SearchResult`를 지정하고, `response_model_exclude_none`을 True로 설정했다.
+    - 그러나, `Response`의 인스턴스를 직접 반환하므로 `response_model`이 적용되지 않고, 이와 관련된 옵션들(`response_model_exclude_none`, `response_model_exclude_unset` 등)도 적용되지 않는다.
+    - 따라서, 아래 코드의 경우 None 값을 가지는 `Doc.description`도 함께 반환되게 된다.
+
+  ```python
+  from fastapi.responses import JSONResponse
+  from fastapi import FastAPI
+  from pydantic import BaseModel, Field
+  
+  
+  app = FastAPI()
+  
+  class Doc(BaseModel):
+      title: str = Field(alias="title_")
+      pages: int
+      description: str | None = None
+  
+  class SearchResult(BaseModel):
+      total: int
+      docs: list[Doc]
+  
+  
+  
+  @app.get("/test", response_model=SearchResult, response_model_exclude_none=True)
+  def update_item():
+      docs = [Doc(title_="Foo", pages=100), Doc(title_="Bar", pages=200)]
+      return JSONResponse(content=SearchResult(total=len(docs), docs=docs).model_dump())
+  ```
+
+  - Pydantic의 `BaseModel` 객체를 `BaseModel.model_dump()` 메서드로 dictionary 값으로 변환하여 이를 `Response`의 content로 사용하려 할 경우, `BaseModel.model_dump()` 메서드 호출 시에 `by_alias` 파라미터에 어떤 값을 넘길지 확인이 필요하다.
+    - 이는, 앞서 살펴본 `response_model_*` 설정이 적용되지 않는 것과도 관련이 있다.
+    - `response_model_by_alias`의 기본값은 `True`로, FastAPI는 사용자가 path operation function을 통해 반환한 Pydantic의 `BaseModel` 객체를 dictionary로 변환할 때, alias를 사용하여 변환한다.
+    - 따라서 만약 FastAPI의 이러한 기본 동작에 맞추고 싶다면, `Response` 객체를 직접 반환할 때도, `BaseModel.model_dump()`를 실행할 때, `by_alias`의 값을 True로 설정해줘야한다.
+    - 예를 들어 아래 예시에서 `/with_response_model` endpoint로 요청을 보내면 `Doc.title`은 alias가 적용되어 `title_`로 반환되지만, `/direct_response`로 요청을 보내면 alias가 적용되지 않아 `title`로 반환된다. 
+
+  ```python
+  from fastapi.responses import JSONResponse
+  from fastapi import FastAPI
+  from pydantic import BaseModel, Field
+  
+  
+  app = FastAPI()
+  
+  class Doc(BaseModel):
+      title: str = Field(alias="title_")
+      pages: int
+      description: str | None = None
+  
+  class SearchResult(BaseModel):
+      total: int
+      docs: list[Doc]
+  
+  
+  @app.get("/with_response_model", response_model=SearchResult, response_model_exclude_none=True)
+  def update_item():
+      docs = [Doc(title_="Foo", pages=100), Doc(title_="Bar", pages=200)]
+      return SearchResult(total=len(docs), docs=docs)
+  
+  @app.get("/direct_response", response_model=SearchResult, response_model_exclude_none=True)
+  def update_item():
+      docs = [Doc(title_="Foo", pages=100), Doc(title_="Bar", pages=200)]
+      return JSONResponse(content=SearchResult(total=len(docs), docs=docs).model_dump())
+  ```
 
 
 
