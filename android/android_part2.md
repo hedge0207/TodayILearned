@@ -504,3 +504,221 @@
     - 그럼 `Attributes` 탭의  `Layout`에 `Constraints Widget`이 나타나는데, 이걸로 제약 조건을 지정할 수 있다.
     - 이 제약 조건으로 레이아웃의 어디에 어느 정도의 여백으로 출력할 것인지, 또는 다른 뷰를 기준으로 어디에 위치시킬지 등을 설정할 수 있다.
 
+
+
+
+
+# 사용자 이벤트 처리하기
+
+- 터치 이벤트
+
+  - 터치 이벤트를 처리하고 싶다면 액티비티 클래스에 터치 이벤트의 콜백 함수인 `onTouchEvent()`를 선언하면 된다.
+    - 콜백 함수란 어떤 이벤트가 발생하거나 특정 시점에 도달했을 때 시스템에서 자동으로 호출하는 함수를 말한다.
+    - 액티비티에  `onTouchEvent()` 함수를 오버라이드만 하면 사용자가 이 액티비티 화면을 터치하는 순간 자동으로 호출된다.
+    - `onTouchEvent()` 함수에 전달되는 매개변수는 `MotionEvent` 객체이며, 이 객체에 터치의 종류와 발생 지점(좌표)이 담긴다.
+
+  ```kotlin
+  class MainActivity : AppCompatActivity() {
+      override fun onTouchEvent(event: MotionEvent?): Boolean {
+          return super.onTouchEvent(event)
+      }
+  }
+  ```
+
+  - 터치 이벤트의 종류
+    - `ACTION_DOWN`: 화면이 눌린 순간의 이벤트
+    - `ACTION_UP`: 화면에서 떼어진 순간의 이벤트
+    - `ACTION_MOVE`: 화면에 터치한채로 이동하는 순간의 이벤트
+
+  ```kotlin
+  class MainActivity : AppCompatActivity() {
+      override fun onTouchEvent(event: MotionEvent?): Boolean {
+          when (event?.action) {
+              MotionEvent.ACTION_DOWN -> {
+                  Log.d("foo","Touch down event")
+              }
+              MotionEvent.ACTION_UP -> {
+                  Log.d("foo","Touch up event")
+              }
+          }
+          return super.onTouchEvent(event)
+      }
+  }
+  ```
+
+  - 터치 이벤트 발생 좌표 얻기
+    - 터치 이벤트를 처리할 때는 이벤트의 종류 뿐만 아니라 이벤트가 발생한 지점을 알아야 하는 경우도 있다.
+    - 이 좌표는 `onTouchEvent()`의 매개 변수인 `MotionEvent` 객체로 얻는다.
+    - `x`, `y`: 이벤트가 발생한 뷰 내에서의  x, y 좌표.
+    - `rawX`, `rawY`: 전체 화면에서의 x, y 좌표.
+
+  ```kotlin
+  class MainActivity : AppCompatActivity() {
+      override fun onTouchEvent(event: MotionEvent?): Boolean {
+          when (event?.action) {
+              MotionEvent.ACTION_DOWN -> {
+                  Log.d("foo","Touch down event. x: ${event.x}, rawX:${event.rawX}")
+              }
+          }
+          return super.onTouchEvent(event)
+      }
+  }
+  ```
+
+
+
+
+- 키 이벤트
+
+  - 사용자가 스마트폰의 키를 누르는 순간에 발생한다.
+    - 액티비티에서 키 이벤트를 처리하라면 아래와 같은 콜백 함수를 오버라이드해야 한다.
+    - `onKeyDown`: 키를 누른 순간의 이벤트.
+    - `onKeyUp`: 키를 떼는 순간의 이벤트.
+    - `onKeyLongPress`: 키를 오래 누르는 순간의 이벤트.
+
+  ```kotlin
+  class MainActivity : AppCompatActivity() {
+      override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+          Log.d("foo", "onKeyDown")
+          return super.onKeyDown(keyCode, event)
+      }
+  
+      override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
+          Log.d("foo", "onKeyUp")
+          return super.onKeyUp(keyCode, event)
+      }
+  }
+  ```
+
+  - 키 이벤트 함수의 첫 번째 매개변수는 키의 코드이며, 이 값으로 사용자가 어떤 키를 눌렀는지 식별할 수 있다.
+
+  ```kotlin
+  class MainActivity : AppCompatActivity() {
+      override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+          when (keyCode) {
+              KeyEvent.KEYCODE_0 -> Log.d("foo", "0")
+              KeyEvent.KEYCODE_A -> Log.d("foo", "A")
+          }
+          return super.onKeyDown(keyCode, event)
+      }
+  }
+  ```
+
+  - 소프트 키보드의 키는 키 이벤트로 처리할 수 없다.
+    - 소프트 키보드는 앱에서 글을 입력할 때 화면 아래에서 올라오는 키보드를 의미한다.
+    - 오직 하드웨어 키보드에서 발생한 입력만 키 이벤트로 처리할 수 있다.
+    - 안드로이드 시스템 버튼(폰 하단에 위치하는 세 개의 버튼) 중 뒤로가기 버튼은 키로 취급되어 처리할 수 있다.
+    - 또한 볼륨 조절 버튼 역시 키로 취급해 이벤트를 처리할 수 있다.
+    - 그러나 전원, 홈, 오버뷰 버튼은 키로 취급하지 않는다.
+
+  ```kotlin
+  class MainActivity : AppCompatActivity() {
+      override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+          when (keyCode) {
+              KeyEvent.KEYCODE_BACK -> Log.d("foo", "back")
+              KeyEvent.KEYCODE_VOLUME_UP -> Log.d("foo", "volume up")
+          }
+          return super.onKeyDown(keyCode, event)
+      }
+  }
+  ```
+
+  - 뒤로 가기 버튼의 경우 `onKeyDown()`, `onKeyUp()` 함수뿐 아니라  `onBackPressed()` 함수를 사용하여 이벤트를 처리할 수도 있었다.
+    - 그러나 이는 Android 13(API 33) 버전부터 depreacted 되었다.
+
+  ```kotlin
+  class MainActivity : AppCompatActivity() {
+      override fun onBackPressed() {
+          Log.d("foo", "back")
+      }
+  }
+  ```
+
+  - 현재는 `androidx.activity.OnBackPressedCallBack()` 함수 사용을 권장하고 있다.
+
+  ```kotlin
+  onBackPressDispatcher.addCallback(this, object: OnBackPressedCallback(true){
+      override fun handleOnBackPressed() {
+          
+      }
+  })
+  ```
+
+
+
+- 뷰 이벤트
+
+  - `TextView`, `EditText`, `ImageView`, `Button` 등의 뷰를 사용자가 터치했을 때는 터치 이벤트를 사용하지 않는다.
+    - 터치 이벤트를 사용하지 못 하는 것이 아니라 사용하지 않는 것이다.
+    - 이러한 뷰의 이벤트를 터치 이벤트로 처리하지 않는 이유는 개발의 편의성을 위함이다.
+    - 만약 화면에 버튼과 체크박스가 있을 때 사용자가 체크박스를 터치했다고 가정해보자.
+    - 화면에 여러 개의 뷰가 있으므로 사용자가 어느 뷰를 터치했는지를 알아야 한다.
+    - 즉 `onTouchEvent()`의 매개 변수를 통해서 사용자가 터치한 지점의 좌표를 얻어서 터치된 뷰가 버튼인지 체크박스인지를 알아내야한다.
+    - 만약 뷰가 더 많아진다면 훨씬 더 복잡해질 것이다.
+  - 뷰 이벤트의 처리 구조
+    - 뷰 이벤트는 `onTouchEvent()` 콜백 함수만 선언하면 처리 되는 터치 이벤트, `onKeyDown()` 콜백 함수만 선언하면 처리 되는 키 이벤트 등과 달리 이벤트 콜백 함수만 선언해서는 처리할 수 없다.
+    - 뷰 이벤트는 이벤트 소스와 이벤트 헨들러로 역할이 나뉘며 이 둘을 리스터로 연결해야 이벤트를 처리할 수 있다.
+    - 이벤트 소스는 이벤트가 발생한 객체를 의미한다.
+    - 이밴트 핸들러는 이벤트 발생 시 실행할 로직이 구현된 객체를 의미한다.
+    - 리스너는 이벤트 소스와 이벤트 헨들러를 연결해 주는 함수이다.
+    - 즉, 이벤트 소스에서 리스터로 이벤트 헨들러를 등록해 놓으면 이벤트가 발생할 때 실행되는 구조이다.
+
+  ```kotlin
+  // checkbox는 이벤트 소스, setOnCheckedChangeListener는 리스너, object은 이벤트 헨들러이다.
+  binding.checkbox.setOnCheckedChangeListener(object: CompoundButton.OnCheckedChangeListener {
+      override fun onCheckedChanged(buttonView: CompoundButton?, isChecked: Boolean) {
+          Log.d("foo", "체크박스 클릭")
+      }
+  }) 
+  ```
+
+  - 이벤트 핸들러
+    - 대부분의 이벤트 핸들러는 이름의 형식이 `On*Listener`(e.g. `OnClickListener`, `OnLongClickListener` 등)인 인터페이스를 구현해서 만든다.
+    - 위 예시에서는 인터페이스를 구현한 `object` 클래스를 이벤트 핸들러로 만들었지만, 액티비티 자체에서 인터페이스를 구현할 수도 있다.
+    - 또한 이벤트 핸들러를 별도의 클래스로 만들어 처리할 수도 있으며, 코틀린의 SAM(Single Abstract Method) 기법을 사용할 수도 있다.
+    - 각 예시는 아래와 같다.
+
+  ```kotlin
+  // 액티비티에서 인터페이스 구현
+  class MainActivity : AppCompatActivity(), CompoundButton.OnCheckedChangeListener {
+      override fun onCreate(savedInstanceState: Bundle?){
+          super.onCreate(savedInstanceState)
+          val binding = ActivityMainBinding.inflate(layoutInflater)
+          setContentView(binding.root)
+          binding.checkbox.OnCheckedChangeListener(this)
+      }
+      override fun onCheckedChanged(buttonView: CompoundButton?, isChecked: Boolean) {
+          Log.d("foo", "체크박스 클릭")
+      }
+  }
+  
+  // 이벤트 헨들러를 별도의 클래스로 구현
+  class MyEventHandler : CompoundButton.OnCheckedChangeListener {
+      override fun onCheckedChanged(buttonView: CompoundButton?, isChecked: Boolean) {
+          Log.d("foo", "체크박스 클릭")
+      }
+  }
+  
+  class MainActivity : AppCompatActivity() {
+      override fun onCreate(savedInstanceState: Bundle?){
+          super.onCreate(savedInstanceState)
+          val binding = ActivityMainBinding.inflate(layoutInflater)
+          setContentView(binding.root)
+          binding.checkbox.OnCheckedChangeListener(MyEventHandler())
+      }
+  }
+  
+  // SAM 기법으로 구현
+  class MainActivity : AppCompatActivity() {
+      override fun onCreate(savedInstanceState: Bundle?){
+          super.onCreate(savedInstanceState)
+          val binding = ActivityMainBinding.inflate(layoutInflater)
+          setContentView(binding.root)
+          binding.checkbox.OnCheckedChangeListener {
+                  buttonView, isChecked ->
+              Log.d("foo", "체크박스 클릭")
+          }
+      }
+  }
+  ```
+
