@@ -722,3 +722,170 @@
   }
   ```
 
+
+
+- 클릭과 롱클릭 이벤트 처리
+
+  - `ClickEvent`, `LongClickEvent`
+    - 뷰의 최상위 클래스인 `View`에 정의된 이벤트이다.
+    - 즉 가장 기초이면서 많이 사용하는 이벤트이다.
+    - 두 이벤트의 헨들러는 아래와 같다.
+
+  ```kotlin
+  open fun setOnClickListener(l: View.OnClickListener?): Unit
+  open fun setOnLongClickListener(l: View.OnLongClickListener?): Unit
+  ```
+
+  - 두 이벤트를 버튼 클릭시에 처리되게 하려면 아래와 같이 하면 된다.
+    - `LongClickEvent`의 콜백 함수는 boolean 값을 반환하도록 정의되어 있어 boolean 값을 반환해야한다. 
+
+  ```kotlin
+  binding.button.setOnClickListener {
+      Log.d("foo", "click event")
+  }
+  
+  binding.button.setOnLongClickListener {
+      Log.d("foo", "long click event")
+      true
+  }
+  ```
+
+
+
+- 시계 앱의 스톱워치 기능 만들기
+
+  - 뷰 바인딩 기법을 사용하기 위해 `build.gradle.kts` 파일(module)에 아래 내용을 추가한다. 
+    - 그 후 프로젝트를 빌드 구성 파일과 동기화한다(sync now를 클릭하면 된다).
+
+  ```groovy
+  android {
+      viewBinding.isEnabled = true
+  }
+  ```
+
+  - `activity_main.xml` 파일을 통해 앱 화면을 구성한다.
+    - `Chronometer` 뷰는 시간을 측정하기 위한 뷰이다.
+
+  ```xml
+  <?xml version="1.0" encoding="utf-8"?>
+  <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+      xmlns:app="http://schemas.android.com/apk/res-auto"
+      xmlns:tools="http://schemas.android.com/tools"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      tools:context=".MainActivity">
+  
+      <Chronometer
+          android:id="@+id/chronometer"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:layout_marginTop="100dp"
+          android:gravity="center_horizontal"
+          android:textSize="60dp"/>
+  
+      <LinearLayout
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:layout_alignParentBottom="true"
+          android:layout_marginBottom="70dp"
+          android:gravity="center_horizontal"
+          android:orientation="horizontal">
+  
+          <Button
+              android:id="@+id/startButton"
+              android:layout_width="100dp"
+              android:layout_height="wrap_content"
+              android:text="Start"
+              android:textColor="#FFFFFF"
+              android:textStyle="bold"/>
+  
+          <Button
+              android:id="@+id/stopButton"
+              android:layout_width="100dp"
+              android:layout_height="wrap_content"
+              android:layout_marginLeft="25dp"
+              android:enabled="false"
+              android:text="Stop"
+              android:textColor="#FFFFFF"
+              android:textStyle="bold"/>
+  
+          <Button
+              android:id="@+id/resetButton"
+              android:layout_width="100dp"
+              android:layout_height="wrap_content"
+              android:layout_marginLeft="25dp"
+              android:enabled="false"
+              android:text="Reset"
+              android:textColor="#FFFFFF"
+              android:textStyle="bold"/>
+      </LinearLayout>
+  </RelativeLayout>
+  ```
+
+  - `MainActivity.kt` 파일 작성하기
+    - 아래와 같이 각종 이벤트를 처리하도록 작성한다.
+
+  ```kotlin
+  package com.example.eventpractice
+  
+  import android.os.Bundle
+  import android.os.SystemClock
+  import android.view.KeyEvent
+  import android.widget.Toast
+  import androidx.appcompat.app.AppCompatActivity
+  import com.example.eventpractice.databinding.ActivityMainBinding
+  
+  class MainActivity : AppCompatActivity() {
+  
+      var initTime = 0L
+      var pauseTime = 0L
+  
+      override fun onCreate(savedInstanceState: Bundle?) {
+          super.onCreate(savedInstanceState)
+  
+          val binding = ActivityMainBinding.inflate(layoutInflater)
+          setContentView(binding.root)
+  
+          binding.startButton.setOnClickListener {
+              binding.chronometer.base = SystemClock.elapsedRealtime() + pauseTime
+              binding.chronometer.start()
+  
+              binding.stopButton.isEnabled = true
+              binding.resetButton.isEnabled = true
+              binding.startButton.isEnabled = false
+          }
+          binding.stopButton.setOnClickListener {
+              pauseTime = binding.chronometer.base - SystemClock.elapsedRealtime()
+              binding.chronometer.stop()
+  
+              binding.stopButton.isEnabled = false
+              binding.resetButton.isEnabled = true
+              binding.startButton.isEnabled = true
+          }
+          binding.resetButton.setOnClickListener {
+              pauseTime = 0L
+              binding.chronometer.base = SystemClock.elapsedRealtime()
+              binding.chronometer.stop()
+  
+              binding.stopButton.isEnabled = false
+              binding.resetButton.isEnabled = false
+              binding.startButton.isEnabled = true
+          }
+      }
+  
+      override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+          if(keyCode === KeyEvent.KEYCODE_BACK){
+              if(System.currentTimeMillis() - initTime > 3000){
+                  Toast.makeText(this, "종료하려면 한 번 더 누르세요", Toast.LENGTH_SHORT)
+                      .show()
+                  initTime = System.currentTimeMillis()
+                  return true
+              }
+          }
+          return super.onKeyDown(keyCode, event)
+      }
+  }
+  ```
+
+
+
