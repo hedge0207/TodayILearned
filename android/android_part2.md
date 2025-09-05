@@ -889,3 +889,180 @@
 
 
 
+
+
+# 리소스 활용하기
+
+- 리소스의 종류와 특징
+  - 안드로이드 앱 개발에서 리소스란 정적인 자원이라고 할 수 있다.
+    - 앱이 동작하면서 동적으로 발생하거나 변경되는 컨텐츠는 코드로 작성해야하지만, 정적인 컨텐츠는 코드에 작성하지 않고 리소스로 분리하여 외부 파일로 만들어 이용할 수 있다.
+    - 리소스를 이용하면 코드를 조금 더 간결하게 작성할 수 있고 프로그램의 유지 보수가 편해진다.
+  - 앱에서 사용하는 리소스는 크게 앱 리소스와 플랫폼 리소스로 구분된다.
+
+
+
+- 앱 리소스
+  - 앱 리소스란 개발자가 직접 추가한 리소스를 의미한다.
+    - 앱을 개발하기 위해 모듈을 만들면 자동으로 `res`라는 디렉터리가 생기고 그 아래에 `drawable`, `layout`, `mipmap`, `values`라는 디렉터리 4개가 생성된다.
+    - 개발자는 이 리소스 디렉터리에 파일을 각가 만든다.
+    - 위 디렉터리 외에도 다양한 종류의 앱 리소스가 존재한다.
+  - 앱 리소스의 종류
+    - `animator`: 속성 애니메이션 XML
+    - `anim`: 트윈 애니메이션 XML
+    - `color`: 색상 상태 목록 정의 XML
+    - `drawable`: 이미지 리소스
+    - `minmap`: 앱 실행 아이콘 리소스
+    - `layout`: 레이아웃 XML
+    - `menu`: 메뉴 구성 XML
+    - `raw`: 원시 형태로 이용되는 리소스 파일
+    - `values`: 단순 값으로 이용되는 리소스
+    - `xml`: 특정 디렉터리가 정의되지 않은 나머지 XML 파일
+    - `font`: 글꼴 리소스
+  - 리소스 디렉터리와 파일은 이름을 지을 때 규칙이 있다.
+    - 위에서 살펴본 디렉터리들은 이름이 고정이며, `res` 디렉터리 아래에 개발자가 임의로 이름을 붙은 디렉터리를 만들 수 없고 하위 디렉터리 역시 추가할 수 없다.
+    - 또한 리소스 파일명은 `values`에 추가하는 파일을 제외하고는 모두 Java의 이름 작성 규칙을 지켜야 하며, 알파벳 대문자를 사용할 수 없다.
+    - 이런 규칙이 있는 이유는 리소스 디렉터리와 파일을 코드에서 그대로 사용하지 않고 R 파일에 식별자로 등록해서 이용하기 때문이다.
+
+
+
+- `drawable` 디렉터리
+
+  - 이미지 리소스를 저장하는 디렉터리이다.
+    - PNG, JPG, GIF, WEBP 이미지를 저장할 수 있다.
+    - 또한 XML로 작성한 이미지도 이 디렉터리에 저장할 수 있다.
+
+  ```xml
+  <!--gradient_box.xml 파일을 아래와 같이 작성하여 drawable 디렉터리에 저장하면-->
+  <shape xmlns:android:"http://schemas.android.com/apk/res/android"
+      android:shape="rectangle">
+      <gradient
+          android:statColor="#FFFF0000"
+          android:endColor="#80FF00FF"
+          android:angle="45" />
+      <corners android:radius="8dp" />
+  </shape>
+  ```
+
+  - 위와 같이 XML로 이미지 파일을 만들 수 있으며, 이 파일도 이미지 리소스처럼 `ImageView` 등애서 사용할 수 있다.
+
+  ```xml
+  <!--다른 XML 파일에서 이미지로 사용이 가능하다-->
+  <ImageView
+      android:layout_width="300dp"
+      android:layout_height="300dp"
+      android:src="@drwable/gradient_box"/>
+  ```
+
+  - XML로 이미지를 만든 때는 아래와 같은 태그들을 사용한다.
+    - `shape`: 도형을 의미하며 `rectanble`, `oval`, `line`, `ring` 중 하나의 도형 타입을 지정한다.
+    - `corners`: 둥근 모서리를 그리는데 사용하며, `shape` 값이 `rectangle`일 때만 사용이 가능하다.
+    - `gradient`: 그라데이션 색상을 지정한다.
+    - `size`: 도형의 크기를 지정한다.
+    - `solid`: 도형의 색상을 지정한다.
+    - `stroke`: 도형의 윤곽선을 지정한다.
+
+
+
+- `values` 디렉터리
+
+  - 값으로 이용되는 리소스를 저장하는 디렉터리이다.
+    - 문자열, 색상, 크기, 스타일, 배열 등의 값을 XML로 저장할 수 있다.
+    - `values`에 저장되는 리소스는 다른 데렉터리의 리소스와 이용 방법이 조금 다르다.
+    - 다른 디렉터리의 리소스는 파일명이 R인 파일에 식별자로 추가되므로 코드에서 이 식별자로 구분해서 사용한다.
+    - 예를 들어 `layout`의 `activity_main.xml` 리소스는 코드에서 `R.layout.activity_main`으로 사용한다.
+    - 그런데 `values` 디렉터리에 있는 파일은, `strings.xml` 파일로 예를 들면, `R.values.strings`처럼 사용하지 않는다.
+  - `values` 디렉터리의 리소스 파일은 파일명이 R인 파일에 식별자로 등록되지 않고 리소스 파일에 값을 지정한 태그의 `name` 속성 값이 등록된다.
+    - 예를 들어 아래와 같이 XML 파일을 등록하면, 각 태그의 `name` 속성의 값이 등록된다.
+
+  ```xml
+  <!--stings.xml-->
+  <resources>
+      <string name="app_name">Test</string>
+      <string name="foo">foo</string>
+      <string name="bar">bar</string>
+  </resources>
+  ```
+
+  - 위와 같은 리소스를 layout XML에서는 아래와 같이 사용한다.
+
+  ```xml
+  <TextView
+      android:id="@+id/textView"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:text="@string/foo"
+  ```
+
+  - 코드에서는 아래와 같이 사용한다.
+
+  ```kotlin
+  binding.textView.text = getString(R.string.foo)
+  ```
+
+  - `values`에는 문자열 외에도 색상, 크기도 설정 가능하다.
+    - 각각  `color`, `dimen` 태그로 등록한다.
+
+  ```xml
+  <!--색상 리소스 등록-->
+  <resources>
+      <color name="txt_color">#FFFF00</color>
+      <color name="bg_color">#FF0000</color>
+  </resources>
+  
+  <!--크기 리소스 등록-->
+  <resources>
+      <dimen name="txt_size">20sp</dimen>
+  </resources>
+  ```
+
+  - 위와 같이 등록한 색상, 크기는 아래와 같이 사용한다.
+
+  ```xml
+  <TextView
+      android:id="@+id/textView"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:text="@string/foo"
+      android:textColor="@color/txt_color"
+      android:background="@color/bg_color"
+      android:textSize="@dimen/txt_size" />
+  ```
+
+  - 코드에서는 아래와 같이 사용한다.
+
+  ```kotlin
+  binding.textView.text = getString(R.string.foo)
+  binding.textView.setTextColor(ResourcesCompat.getColor(resources, R.color.txt_color, null))
+  binding.textView.textSize = resources.getDimension(R.dimen.txt_size)
+  ```
+
+  - `style` 태그로 스타일 리소스를 등록하는 것도 가능하다.
+    - 스타일 속성은 뷰에 설정되는 여러 속성을 스타일에 등록하여 한꺼번에 적용하거나 여러 뷰에 중복되는 속성을 스타일로 정의해 재사용하는 용도로 쓰인다.
+    - 스타일을 정의할 때는 다른 스타일을 상속받아 재정의할 수 있다.
+    - 아래 예시를 보면 `MyTextStyle`이라는 이름의 스타일을 정의하고, `MyTextStyleSub`라는 스타일을 만들면서 `parent` 속성을 이용해 상속 받아 작성한다.
+    - 이렇게 하면 parent에 명시한 속성 2개를 상속받은 스타일을 정의하는 것인데 `android:background`라는 새로운 속성을 추가하고 `textColor`라는 속성을 재정의한다.
+    - 결국 `MyTextStyleSub`를 뷰에 적용하면 속성 3개가 적용된다.
+
+  ```xml
+  <resources>
+      <style name="MyTextStyle">
+          <item name="android:textSize">@dimen/txt_size</item>
+          <item name="android:textColor">@color/txt_color</item>
+      </style>
+      <style name="MyTextStyleSub", parent="MyTextStyle">
+          <item name="android:textColor">#0000FF</item>
+          <item name="android:background">@color/txt_bg_color</item>
+      </style>
+  </resources>
+  ```
+
+  - 위와 같이 정의한 스타일을 XML에 적용하려면 아래와 같이 하면 된다.
+
+  ```xml
+  <TextView
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      style="@style/MyTextStyleSub"
+      android:text="Hello World" />
+  ```
+
