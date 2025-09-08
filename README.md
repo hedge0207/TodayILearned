@@ -275,6 +275,8 @@
 
 - 데이터 베이스 응용 기술
 
+- Index
+
 <br/>
 <br/>
 
@@ -812,6 +814,16 @@
 - 안드로이드 앱의 기본 구조
 
 - 뷰를 이용한 화면 구성
+
+<br/>
+<br/>
+
+## android_part2
+- 뷰 배치하기
+
+- 사용자 이벤트 처리하기
+
+- 리소스 활용하기
 
 <br/>
 <br/>
@@ -1355,8 +1367,6 @@
 ## Elasticsearch_part8
 - Loggin Configuration
 
-- Metricbeat
-
 - Data streams
 
 - Index template
@@ -1490,6 +1500,12 @@
 
 ## mecab
 - Mecab 사용해보기
+
+<br/>
+<br/>
+
+## metricbeat
+- Metricbeat
 
 <br/>
 <br/>
@@ -1628,19 +1644,13 @@
 <br/>
 
 ## fastapi_part2
-- Response model
-
-- Lifespan Events
+- Response
 
 - Testing
 
 - Dependencies
 
 - SQLAlchemy와 함께 사용하기
-
-- Backround Tasks
-
-- Async
 
 <br/>
 <br/>
@@ -1651,6 +1661,16 @@
 - Nginx + FastAPI
 
 - Uvicorn과 Gunicorn
+
+<br/>
+<br/>
+
+## fastapi_part4
+- Lifespan Events
+
+- Backround Tasks
+
+- Async
 
 <br/>
 <br/>
