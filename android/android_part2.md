@@ -1066,3 +1066,82 @@
       android:text="Hello World" />
   ```
 
+
+
+- `color` 디렉터리
+
+  - `color` 디렉터리의 리소스는 특정 뷰의 상태를 표현하고 그 상태에 적용 되는 색상을 등록할 때 사용한다.
+    - 앞서 살펴본대로 `values` 디렉터리에 만드는 리소스 파일에서도 `<color>` 태그로 색상을 등록할 수 있으나, 이는 색상 하나를 리소스에 등록해 사용하겠다는 의미이다.
+    - 예를 들어 어떤 버튼을 눌렀을 때와 누르지 않았을 때의 색상을 리소스로 등록하고자 한다고 가정해보자.
+    - 이를 `values` 디렉터리의 리소스 파일에 `<color>` 태그러 등록해 사용할 수도 있지만, 버튼의 상태에 따른 색상을 하나의 XML에 등록해 적용하면 더 편리한데, 이 떄 `color` 디렉터리를 사용한다.
+  - 아래와 같이 작성하면 된다.
+    - `state_pressed`는 뷰를 눌렀을 때, `state_focused`는 뷰에 포커스가 주어졌을 때를 의미한다.
+
+  ```xml
+  <?xml version="1.0" encoding="utf-8"?>
+  <selector xmlns:android="http//schemas.android.com/apk/res/android">
+      <item android:state_pressed="true"
+          android:color="#ffff0000"/>
+      <item android:state_focused="true"
+          android:color="#ff0000ff"/>
+      <item android:color="#ff000000"/>
+  </selector>
+  ```
+
+  - 위와 같이 등록한 리소스를 아래와 같이 뷰에 등록해서 사용한다.
+
+  ```xml
+  <Buttom
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:text="Click!"
+      android:textColor="@color/button_text" />
+  ```
+
+
+
+- `font` 디렉터리
+
+  - 글꼴 리소스를 저장하는 디렉터리이다.
+    - 디렉터리에 TTF나 OTF 파일을 저장한 후 글꼴을 적용할 뷰에서 사용하면 된다.
+  - 아래와 같이 사용한다.
+
+  ```xml
+  <TextView
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:text="Hello"
+      android:textSize="20dp"
+      android:fontFamily="@font/pacifico"
+  ```
+
+
+
+- 플랫폼 리소스 사용하기
+
+  - 플랫폼 리소스는 안드로이드 플랫폼이 제공하는 리소스이다.
+    - `res` 디렉터리에 추가하는 것은 앱 리소스로, 개발자가 추가하는 것이다.
+    - 플랫폼 리소스는 개발자가 따로 리소스를 준비하지 않아도 기본으로 제공된다.
+    - 안드로이드 스튜디오의 프로젝트 탐색 창에서 보기 옵션을 [Packages]로 설정한 후 [Libraries] 항목에서 확인이 가능하다.
+  - 플랫폼 리소스도 R 파일에 등록된 식별자로 이용할 수 있다.
+    - 단, 플랫폼 리소스는 앱에 있는 리소스가 아니므로 앱의 R 파일이 아니라 `android.R`이라는 플랫폼 라이브러리의 R 파일에 등록되어 있다.
+    - 따라서 이 파일을 통해 플랫폼 리소스를 사용할 수 있다.
+
+  ```kotlin
+  binding.imageView.setImageDrawable(ResourcesCompat.getDrawable(resources, android.R.drawable.alert_dark_frame, null))
+  binding.textView.text=getString(android.R.string.emptyPhoneNumber)
+  ```
+
+  - 플랫폼 리소스를 XML에서 사용할 때는 `@android:` 패턴을 사용한다.
+    - XML에서 앱 리소스는 `@`기호로 R 파일의 리소스를 사용했다.
+    - 예를 들어 `drawable`의 `save.png`파일을 사용하려면 `@drawable/save` 처럼 작성했다.
+    - 반면에 플랫폼의 `drawable` 디렉터리의 `save.png` 파일을 사용하려면 `@android:drwable/save`와 같이 작성해야한다.
+
+  ```xml
+  <TextView
+      android:id="@+id/textView"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:fontFamily="@android:string/emptyEmailAddress"
+  ```
+
