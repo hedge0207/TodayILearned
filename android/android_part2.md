@@ -1197,3 +1197,132 @@
   | 기본 비터치 탐색 방법 | nanav, dpad, trackball, wheel                                | 터치하지 않고 탐색이 가능한 기기가 있는지 판단.              |
   | 플랫폼 버전           | v21                                                          | 기기의 API 레벨                                              |
 
+
+
+- 리소스 조건을 사용하여 화면 회전에 대응하기
+
+  - 화면 회전에 대응하려면 가로와 세로 방향일 때 출력할 레이아웃 XML 파일을 각가 준비해야한다.
+    - 이 때 어느 방향에서 어떤 파일을 출력할지를 리소스 조건을 사용하여 결정할 수 있다.
+    - 두 개의 레이아웃 파일을 각기 다른 `layout` 디렉터리에 저장한다.
+  - 세로 방향 레이아웃
+    - `acitivity_main.xml` 파일을 `layout` 디렉터리에 저장한다.
+    - 조건을 명시하지 않았으므로 기본값이 된다.
+
+
+  ```xml
+  <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:orientation="vertical">
+      <ImageView
+          android:layout_width="wrap_content"
+          android:layout_height="0dp"
+          android:layout_weight="1"
+          android:src="@drawable/image1"/>
+      <ImageView
+          android:layout_width="wrap_content"
+          android:layout_height="0dp"
+          android:layout_weight="1"
+          android:src="@drawable/image2"/>
+  </LinearLayout>
+  ```
+
+  - 가로 방향 레이아웃
+    - `acitivity_main.xml` 파일을 `layout-land` 디렉터리에 저장한다.
+
+  ```xml
+  <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:orientation="vertical">
+      <ImageView
+          android:layout_width="wrap_content"
+          android:layout_height="0dp"
+          android:layout_weight="1"
+          android:src="@drawable/image1"/>
+      <ImageView
+          android:layout_width="wrap_content"
+          android:layout_height="0dp"
+          android:layout_weight="1"
+          android:src="@drawable/image2"/>
+  </LinearLayout>
+  ```
+
+
+
+- 리소스 조건을 사용하여 댜양한 언어 지원하기
+
+  - `strings.xml` 파일을 각기 다른 `values`의 서브 디렉터리에 저장하여 사용자 기기의 지역 설정에 맞는 언어를 지원하는 것이 가능하다.
+    - 문자열 리소스는 `values` 디렉터리의 리소스이므로 식별자는 파일명이 아니라 `<string>` 태그의 `name` 값이다.
+    - 따라서 각 파일에 문자열을 등록할 때 `name` 값은 같아야한다.
+    - 두 파일을 리소스 조건을 명시한 각각의 리소스 디렉터리에 생성한다.
+
+  - 영어 문자열을 위한 `strings.xml` 파일 작성
+    - `values` 디렉터리에 저장한다.
+
+  ```xml
+  <resources>
+      <string name="app_name">Test</string>
+      <string name="intro">Hello</string>
+  </resources>
+  ```
+
+  - 한국어 문자열을 위한 `strings.xml` 파일 작성
+    - `values-ko-rKR` 디렉터리에 저장한다.
+
+  ```xml
+  <resources>
+      <string name="app_name">테스트</string>
+      <string name="intro">안녕하세요</string>
+  </resources>
+  ```
+
+
+
+- 기기 크기의 호환성
+
+  - 다양한 크기의 기기와 호환되는 화면을 만드는 것은 앱 개발자에게 중요한 과제이다.
+    - 기기 크기의 호환성은 안드로이드 시스템에서 도와주는 부분이 있고 개발자가 직접 코드에서 해결해야 하는 부분이 있다.
+  - 논리적인 단위
+    - 안드로이드 시스템은 기기의 크기를 아래와 같이 구분한다.
+    - dpi는 dots per inch의 줄임말로 1인치 안에 있는 도트의 개수를 의미한다.
+
+  | 크기    | 설명                       |
+  | ------- | -------------------------- |
+  | ldpi    | 저밀도 화면. ~120dpi       |
+  | mdpi    | 중밀도 화면. ~160dpi       |
+  | hdpi    | 고밀도 화면. ~240dpi       |
+  | xhdpi   | 초고밀도 화면. ~320dpi     |
+  | xxhdpi  | 초초고밀도 화면. ~480dpi   |
+  | xxxhdpi | 초초초고밀도 화면. ~640dpi |
+
+  - 안드로이드 시스템은 아래 표처럼 기기의 크기를 구분하여 컨텐츠의 크기를 조정한다.
+    - 안드로이드 시스템이 컨텐츠의 크기를 자동으로 조정하게 하기 위해선 개발자가 컨텐츠의 크기를 지정할 때 논리적인 단위를 사용해야한다.
+    - 물리적인 단위로 지정하면 시스템의 도움을 받을 수 없다.
+  - 안드로이드 앱을 개발할 때 크기 지정에 사용할 수 있는 단위는 아래와 같다.
+    - dp(dip: density-independent pixels): 스크린의 물리적 밀도에 기반을 둔 단위.
+    - sp(sip: scale-independent pixels): dp와 유사하며 글꼴 크기에 적용.
+    - pt(points): 스크린 크기의 1/72 1pt로 한다.
+    - px(픽셀): 픽셀.
+    - mm: 밀리미터.
+    - in: 인치.
+  - 안드로이드에서는 논리적인 단위인 dp와 sp로 크기를 지정하길 권한다.
+    - dp는 일반 크기, sp는 글꼴 크기를 지정한다.
+    - 논리적인 단위로 지정하면 화면의 크기에 따라 자동으로 크기가 조정된다.
+  - 화면 정보 가져오기
+    - 안드로이스 시스템은 기본적으로 크기 호환성을 지원하지만, 개발자가 직접 코드에서 조정할 수도 있다.
+    - 이를 위해서는 기기의 크기 정보를 가져와야 하는데, 가져오는 방식은 API 레벨 30 버전과 이전 버전에서 차이가 있다.
+    - 30 이전 버전에서는 `DisplayMetrics`로 크기 정보를 가져오지만, 30 버전부터는 `WindowMetrics`를 이용해야 한다.
+
+  ```kotlin
+  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+              val windowMetrics: WindowMetrics = windowManager.currentWindowMetrics
+              binding.textView.text = "width: ${windowMetrics.bounds.width()}, height: ${windowMetrics.bounds.height()}"
+          } else {
+              val display = windowManager.defaultDisplay
+              val displayMetrics = DisplayMetrics()
+              display?.getRealMetrics(displayMetrics)
+              binding.textView.text = "width: ${displayMetrics.widthPixels}, height: ${displayMetrics.heightPixels}"
+          }
+  ```
+
