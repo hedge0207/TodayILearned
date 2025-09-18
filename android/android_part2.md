@@ -1326,3 +1326,174 @@
           }
   ```
 
+
+
+- 메신저 앱의 인트로 화면 만들기.
+
+  - 영어 문자열 리소스 작성하기
+    - `res/values` 디렉터리에 있는 `strings.xml` 파일을 아래와 같이 작성한다.
+
+  ```xml
+  <resources>
+      <string name="app_name">Ch9_Resource</string>
+      <string name="intro_main">
+      Find your phone contacts on Messenger
+      </string>
+      <string name="intro_detail">
+      Continuously uploading your contacts helps Facebook and Messenger suggest connections
+      and provide and improve ads for you and others, and offer a better service.
+      </string>
+      <string name="intro_more">Learn More</string>
+      <string name="intro_button">TRUN ON</string>
+      <string name="intro_delay">NOT NOW</string>
+  </resources>
+  ```
+
+  - 한국어 문자열 리소스 작성하기
+    - `res/values` 디렉터리를 우클릭하고, `New` - `Values Resources File` 메뉴를 선택한다.
+    - 리소스 파일 생성 창이 열리면 파일명을 `strings.xml`이라고 입력하고, `Available qualifiers`에서 `Locale`을 선택한다.
+    - 이후 `>>` 버튼을 클릭하면 창 구성이 언어 설정 화면으로 변경되는데, 화면에서 `ko: Korean`를 선택한다.
+    - 새로 생성 된 `strings.xml` 파일을 아래와 같이 작성한다.
+
+  ```xml
+  <?xml version="1.0" encoding="utf-8"?>
+  <resources>
+      <string name="app_name">Ch9_Resource</string>
+      <string name="intro_main">
+      Messenger에서 휴대폰 연락처에 있는 사람들을 찾아보세요
+      </string>
+      <string name="intro_detail">
+      연락처를 계속 업로드하면 Facebook 및 Messenger에서 연결된 연락처를 추천하고 회원님과 다른
+      사람들에게 더욱 관련성 높은 광고를 표시하여 더 나은 서비스를 제공하는 데 도움이 됩니다.
+      </string>
+      <string name="intro_more">더 알아보기</string>
+      <string name="intro_button">설정</string>
+      <string name="intro_delay">나중에 하기</string>
+  </resources>
+  ```
+
+  - 세로 방향 화면 구성하기
+    - `res/layout`에 `activity.main.xml` 파일을 아래와 같이 작성한다.
+
+  ```xml
+  <?xml version="1.0" encoding="utf-8"?>
+  <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+      xmlns:app="http://schemas.android.com/apk/res-auto"
+      xmlns:tools="http://schemas.android.com/tools"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:padding="20dp"
+      android:id="@+id/main">
+  
+      <ImageView
+          android:id="@+id/imageView"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:layout_centerHorizontal="true"
+          android:src="@drawable/intro"/>
+  
+      <TextView
+          android:id="@+id/mainTextView"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:layout_below="@id/imageView"
+          android:layout_centerHorizontal="true"
+          android:layout_marginTop="20dp"
+          android:gravity="center_horizontal"
+          android:text="@string/intro_main"
+          android:textSize="20dp"
+          android:textStyle="bold"/>
+  
+      <TextView
+          android:id="@+id/detailTextView"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:layout_below="@id/mainTextView"
+          android:layout_centerHorizontal="true"
+          android:layout_marginTop="20dp"
+          android:gravity="center_horizontal"
+          android:text="@string/intro_detail"/>
+  
+      <TextView
+          android:id="@+id/delayTextView"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:layout_alignParentBottom="true"
+          android:layout_centerHorizontal="true"
+          android:layout_marginBottom="20dp"
+          android:gravity="center_horizontal"
+          android:text="@string/intro_delay"/>
+  
+      <Button
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:layout_above="@id/delayTextView"
+          android:layout_centerHorizontal="true"
+          android:layout_marginBottom="20dp"
+          android:text="@string/intro_button"
+          android:textColor="#FFFFFF"/>
+  </RelativeLayout>
+  ```
+
+  - 가로 방향 화면 구성하기
+    - `res/layout` 디렉터리를 우클릭 후 `New` - `Layout Resources File`을 선택한다.
+    - 리소스 파일 생성 창이 열리면 파일명으로 `activity_main`을 입력하고 `Available qualifier`에서 `Orientation`을 선택하고 `>>`를  누른다.
+    - 창 구성이 변경되면 `Screen orientation` 항목에서  `Landscape`를 선택한다.
+    - `res/layout-land` 디렉터리에 생성된 `activity_main.xml`파일을 아래와 같이 작성한다.
+
+  ```xml
+  <?xml version="1.0" encoding="utf-8"?>
+  <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+      xmlns:app="http://schemas.android.com/apk/res-auto"
+      xmlns:tools="http://schemas.android.com/tools"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:padding="20dp"
+      android:id="@+id/main">
+  
+      <TextView
+          android:id="@+id/mainTextView"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:layout_centerHorizontal="true"
+          android:layout_marginTop="20dp"
+          android:gravity="center_horizontal"
+          android:text="@string/intro_main"
+          android:textSize="20dp"
+          android:textStyle="bold"/>
+  
+      <TextView
+          android:id="@+id/detailTextView"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:layout_below="@id/mainTextView"
+          android:layout_centerHorizontal="true"
+          android:layout_marginTop="20dp"
+          android:gravity="center_horizontal"
+          android:text="@string/intro_detail"/>
+  
+      <TextView
+          android:id="@+id/delayTextView"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:layout_alignParentBottom="true"
+          android:layout_centerHorizontal="true"
+          android:layout_marginBottom="20dp"
+          android:gravity="center_horizontal"
+          android:text="@string/intro_delay"/>
+  
+      <Button
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:layout_above="@id/delayTextView"
+          android:layout_centerHorizontal="true"
+          android:layout_marginBottom="20dp"
+          android:text="@string/intro_button"
+          android:textColor="#FFFFFF"/>
+  </RelativeLayout>
+  ```
+
+
+
+
+
