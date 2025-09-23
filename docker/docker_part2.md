@@ -1517,6 +1517,149 @@
     - 그러나 그렇게 보일뿐, 실제로는 용량을 차지하지는 않는다.
     - 또한 bind mounts 방식인 것 같지만, `docker inspect <container_name>`을 통해서 `Mounts.type`을 확인해보면 `volume`으로 생성된 것을 확인할 수 있다.
     - 따라서 `docker volume` 명령어를 통해 조작이 가능하다.
+  - 예시
+    - 아래와 같이 `test-mysql`라는 이름의 volume을 생성하고, 생성한 `test-mysql` volume을 container에 설정한다.
+  
+  ```yaml
+  services:
+    my-mysql:
+      image: mysql:8.2.0
+      container_name: my-mysql
+      ports:
+        - 3306:3306
+      volumes:
+        - test-mysql:/var/lib/mysql
+      restart: always
+  
+  volumes:
+    test-mysql:
+      driver: local
+      driver_opts:
+        type: none
+        o: bind
+        device: /my_data
+  ```
+  
+  - 위에서 생성한 volume은 project name(기본값은 docker-compose.yml 파일이 위치한 directory명)이 prefix로 붙어서 생성된다.
+  
+  ```bash
+  $ docker volume ls | grep mysql
+  
+  # output
+  local     mysql_test-mysql
+  ```
+  
+  - `mysql_test-mysql` 볼륨을 확인하면 아래와 같다.
+    - `Mountpoint`를 확인하면, 위에서 설정한 경로가 아닌 일반적인 docker volume 경로로 설정된 것을 확인할 수 있다.
+    - 그러나, 이는 Docker의 추상화 때문으로, 보이는 것만 그렇게 보일 뿐 실제 데이터는 `/my_data` 경로에 mount된다.
+  
+  ```bash
+  $ docker volume inspect mysql_test-mysql
+  
+  # output
+  [
+      {
+          # ...
+          "Mountpoint": "/var/lib/docker/volumes/mysql_test-mysql/_data",
+          "Name": "mysql_test-mysql",
+          "Options": {
+              "device": "/my_data",
+              "o": "bind",
+              "type": "none"
+          },
+          "Scope": "local"
+      }
+  ]
+  ```
+  
+  - Container를 봐도 마찬가지다.
+    - `Source`는 Docker의 기본 volume 경로로 설정되어 있지만, 이는 추상화로 그렇게 보이는 것일 뿐이다.
+  
+  ```bash
+  $ docker inspect my-mysql | grep Mounts -A 11
+  
+  # output
+  "Mounts": [
+      {
+          "Type": "volume",
+          "Name": "mysql_test-mysql",
+          "Source": "/var/lib/docker/volumes/mysql_test-mysql/_data",
+          "Destination": "/var/lib/mysql",
+          "Driver": "local",
+          "Mode": "rw",
+          "RW": true,
+          "Propagation": ""
+      }
+  ]
+  ```
+  
+  - 만약 project명이 붙지 않길 원한다면, volume을 미리 생성하고, 아래와 같이 `external` 값을 true로 설정하면 된다.
+    - `docker volume create --driver local --opt type=none --opt device=/my_data  --opt o=bind my_vol`로 미리 volume을 생성한다.
+    - 그 후 yaml 파일에 volume을 설정할 때 `external` 값을 true로 설정한다.
+    - `driver_opts`와 `external` 옵션을 동시에 설정할 수는 없으므로 반드시 volume을 먼저 생성해야한다.
+  
+  ```yaml
+  services:
+    my-mysql:
+      image: mysql:8.2.0
+      container_name: my-mysql
+      ports:
+        - 3306:3306
+      volumes:
+        - my_vol:/var/lib/mysql
+      restart: always
+  
+  volumes:
+    my_vol:
+      external: true
+  ```
+
+
+
+- Docker volume의 설정이 변경될 경우 주의 사항
+
+  - 예를 들어 아래와 같은 docker-compose.yml 파일이 있다고 가정해보자.
+
+  ```yaml
+  services:
+    my-mysql:
+      image: mysql:8.2.0
+      container_name: my-mysql
+      ports:
+        - 3306:3306
+      volumes:
+        - test-mysql:/var/lib/mysql
+      restart: always
+  
+  volumes:
+    test-mysql: {}
+  ```
+
+  - 위 설정 대로 container와 volume을 생성 하여 사용하다 volume은 삭제하지 않은 상태에서 volume의 설정을 변경하고, container만 재생성했다고 가정해보자.
+    - `docker compose up` 명령어를 실행하면 기존 `test-mysql` volume이 그대로 남아 있는 상태이므로, 변경된 설정으로 volume을 재생성할지를 묻는다.
+    - 만약 여기서 N를 선택하면 기존 volume을 그대로 사용하여 변경된 설정이 적용되지 않는다.
+
+  ```yaml
+  services:
+    my-mysql:
+      image: mysql:8.2.0
+      container_name: my-mysql
+      ports:
+        - 3306:3306
+      volumes:
+        - test-mysql:/var/lib/mysql
+      restart: always
+  
+  volumes:
+    test-mysql:
+      driver: local
+      driver_opts:
+        type: none
+        o: bind
+        device: /my_data
+  ```
+
+  
 
 
 
