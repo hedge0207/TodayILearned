@@ -1478,7 +1478,10 @@
   ```
 
   - docker-compose.yml 에서 설정 변경하기
-
+    - 정확한 원인은 알 수 없지만, 이렇게 설정할 경우 voluem의 `Options` 값이 처음에는 `driver_opts`에 설정된 대로 잘 설정 되지만, 이후에 null로 변경되는 경우가 있다.
+    - 따라서 아래와 같이 사용하기 보다는 bind mounts를 사용하는 것이 나을 것 같다.
+  
+  
   ```yaml
   services:
     <컨테이너명>:
