@@ -1456,7 +1456,121 @@
 
 
 
+- 버킷의 개수가 aggs 성능에 영향을 주는가
 
+  - `terms` aggregation 대상 필드의 value cardinality가 높을수록 aggregation에 더 많은 시간이 소요되는지 확인해볼 것이다.
+  - 테스트를 위한 데이터를 색인한다.
+    - 총 세 개의 필드를 사용하며, 하나의 필드에는 두 개의 값, 다른 하나의 필드에는 5개의 값, 마지막 하나의 필드에는 10개의 값을 색인할 것이다.
+
+  ```python
+  import random
+  
+  from elasticsearch import Elasticsearch, helpers
+  
+  
+  INDEX_NAME = "num_bucket_test"
+  
+  for i in range(10_000):
+      docs = []
+      for _ in range(1_000):
+          doc = {
+              "_index": INDEX_NAME,
+              "_source":{
+                  "category_2_values": chr(random.randint(97, 98)),
+                  "category_5_values": chr(random.randint(97, 101)),
+                  "category_10_values": chr(random.randint(97, 106))
+              }
+          }
+          docs.append(doc)
+      helpers.bulk(Elasticsearch("http://localhost:9200"), docs)
+      print(i)
+  ```
+
+    - 아래와 같이 각 aggregation을 수행하는 데 소요된 시간을 ns 단위로 확인한다.
+
+  ```json
+  from elasticsearch import Elasticsearch
+  
+  
+  es_client = Elasticsearch("http://localhost:9200")
+  
+  N = 10000
+  INDEX_NAME = "num_bucket_test"
+  aggs = {
+      "two_values": {
+          "terms": {
+              "field": "category_2_values.keyword"
+          }
+      },
+      "five_values": {
+          "terms": {
+              "field": "category_5_values.keyword"
+          }
+      },
+      "ten_values": {
+          "terms": {
+              "field": "category_10_values.keyword"
+          }
+      }
+  }
+  
+  times = {aggs_name:0 for aggs_name in aggs.keys()}
+  for i in range(N):
+      res = es_client.search(index=INDEX_NAME, aggs=aggs, size=0, profile=True)    
+      for aggs_profile in res["profile"]["shards"][0]["aggregations"]:
+          times[aggs_profile["description"]] += aggs_profile["time_in_nanos"]
+  
+  for aggs_name, times in times.items():
+      print(f"{aggs_name}: {times/N}")
+  ```
+
+    - 결과는 아래와 같다.
+      - 각  field의 cardinality에 비례해서 aggs에 소요되는 시간이 증가하는 것을 확인할 수 있다.
+
+  ```
+  two_values: 55071.6662
+  five_values: 109981.7541
+  ten_values: 221552.0501
+  ```
+
+    - 이번에도 마찬가지로 위와 같은 차이가 전체 검색 시간에 큰 영향을 주지는 않는다.
+      - 물론 cardinality가 높아질수록 전체 검색 시간에 미치는 영향도 더 커질 것이다.
+
+
+  ```python
+  from elasticsearch import Elasticsearch
+  
+  
+  es_client = Elasticsearch("http://localhost:9200")
+  
+  N = 1
+  INDEX_NAME = "num_bucket_test"
+  N = 10_000
+  for field in ["category_2_values.keyword", "category_5_values.keyword", "category_10_values.keyword"]:
+      aggs = {
+          "blood_type":{
+              "terms":{
+                  "field":field
+              }
+          }
+      }
+      time_ms = 0
+      for _ in range(N):
+          res = es_client.search(index=INDEX_NAME, aggs=aggs, size=0)
+          time_ms += res["took"]
+      print(f"{field}: {time_ms/N}")
+  
+  
+  """
+  category_2_values.keyword: 0.0373
+  category_5_values.keyword: 0.0209
+  category_10_values.keyword: 0.0121
+  """
+  ```
+
+  - Field의 value cardinality에 따라 속도 차이가 발생하는 원인
+    - Bucket의 개수가 많아질수록 메모리에 유지해야 하는 정보(bucket key, doc_count 등)도 증가한다.
+    - Bucket을 반환할 때 bucket을 정렬해서 반환하는 데 bucket의 개수가 많아질수록 정렬에 필요한 시간도 늘어난다.
 
 
 
