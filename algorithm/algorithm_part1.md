@@ -221,7 +221,7 @@
   - Upper bound 구하기
   
     - Lower bound와 마찬가지로 배열의 길이 만큼을 대상으로 한다.
-    - Lower bound를 구할 때와 비슷한데 `arr[mid]=target`일 때만 다르게 처리해줘야한다. Lower bound를 구할 때 `arr[mid]=target`이면 `en`의 값을 `mid`로 변경했지만, upper bound를 구할 때는 `arr[mid]=target`인 경우 `st`의 값을 `mid+1`로 변경해야한다.
+    - Lower bound를 구할 때와 비슷한데 `arr[mid]=target`일 때만 다르게 처리해줘야한다. Lower bound를 구할 때 `arr[mid]=target`이면 `ed`의 값을 `mid`로 변경했지만, upper bound를 구할 때는 `arr[mid]=target`인 경우 `st`의 값을 `mid+1`로 변경해야한다.
   
     | 1    | 3    | 4    | 12   | 12   | 14   | 24   | 27   | 28   | 32   |      |
     | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
@@ -249,27 +249,67 @@
   
   - Python 코드 구현
   
+    - 아래 코드는 새로운 값을 삽입해야 할 때, 어디에 삽입해야 하는지를 찾기 위해 사용할 수 있다.
+  
+  
   ```python
   def lower_bound(num):
-      st, ed = 0, num_cards
+      st, ed = 0, len(nums)
       while st < ed:
           mid = (st+ed) // 2
-          if cards[mid] >= num:
+          if nums[mid] >= num:
               ed = mid
           else:
               st = mid + 1
       return st
   
   def upper_bound(num):
-      st, ed = 0, num_cards
+      st, ed = 0, len(nums)
       while st < ed:
           mid = (st+ed) // 2
-          if cards[mid] > num:
+          if nums[mid] > num:
               ed = mid
           else:
               st = mid + 1
       return st
   ```
+  
+  - 다른 방식의 구현
+    - 중복된 값들 중 가장 왼쪽, 혹은 가장 오른쪽에 있는 값을 찾으려면 아래와 같이 구현하면 된다.
+    - 위 코드와의 차이는 위 코드는 특정 값을 삽입할 index를 반환하는 반면, 아래 코드는 중복된 값들 중 가장 왼쪽, 오른쪽에 있는 index를 반환하며, 찾는 값이 없을 경우 없다는 의미로 -1을 반환한다.
+  
+  ```python
+  # 가장 왼쪽에 있는 값을 찾기
+  def binary_search_left(arr, target):
+      st, ed = 0, len(arr) - 1
+      result = -1
+      while st <= ed:
+          mid = (st + ed) // 2
+          if arr[mid] >= target:
+              if arr[mid] == target:
+                  result = mid
+              ed = mid - 1
+          else:
+              st = mid + 1
+      return result
+  
+  
+  # 가장 오른쪽에 있는 값을 찾기
+  def binary_search_right(arr, target):
+      st, ed = 0, len(arr) - 1
+      result = -1
+      while st <= ed:
+          mid = (st + ed) // 2
+          if arr[mid] <= target:
+              if arr[mid] == target:
+                  result = mid
+              st = mid + 1
+          else:
+              ed = mid - 1
+      return result
+  ```
+  
+  
 
 
 
@@ -860,7 +900,7 @@
 
 
     - 재귀를 기반으로 하는 메모이제이션과 달리 타뷸레이션은 반복문을 사용한다.
-
+    
     - 또한 fibo(5)를 구하기 위해 fibo(4)를 구해야 하고, fibo(4)를 구하기 위해 fibo(3)를 구해야 하는 것 처럼 하향식 접근을 취하는 메모이제이션에 비해 타뷸레이션은 fibo(5)를 구하기 위해 fibo(1)부터 fibo(5)까지 구해나가는 상향식 접근을 취한다.
 
 

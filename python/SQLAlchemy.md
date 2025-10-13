@@ -263,6 +263,10 @@
   - Transient object, Persistent object
     - Session에 의해 load된 object를 persistent object라 부른다.
     - Session에 의해 load되지 않은 object를 transient object라 부른다.
+  - `Session`과 `Connection`의 차이
+    - `Session`은 SQLAlchemy의 ORM 레이어에서 제공하는 트랜잭션 및 객체 상태 관리자이다.
+    - `Session`은 내부적으로 하나 이상의 `Connection`을 사용하지만, 사용자는 SQL이 아닌 파이썬 객체 모델을 조작한다.
+    - 즉 둘은 서로 속한 계층이 다르다.
 
 
 
@@ -609,6 +613,8 @@
 
 
 
+
+
 ## Databasse Metadata
 
 - Metadata
@@ -801,6 +807,8 @@
   # table 생성
   some_table = Table("some_table", metadata, autoload_with=engine)
   ```
+
+
 
 
 
