@@ -543,8 +543,6 @@
 
 
 
-
-
 ## 주요 옵션
 
 ### server.properties
@@ -589,8 +587,8 @@
       - `KAFKA_INTER_BROKER_LISTENER_NAME`(`inter.broker.listener.name`): Kafka cluster 내의 broker들 사이의 통신에 사용할 listener를 설정한다.
 
   ```yaml
-  # LISTENER_BOB을 kafka0:29092에 binding하고, LISTENER_FRED를 localhost:9092에 binding한다.
-  KAFKA_LISTENERS: LISTENER_BOB://kafka0:29092,LISTENER_FRED://localhost:9092
+  # LISTENER_BOB을 kafka0:29092에 binding하고, LISTENER_FRED를 0.0.0.0:9092에 binding한다.
+  KAFKA_LISTENERS: LISTENER_BOB://kafka0:29092,LISTENER_FRED://0.0.0.0:9092
   
   # Client는 아래 listener들을 통해 event를 읽고 쓴다.
   KAFKA_ADVERTISED_LISTENERS: LISTENER_BOB://kafka0:29092,LISTENER_FRED://localhost:9092
@@ -603,7 +601,7 @@
   ```
 
     - Client와 broker 사이의 첫 통신 시에 broker가 어떤 listener에 대한 정보를 반환할 지는 client가 어떤 port로 첫 통신을 시도했는지에 따라 달라진다.
-      - 예를 들어 위와 같이 설정했을 때, client가 `kafka0:9092`로 접속 정보를 설정(`LISTENER_FRED`)했다면, broker는 `localhost:9092`를 client에게 반환한다.
+      - 예를 들어 위와 같이 설정했을 때, client가 `0.0.0.0:9092`로 접속 정보를 설정(`LISTENER_FRED`)했다면, broker는 `localhost:9092`를 client에게 반환한다.
       - 반면에 client가 `kafka0:29092`로 접속 정보를 설정(`LISTENER_BOB`)했다면, broker는 `kafka0:29092`를 client에게 반환한다.
 
   - Host를 설정하지 않을 경우 default network interface에 binding된다.
@@ -611,7 +609,8 @@
     - `INTERNAL` listener의 경우 `INTERNAL://:29092`와 같이 host를 설정하지 않았다.
     - 이럴 경우 default network interface에 binding된다.
     - 아래 예시의 경우 Docker로 실행했으므로 docker network상에서 docker container가 부여 받은 IP에 binding된다.
-
+    - 만약 `KAFKA_ADVERTISED_HOST_NAME`를 설정했다면 이 값이 설정된다(다만, `KAFKA_ADVERTISED_HOST_NAME`는 추후에 depreacted 될 예정이다).
+  
   ```yaml
   version: '3'
   
@@ -634,11 +633,58 @@
     - Broker는 `advertised.listeners` 값인 localhost를 반환한다.
     - Client는 broker로 부터 받은 metadata를 읽어 localhost로 요청을 보낸다.
     - 즉, broker는 B machine에서 실행중임에도 A machine으로 요청을 보내게 되고, A machine에는 Kafka가 실행중이 아니므로 요청은 실패하게 된다.
-  - 혹은 같은 client는 Docker container 밖에서, broker는 docker container로 실행된다면, 이 역시 문제가 될 수 있다.
+  - 또한 client는 Docker container 밖에서, broker는 docker container로 실행된다면, 이 역시 문제가 될 수 있다.
     - 예를 들어 IP가 11.22.33.44인 server에서 `KAFKA_ADVERTISED_LISTENERS`의 값을 `PLAINTEXT://my-kafka:29092`와 같이 설정하고, 29092 port를 pulbish하여 container를 실행했다고 가정해보자.
     - 이 때 container 외부에 있는 client는 broker container가 속한 docker network에 접근할 수 없으므로 server의 IP를 사용하여 `11.22.33.44:29092`로 요청을 보낸다.
     - 이 경우 bootstrap은 성공하여 broker로부터 metadata는 받아오며, metadata에는 `KAFKA_ADVERTISED_LISTENERS`에 설정한 `my-kafka:29092`가 담겨서 온다.
     - `my-kafka:29092`의 host에 해당하는 `my-kafka`는 docker network 내에서만 사용 가능하므로, docker network에 속하지 않은 client는 해당 listner로 요청을 보낼 수 없게 된다.
+
+
+
+- `listeners` 설정시 주의 사항
+
+  - 만약 Docker container로 Kafka를 실행할 경우 `listener`의 host로 localhost를 설정해선 안 된다.
+    - 예를 들어 아래와 같이 `EXTERNAL` listner의 host를 localhost로 설정했다고 가정해보자.
+
+  ```yaml
+  services:
+    kafka:
+      container_name: my_kafka
+      image: confluentinc/cp-kafka:7.5.3
+      ports:
+        - "9097:9092"
+      environment:
+        KAFKA_NODE_ID: 1
+        KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+        KAFKA_LISTENERS: INTERNAL://:29092,CONTROLLER://:29093,EXTERNAL://localhost:9092
+        KAFKA_ADVERTISED_LISTENERS: INTERNAL://:29092,EXTERNAL://localhost:9097
+        KAFKA_PROCESS_ROLES: 'broker,controller'
+        KAFKA_CONTROLLER_QUORUM_VOTERS: 1@my_kafka:29093
+        KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+        KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+        KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+        CLUSTER_ID: RhR3ORHBNfefcwNTJFEFM7HT
+  ```
+
+  - 이 때, 아래와 같이 컨테이너 외부(같은 서버라고 가정)에서 Kafka에 연결하려고 하면 연결이 실패한다.
+    - `kafka.errors.NoBrokersAvailable: NoBrokersAvailable` 에러가 발생한다.
+
+  ```python
+  from kafka import KafkaAdminClient
+  
+  
+  KafkaAdminClient(bootstrap_servers=["localhost:9097"])
+  ```
+
+  - 원인
+    - `listner`를 localhost에 바인딩하면 컨테이너 내부 루프백(127.0.0.1)에만 소켓이 열린다.
+    - Container를 생성할 때 9097 port를 9092 port로 포워딩을 했다고 하더라도 컨테이너 내부에서 127.0.0.1에만 바인딩되어 있으면 container IP로 들어오는 연결을 받지 못 해 접속이 거부된다.
+  - 해결
+    - 아래와 같이 container 외부에서 연결해야 하는 listener는 모든 인터페이스에 바인딩해야한다.
+
+  ```yaml
+  KAFKA_LISTENERS=INTERNAL://:29092,CONTROLLER://:29093,EXTERNAL://0.0.0.0:9092
+  ```
 
 
 
@@ -672,7 +718,7 @@
     - 첫 통신에서 이들은 event를 읽고 쓰기 위한 접속 정보인 `kafka0`라는 hostname을 받게 된다.
   - Docker network를 사용하지 않는 client
     - 이 client들은 `LISTENER_FRED` listener(localhost:9092)를 이용하여 Kafka와 통신하면 된다.
-    - 9092 port가 Docker container에 의해 expose되었기 때문에 localhost:9092를 통해 통신이 가능하다.
+    - 9092 port가 Docker container에 의해 publish되었기 때문에 localhost:9092를 통해 통신이 가능하다.
     - Client가 broker와 처음으로 통신할 때 localhost라는 hostname을 받게 된다.
 
 
