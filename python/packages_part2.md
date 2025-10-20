@@ -1643,6 +1643,84 @@ keep='last'
 
 
 
+- `pause_job()` 메서드를 실행해도 실행 중인 job이 정지되지는 않는다.
+
+  - 아래 코드를 실행해보면, 이미 실행중이던  job은 완료될 때까지 실행되고, 다음  job부터 실행되지 않는다.
+
+  ```python
+  from apscheduler.schedulers.background import BackgroundScheduler
+  import time
+  
+  
+  def my_method():
+      for i in range(15):
+          print(i)
+          time.sleep(1)
+  
+  # 스케줄러 생성
+  scheduler = BackgroundScheduler()
+  scheduler.add_job(my_method, 'interval', seconds=3, id="my_job")
+  scheduler.start()
+  
+  time.sleep(5)
+  # job 정지
+  scheduler.pause_job("my_job")
+  
+  # 프로그램이 종료되지 않도록 유지
+  try:
+      while True:
+          time.sleep(1)
+  except (KeyboardInterrupt, SystemExit):
+      scheduler.shutdown()
+  ```
+
+  - Job으로 객체의 메서드를 등록하고, 객체가 할당된 변수와 객체의 바인딩을 해제하더라도 job은 계속 실행된다.
+    - `job.func.__self__`를 통해 여전히 객체에 접근할 수 있다.
+    - `job.func`에는 job이 실행할 function이 저장되어 있다.
+    - 이는 `del`이 객체를 메모리에서 삭제시키는 것이 아니라 변수와 객체의 바인딩을 해제하는 키워드이기 때문이다.
+
+  ```python
+  from apscheduler.schedulers.background import BackgroundScheduler
+  import time
+  
+  
+  class MyClass:
+      def __init__(self, name):
+          self.name = name
+  
+      def my_method(self):
+          for i in range(15):
+              print(f"Hello from {self.name}! Running scheduled task. {i}")
+              time.sleep(1)
+  
+      def foo(self):
+          return f"Foo {self.name}"
+  
+  # 인스턴스 생성
+  my_instance = MyClass("Instance1")
+  
+  # 스케줄러 생성
+  scheduler = BackgroundScheduler()
+  scheduler.add_job(my_instance.my_method, 'interval', seconds=3, id="my_job")
+  scheduler.start()
+  job = scheduler.get_job(job_id="my_job")
+  
+  del my_instance
+  
+  print(job.func.__self__.foo())
+  
+  # 프로그램이 종료되지 않도록 유지
+  try:
+      while True:
+          time.sleep(1)
+  except (KeyboardInterrupt, SystemExit):
+      scheduler.shutdown()
+  ```
+
+
+
+
+
 
 
 # Linter & formmater

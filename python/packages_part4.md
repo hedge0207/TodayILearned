@@ -1481,7 +1481,43 @@
   decorated()
   ```
 
+
+
+
+
+
+# cryptography
+
+- cryptography
+
+  - 암호화를 위한 Python package이다.
+    - 암호화를 위한 고수준 메서드들과 저수준 인터페이스를 제공한다.
+    - Python 3.8 이상부터 사용이 가능하다.
+  - 아래와 같이 설치한다.
+
+  ```bash
+  $ pip install cryptography
+  ```
+
+  - 예시
+
+  ```python
+  from cryptography.fernet import Fernet
   
+  # key를 생성한다.
+  key = Fernet.generate_key()
+  f = Fernet(key)
+  
+  # 암호화
+  token = f.encrypt(b"A really secret message. Not for prying eyes.")
+  print(token)
+  
+  # 복호화
+  print(f.decrypt(token))
+  ```
+
+
+
 
 
 
