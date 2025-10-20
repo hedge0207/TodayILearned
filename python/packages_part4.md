@@ -2,12 +2,8 @@
 
 - Locust
   - Performance testing tool
-  - open source로 개발되었다.
-  - 이름이 locust인 이유는 메뚜기 떼가 농장을 습격하듯 사용자들이 웹 사이트를 습격한다고 하여 붙인 이름이다.
-
-
-
-- 특징
+    - open source로 개발되었다.
+    - 이름이 locust인 이유는 메뚜기 떼가 농장을 습격하듯 사용자들이 웹 사이트를 습격한다고 하여 붙인 이름이다.
   
   - 장점
     - Python code로 test scenario 작성이 가능하다.
@@ -20,7 +16,6 @@
   
   - 단점
     - 하드웨어 모니터링 기능이 없다.
-  
 
 
 
@@ -103,8 +98,8 @@
 
 - Locust의 기본적인 동작 과정은 다음과 같다.	
   - 설정한 사용자 수 만큼 User class의 instance를 생성한다.
-  - user instance는 각자의 green thread 안에서 동작을 시작한다.
-  - 각 user instance는 task를 선택하고, task를 실행한다.
+  - User instance는 각자의 green thread 안에서 동작을 시작한다.
+  - 각 User instance는 task를 선택하고, task를 실행한다.
   - 그 후 설정된 시간 만큼 대기한다.
   - 대기 시간이 끝나면 다시 다음 task를 선택하고, 실행한다.
 
@@ -843,8 +838,6 @@
 
 # contextlib
 
-## contextlib
-
 - `contextlib`
   - Python의 context manager를 보다 쉽게 선언할 수 있게 해주는 module이다.
     - 원래 Python에서 context manager를 선언하려면 `__enter__`와 `__exit__` method를 선언한 class가 있어야 한다.
@@ -1060,13 +1053,14 @@
     var = ContextVar('var', default=42)
     ```
 
-    - `.get([default])`
-      - 현재 context에 대한 context variable 값을 반환한다.
-      - 만약 context에 해당하는 context variable 값이 없을 경우 아래 순서로 값을 반환한다.
-      - `.get()` method 실행시 넘긴 defaul값
-      - `ContextVar`의 instance 생성시에 설정한 default 값
-      - 둘 다 없을 경우 `LookupError`가 raise된다.
-
+  - `.get([default])`
+  
+    - 현재 context에 대한 context variable 값을 반환한다.
+    - 만약 context에 해당하는 context variable 값이 없을 경우 아래 순서로 값을 반환한다.
+    - `.get()` method 실행시 넘긴 defaul값
+    - `ContextVar`의 instance 생성시에 설정한 default 값
+    - 둘 다 없을 경우 `LookupError`가 raise된다.
+  
     ```python
     import contextvars 
     
@@ -1080,11 +1074,12 @@
     var_with_default = contextvars.ContextVar("var", default=42)
     print(var_with_default.get())	# 42
     ```
-
-    - `.set(value)`
-      - Context variable에 현재 context에 대한 값을 설정한다.
-      - `.reset()` method를 통해서 variable을 이전의 값으로 되돌릴 수 있게 해주는 `Token` instance를 반환한다.
-
+  
+  - `.set(value)`
+  
+    - Context variable에 현재 context에 대한 값을 설정한다.
+    - `.reset()` method를 통해서 variable을 이전의 값으로 되돌릴 수 있게 해주는 `Token` instance를 반환한다.
+  
     ```python
     import contextvars 
     
@@ -1093,10 +1088,11 @@
     print(var.get())		# value
     print(type(token))		# <class 'Token'>
     ```
-
-    - `.reset(token)`
-      - Context variable을 `.set()` method를 통해 새로운 값이 설정되기 이전의 상태로 되돌린다.
-
+  
+  - `.reset(token)`
+  
+    - Context variable을 `.set()` method를 통해 새로운 값이 설정되기 이전의 상태로 되돌린다.
+  
     ```python
     from contextvars import ContextVar
     
@@ -1486,6 +1482,8 @@
 
 
 
+
+
 # cryptography
 
 - cryptography
@@ -1516,6 +1514,39 @@
   print(f.decrypt(token))
   ```
 
+
+
+
+- Fernet
+
+  - 대칭키 암호화를 제공하는 암호화 표준 중 하나이다.
+    - 대칭키 암호화이므로 암호화할 때와 복호화할 때 같은 비밀 키를 사용한다.
+    - 또한 인증된(authenticated) 암호화 방식으로 암호화할 뿐만 아니라 변조되었는지도 검증한다.
+  - 내부적으로 아래 정보를 결합한 포맷을 사용한다.
+    - version: Fernet의 버전.
+    - timestamp: 암호화된 시점(epoch 초 단위).
+    - IV(Initialization Vector): AES CBC에 쓰이는 초기화 벡터.
+    - ciphertext: AES-128-CBC로 암호화된 실제 데이터.
+    - HMAC: SHA256 기반의 메시지 인증 코드 (데이터 변조 검증용).
+
+  ```
+  | version | timestamp | IV | ciphertext | HMAC |
+  ```
+
+  - Fernet 키의 구조
+    - 32바이트(256비트)의 랜덤 값으로 구성되어 있으며, Base64로 인코딩된 문자열 형태로 표현된다.
+    - 키는 내부적으로 16바이트씩 두 부분으로 나뉘는데, 각 나뉜 부분은 AES 암호화용 키, HMAC 서명용 키이다.
+
+  ```python
+  from cryptography.fernet import Fernet
+  
+  key = Fernet.generate_key()
+  print(key)  	# b'LLYpQXhGo2dGxE2MGBc2GIVqUPeW1oOT9jGVEsOiF1E='
+  ```
+
+  - `decrypt()`시에 ttl(초 단위)값을 줄 수 있다.
+    - 만약 복호화하려는 메시지가 생성된지 ttl second 이상 지났을 경우 exception이 raise된다.
+    - 만약 주지 않을 경우 기본 값은 None이며, 이 경우 ttl은 무시된다.
 
 
 
