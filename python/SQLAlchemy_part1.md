@@ -236,6 +236,70 @@
 
 
 
+- Engine
+
+  - `Engine`은 SQLAlchemy application의 시작점이다.
+    - `Engine`은 `Dialect` 인스턴스와 `Pool` 인스턴스를 참조한다.
+    - 이 둘을 통해 DBAPI 모듈의 함수들과 DB의 동작 방식을 해석한다.
+  - 아래와 같이 생성이 가능하다.
+    - 아래 예시에서는 PostgreSQL을 위한 `Dialect` 인스턴스와 DBAPI와 연결을 위한 `Pool` 인스턴스를 생성하고 이를 참조한다.
+    - `Engine` instance를 직접 사용하거나 `Session`에 넘겨서 사용할 수 있다.
+
+  ```python
+  from sqlalchemy import create_engine
+  
+  engine = create_engine("postgresql+psycopg2://scott:tiger@localhost:5432/mydatabase")
+  ```
+  
+  - 아래와 같이  `connect()`나 `begin()` 메서드를 사용하여  DB와 연결한다.
+    - 둘의 차이는 `connect()`는 변경 사항을 자동으로 commit하지 않고,  `begin()`은 변경 사항을 자동으로 commit한다. 
+  
+  ```python
+  with engine.connect() as conn:
+      conn.execute(text("INSERT INTO users (name) VALUES ('Alice')"))
+  
+  with engine.begin() as conn:
+      conn.execute(text("INSERT INTO users (name) VALUES ('Alice')"))
+  ```
+
+
+
+- Engine disposal
+
+  - `Engine` 객체는 connection pool 객체를 참조한다.
+
+    - 따라서 `Engine` 객체가 남아있는 상황에서는 DB와의 connection도 유지된다.
+    - 그러나 `Engine` 객체가 garbage collect 되면 connection pool 객체에 대한 참조가 사라지게 되는데, 이 때 check out 된 연결(connection pool로부터 받아온 연결)이 없다면 connection pool도 garbage collect된다.
+
+  - `Engine`은 application과 lifespan을 함께 하도록 설계되었다.
+
+    - 즉 매 connection마다 생성되고  dispose되도록 설계된 것이 아니다.
+    - `Engine`은 connection pool과 connection에 대한 정보, DB와 DBAPI에 대한 설정 정보를 저장하기 위한 저장소로 고안되었다.
+
+  - 그러나 경우에 따라서는 `Engine`이 참조하고 있는 모든 정보들을 완전히 없애야 할 수도 있다.
+
+    - Python의  GC는 참조 횟수를 기반으로 발생하기에, `Engine`이 의존하는 정보를 없애기 위하 Python의 GC에 의존하는 것은 좋은 생각이 아니다.
+    - 따라서 명시적으로 이를 수행해야 하는데, 이를 위해 `Engine`은  `dispose()` 메서드를 지원한다.
+
+    - 이 메서드가 실행되면 `Engine`이 참조하고 있는 connection pool이 비어 있는 새로운 connection pool로 대체된다.
+
+  - `Engine.dispose()` 호출하는 것이 적절한 상황은 아래와 같다.
+
+    - Connection pool에서 가지고 있는 connection들이 모두 추후에 사용되지 않을 것으로 예상돼 반환하고자 하는 경우.
+    - Program이 multi processsing 혹은 `fork()`를 사용하고 `Engine` instance가 자식 process에 복사었을 때 fork된  process를 위한 connection pool을 생성하고자 하는 경우.
+    - 테스트 코드에서 사용하는 경우.
+    - Multitenancy 환경이거나 `Engine`을 잠깐 사용하고 마는 경우.
+
+  - `Engine.dispose()`는 오직 check in 상태인  connection에만 영향을 미친다.
+    - `Engine.dispose()`를 호출됐거나 GC가 발생하여 connection pool instance가 GC될 때 check out 상태의 connection은 반환되지 않을 수 있다.
+    - Check out 상태의 connection은 application 내의 다른 부분에서 참조하고 있을 수 있기 때문으로, 해당 connection에 대한 참조가 완전히 사라지면 orphan 상태가 된 connection pool로 반환되며 해당 pool에 대한 참조 역시 사라졌을 때에야 GC가 실행되어 완전히 사라진다.
+    - 이 과정은 제어하기가 쉽지 않기 때문에, `Engine.dispose()`는 모든 체크아웃된 커넥션이 풀에 반환(check-in) 되었거나 풀과의 연결이 완전히 해제(de-associated)된 이후에 호출하는 것을 강력히 권장한다.
+  - 만약 connection pooling이 application에 부정적인 영향을 미치는 경우 connection pooling을 비활성화하는 것도 하나의 대안이 될 수 있다.
+    - 이 경우, 새로운 커넥션을 생성할 때 약간의 성능 저하만 발생할 수는 있다. 
+    - 그러나 커넥션이 check in 될 때 해당 연결은 완전히 종료 되고 메모리에 보관되지 않는다.
+
+
+
 
 
 ## Session
@@ -807,5 +871,4 @@
   # table 생성
   some_table = Table("some_table", metadata, autoload_with=engine)
   ```
-
 
