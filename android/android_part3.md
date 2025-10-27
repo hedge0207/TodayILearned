@@ -144,3 +144,278 @@
   requestPermissionLauncher.launch("android.permission.ACCESS_FINE_LOCATION")
   ```
 
+
+
+
+
+
+
+# 다양한 다이얼로그
+
+- Dialog
+  - 사용자와 상호작용하는 대화 상자를 의미한다.
+  - 대표적인 다이얼로그들은 아래와 같다.
+    - 토스트
+    - 날ㄷ짜 또는 시간 입력
+    - 알림 창
+  - 개발자가 직접 커스텀 다이얼로그를 구성하는 것도 가능하다.
+
+
+
+- 토스트 메시지 띄우기
+
+  - 토스트(Toast)는 화면 아래쪽에 잠깐 보였다가 사라지는 문자열을 의미한다.
+    - 사용자에게 간단한 메시지로 특정한 상황을 알릴 때 사용한다.
+    - 토스트를 사용하는 대표적인 예로 사용자가 폰의 뒤로 가기 버튼을 눌러 앱을 종료될 때 "종료하려면 한 번 더 누르세요." 메시지가 출력되는 것을 들 수 있다.
+  - 토스트는 `Toast.makeText()` 함수로 만든다.
+    - 두 번째 매개변수는 출력할 문자열이며, 세 번째 매개 변수는 토스트가 화면에 출력되는 시간이다.
+    - 세 번째 매개 변수는 일반적으로 `Toast.LENGTH_SHORT`, `Toast.LEGNTH_LONG` 상수를 사용하며, 각기 3초, 5초이다.
+
+  ```kotlin
+  open static fun makeText(context: Context!, text: CharSequence!, duration: Int): Toast!
+  
+  open static fun makeText(context: Context!, resId: Int, duration: Int): Toast!
+  ```
+
+  - 토스트의 출력은 `show()` 함수를 사용하여 화면에 출력한다.
+
+  ```kotlin
+  val toast = Toast.makeText(this, "종료하려면 한 번 더 누르세요.", Toast.LENGTH_SHORT)
+  toast.show()
+  ```
+
+  - 토스트는 `makeText()` 함수 이외에도 아래의 세터 함수로 만들 수도 있다.
+
+  ```kotlin
+  // 화면에 출력될 시간 설정
+  open fun setDuration(duration: Int): Unit
+  // 화면에 출력될 위치 설정
+  open fun setGravity(gravity: Int, xOffset: Int, yOffset: Int): Unit
+  // 화면에 출력될 위치 설정
+  open fun setMargin(horizontalMargin: Float, verticalMargin: Float): Unit
+  // 화면에 출력될 문자열 설정
+  open fun setText(resId: Int): Unit
+  ```
+
+  - 토스트가 화면에 출력되거나 사라지는 순간을 콜백으로 감지해 특정 로직을 수행하게 할 수도 있다.
+    - 이 콜백 기능은 API 레벨 30 버전에서 추가되었다.
+    - 토스트의 콜백을 등록하려면 `Toast.Callback` 타입의 객체를 토스트 객체의 `addCallback()` 함수로 등록하면 된다.
+    - 토스트가 화면에 출력될 때 `Toast.Callback` 객체의  `onToastShown()` 함수가, 화면에서 사라질 때 `onToastHidden()` 함수가 자동으로 호출된다.
+
+  ```kotlin
+  @RequiresApi(Build.VERSION_CODES.R)
+  fun showToast() {
+      val toast = Toast.makeText(this, "종료하려면 한 번 더 누르세요.", Toast.LENGTH_SHORT)
+      toast.addCallback(
+          object: Toast.Callback() {
+              override fun onToastHidden() {
+                  super.onToastHidden()
+                  Log.d("foo", "toast hidden")
+              }
+              
+              override fun onToastShown() {
+                  super.onToastShown()
+                  Log.d("foo", "toast shown")
+              }
+          })
+      toast.show()
+  }
+  ```
+
+
+
+
+- 날짜 또는 시간 입력 받기
+
+  - Picker 다이얼로그
+    - 앱에서 사용자에게 날짜나 시간을 입력받는 데 사용하는 다이얼로그를 피커 다이얼로그라고 한다.
+    - 날짜를 입력 받을 때는 `DatePickerDialog`를, 시간을 입력 받을 때는 `TimePickerDialog`를 사용한다.
+  - 날짜를 입력받는 데이트 피커 다이얼로그의 생성자는 아래와 같다.
+    - 두 번째 매개변수로 `DatePickerDialog.OnDateSetListener` 구현 객체를 등록하면 다이얼로그에서 사용자가 설정한 날짜를 콜백 함수로 얻을 수 있다.
+    - 나머지 Int 타입의 매개 변수는 처음에 보이는 날짜이다.
+    - `month` 값은 0부터 11까지 지정되며, 0은 1월을 의미한다.
+
+  ```kotlin
+  DatePickerDialog(context: Context, listener: DatePickerDialog.OnDateSetListener?, year: Int, month: Int, dayOfMont: Int)
+  ```
+
+  - 데이트 피커 다이얼로그 사용 예시
+
+  ```kotlin
+  DatePickerDialog(this, object: DatePickerDialog.OnDateSetListener {
+      override fun onDateSet(datePicker: DatePicker?, year: Int, month: Int, dayOfMonth: Int) {
+          Log.d("foo", "yaer: $year, month: ${month+1}, dayOfMont: $dayOfMonth")
+      }
+  }, 2025, 8, 16).show()
+  ```
+
+  - 시간을 입력 받는 타임 피커 다이얼로그의 생성자는 아래와 같다.
+    - 두 번째 매개변수로 `TimePickerDialog.OnTimeSetListener`를 구현한 객체를 지정하면 사용자가 다이얼로그에서 설정한 시간을 얻을 수 있으며 처음에 보일 시간을  Int 타입으로 설정할 수 있다.
+    - 마지막 매개 변수로 시간을 24시간과 12시간 형태 중 어떤 것으로 출력할 것인지를 지정한다.
+    - false로 지정해 12시간 형태로 출력하면 오전/오후를 선택하는 부분이 출력된다.
+
+  ```kotlin
+  TimePickerDialog(context: Context!, listenr: TimePickerDialog.OnTimeSetListener!, hourOfDay: Int, minute: Int, is24HourView: Boolean)
+  ```
+
+  - 타임 피커 다이얼로그 사용 예시
+
+  ```kotlin
+  TimePickerDialog(this, object: TimePickerDialog.OnTimeSetListener {
+      override fun onTimeSet(timePicker: TimePicker?, hourOfDay: Int, minute: Int) {
+          Log.d("foo", "time: $hourOfDay, minute: $minute")
+      }
+  }, 15, 0, true).show()
+  ```
+
+
+
+- 알림 창 띄우기
+
+  - 안드로이드 다이얼로그의 기본은 `AlertDialog`이다.
+    - 알림 창은 단순히 메시지만 출력할 수도 있고 다양한 화면을 출력할 수도 있다.
+    - 앞에서 살펴본 데이트 피커와 타임 피커도 `AlertDialog`의 하위 클래스이며 각각의 화면에 데이트 피커와 타임 피커를 출력한 다이얼로그이다.
+  - 알림 창은 크게 3가지 영역으로 구분된다.
+    - 제목, 내용, 버튼 영역으로 구분된다.
+    - 그런데 이 세 영역이 항상 모두 보이는 것은 아니다.
+    - 알림 창을 설정할 때 제목과 버튼 정보를 지정하지 않았다면 내용 영역만 출력된다.
+  - `AlertDialog.Builder`
+    - 알림창의 생성자는 접근 제한자가  protected로 선언되어 객체를 직접 생성할 수 없다.
+    - 그 대신 `AlertDialog.Builder`를 제공하므로 이 빌더를 이용해 알림 창을 만든다.
+    - 먼저  `AlertDialog.Builder` 객체를 생성하고, 빌더의 세터 함수로 알림 창의 정보를 지정한다.
+
+  ```kotlin
+  AlertDialog.Builder(context: Context!)
+  ```
+
+  - 아래 함수들은 알림 창의 아이콘, 제목, 내용을 지정하는 함수이다.
+
+  ```kotlin
+  open fun setIcon(iconId: Int): AlertDialog.Builder!
+  
+  open fun setTitle(title: CharSequence!): AlertDialog.Builder!
+  
+  open fun setMessage(message: CharSequence!): AlertDialog.Builder!
+  ```
+
+  - 아래 함수들은 알림 창에 버튼을 지정하는 함수이다.
+    - 각 함수의 첫 번째 매개변수는 버튼의 문자열이며, 두 번째 매개변수는 사용자가 버튼을 클릭했을 때 처리할 이벤트 핸들러이다.
+    - 만약 버튼을 클릭했을 때 처리할 내용이 없다면 두 번째 매개변수에 null을 대입하며, null을 대입하더라도 버튼을 클릭하면 창이 닫힌다.
+    - 알림 창의 버튼은 최대 3개까지만 추가할 수 있으며, 만약 같은 함수를 여러 번 사용하면 버튼은 중복되어 하나만 나타난다.
+
+  ```kotlin
+  open fun setPositiveButton(text: CharSequence!, listener: DialogInterface.OnclickListener!): AlertDialog.Builder!
+  
+  open fun setNegativeButton(text: CharSequence!, listener: DialogInterface.OnclickListener!): AlertDialog.Builder!
+  
+  open fun setNeutralButton(text: CharSequence!, listener: DialogInterface.OnclickListener!): AlertDialog.Builder!
+  ```
+
+  - 버튼 함수를 위와 같이 세 개로 구분하는 이유는 이벤트 핸들러에서 어떤 버튼이 클릭되었는지 구분하기 위해서다.
+    - 각 이벤트에 해당하는 이벤트 핸들러를 따로 만들 수도 있지만, 한 알림 창의 버튼 이벤트를 하나의 이벤트 핸들러에서 모두 처리할 수도 있다.
+    - 이때 어떤 버튼이 클릭되었는지를 구분해야 하는데, 셋 중 어떤 함수를 사용했는지에 따라 이벤트 핸들러에 전달되는 매개변수 값이 달라서 그 값으로 구분한다.
+    - 알림 창을 클릭했을 때 호출되는  `onClick()` 함수의 두 번째 매개변수로 이벤트가 발생한 버튼을 알 수 있다.
+    - `setPositiveButton()` 함수로 만든 버튼은 이벤트 구분자가 `DialogInterface.BUTTON_POSITIVE`로 지정된다.
+    - `setNegativeButton()` 함수로 만든 버튼은 이벤트 구분자가 `DialogInterface.BUTTON_NEGATIVE`로 지정된다.
+
+  ```kotlin
+  val eventHandler = object: DialogInterface.OnClickListener {
+      override fun onClick(p0: DialogInterface?, p1: Int) {
+          if (p1 == DialogInterface.BUTTON_POSITIVE) {
+              Log.d("foo", "positive button click")
+          } else if (p1 == DialogInterface.BUTTON_NEGATIVE) {
+              Log.d("foo", "negative button click")
+          }
+      }
+  }
+  
+  // ...
+  setPositiveButton("OK", eventHandler)
+  setNegativeButton("Cancel", eventHandler)
+  ```
+
+  - 알림 창의 내용 영역에는 문자열을 출력하는  `setMessage()`말고도 다영한 함수를 사용이 가능하다.
+    - 목록을 제공하고, 목록 중 하나를 선택하는 알림 창을 만들고자 한다면 아래 함수를 이용하면 된다.
+
+  ```kotlin
+  open fun setItems(items: Array<CharSequence!>!, listener: DialogInterface.OnClickListener!): AlertDialog.Builder!
+  
+  open fun setMultiChoiceItems(items: Array<CharSequence!>!, checkItems: BooleanArray!, listener: DialogInterface.OnMultiChoiceClickListener!): AlertDialog.Builder!
+  
+  open fun setSingleChoiceItems(items: Array<CharSequence!>!, checkedItem: Int, listener: DialogInterface.OnClickListener!): AlertDialog.Builder!
+  ```
+
+  - 목록을 출력하는 알림창 예시
+    - `setItems()` 함수의 두 번째 매개변수는 항목을 선택할 때의 이벤트 핸들러이며 사용자가 항목을 선택하면  `OnClick()` 함수가 자동으로 호출된다.
+    - 사용자가 선택한 항목의 index는 `onClick()` 함수의 두 번째 매개변수로 전달된다.
+
+  ```kotlin
+  val items = arrayOf<String>("foo", "bar", "baz", "qux")
+  AlertDialog.Builder(this).run {
+      setTitle("items test")
+      setIcon(android.R.drawable.ic_dialog_info)
+      setItems(items, object: DialogInterface.OnClickListener {
+          override fun onClick(p: DialogInterface?, p1: Int) {
+              Log.d("foo", "선택된 문자열: ${items[p1]}")
+          }
+      })
+      setPositiveButton("닫기", null)
+      show()
+  }
+  ```
+
+  - 체크박스 사용하기
+    - `setMultiChoiceItems()` 함수는 다중 선택을 위한 체크박스가 함께 출력되는 항목을 만들어준다.
+    - 두 번째 매개변수로 처음 체크 상태를 지정한다.
+    - 세 번째 매개변수가 항목을 선택할 때의 이벤트 핸들러이며 사용자가 항목을 선택하는 순간 `onClick()` 함수가 자동으로 호출된다.
+    - `onClick()` 함수의 두 번째 매개변수로 선택한 항목의 인덱스가 전달되며 세 번째 매개변수로 체크 상태가 전달된다.
+
+  ```kotlin
+  setMultiChoiceItems(items, booleanArrayOf(true, false, true, false), object: DialogInterface.OnMultiChoiceClickListener{
+      override fun onClick(p0: DialogInterface?, p1: Int, p2: Boolean) {
+          Log.d("foo ${items[p1]}이 ${if(p2) "선택되었습니다." else "해제되었습니다."}")
+      }
+  })
+  ```
+
+  - 라디오 버튼 사용하기
+    - `setSingleChoiceItems()` 함수는 하나만 선택할 수 있는 라디오 버튼으로 구성된 항목을 만들어준다.
+    - 두 번째 매개변수로 처음 선택할 항목을 지정한다.
+
+  ```kotlin
+  setSingleChoiceItems(items, 1, object: DialogInterface.OnClickListener {
+      override fun onClick(p0: DialogInterface?, p1: Int) {
+          Log.d("foo", "${items[p1]} 이 선택되었습니다.")
+      }
+  })
+  ```
+
+  - 알림 창의 속성을 설정하는 함수들
+    - 두 함수 모두 사용자의 행동에 따라 알림 창을 닫을 것인지를 설정한다.
+    - `setCancelable()` 함수는 사용자가 기기의 뒤로 가기 버튼을 눌렀을 때 창을 닫는다.
+    - `setCanceledOnTouchOutside()` 함수는 알림 창의 바깥 영역을 터치했을 때 매개 변수가  true면 닫고, false면 닫지 않는다(기본 값은  true).
+    - `setCancelable()`는 `AlertDialog.Builder` 클래스의 메서드이고, `setCanceledOnTouchOutside()`는 `Dialog` 클래스의 메서드이다.
+
+  ```kotlin
+  open fun setCancelable(cancelable: Boolean): AlertDialog.Builder!
+  
+  open fun setCanceledOnTouchOutside(cancel: Boolean): Unit
+  ```
+
+  - 알림 창 속성 예시
+
+  ```kotlin
+  AlertDialog.Builder(this).run {
+      setTitle("items test")
+      setIcon(android.R.drawable.ic_dialog_info)
+      setItems(items, object: DialogInterface.OnClickListener {
+          override fun onClick(p: DialogInterface?, p1: Int) {
+              Log.d("foo", "선택된 문자열: ${items[p1]}")
+          }
+      })
+      setCancelable(false)
+      setPositiveButton("닫기", null)
+      show()
+  }.setCanceledOnTouchOutside(false)
+  ```
+
