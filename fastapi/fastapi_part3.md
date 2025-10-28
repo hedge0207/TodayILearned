@@ -1139,6 +1139,90 @@
 
 
 
+- Uvicorn logging
+
+  - Uvicorn의 기본 로깅 설정은 아래와 같이 확인할 수 있다.
+
+  ```python
+  from uvicorn.config import LOGGING_CONFIG
+  
+  print(LOGGING_CONFIG)
+  ```
+
+  - 기본 설정은 아래와 같다.
+
+  ```python
+  {
+      "version": 1,
+      "disable_existing_loggers": False,
+      "formatters": {
+          "default": {
+              "()": "uvicorn.logging.DefaultFormatter",
+              "fmt": "%(levelprefix)s %(message)s",
+              "use_colors": None,
+          },
+          "access": {
+              "()": "uvicorn.logging.AccessFormatter",
+              "fmt": '%(levelprefix)s %(client_addr)s - "%(request_line)s" %(status_code)s',  # noqa: E501
+          },
+      },
+      "handlers": {
+          "default": {
+              "formatter": "default",
+              "class": "logging.StreamHandler",
+              "stream": "ext://sys.stderr",
+          },
+          "access": {
+              "formatter": "access",
+              "class": "logging.StreamHandler",
+              "stream": "ext://sys.stdout",
+          },
+      },
+      "loggers": {
+          "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
+          "uvicorn.error": {"level": "INFO"},
+          "uvicorn.access": {"handlers": ["access"], "level": "INFO", "propagate": False},
+      },
+  }
+  ```
+
+  - 위 변수의 값을 아래와 같이 변경하여 로깅 설정을 변경할 수 있다.
+
+  ```python
+  import uvicorn
+  from uvicorn.config import LOGGING_CONFIG
+  
+  LOGGING_CONFIG["formatters"]["default"]["fmt"] = "%(asctime)s %(levelprefix)s %(message)s"
+  LOGGING_CONFIG["formatters"]["default"]["datefmt"] = "%Y-%m-%d %H:%M:%S"
+  
+  uvicorn.run(
+      "main:app",
+      host="0.0.0.0",
+      port=8000
+  )
+  ```
+
+
+
+- Uvicorn의 logging 관련 설정
+  - `--log-config <path>`
+    - 로깅 설정 파일을 지정한다.
+    - 지원 형식: `dictConfig()` 포맷(`.json`, `.yaml`).
+    - 그 외 형식의 파일은 `fileConfig()` 방식으로 처리된다.
+    - 자동 감지되는 색상 출력 동작을 덮어쓰려면  `formatters.default.use_colors` 및 `formatters.access.use_colors` 값을 설정하면 된다.
+    - 만약 YAML 파일을 로깅 설정으로 사용하려면, 프로젝트에 `PyYAML` 패키지를 의존성으로 추가하거나 `uvicorn[standard]` 옵션으로 설치해야 한다.
+  - `--log-level <str>`
+    - 로그 레벨을 설정한다.
+    - 가능한 값: `critical`, `error`, `warning`, `info`(default), `debug`, `trace`
+  - `--no-access-log`
+    - 접근 로그(access log)만 비활성화한다(전체 로그 레벨에는 영향을 주지 않는다).
+  - `--use-colors` / `--no-use-colors`
+    - 로그 출력에 색상을 사용할지 여부를 지정한다.
+    - 설정하지 않으면 색상 사용 여부를 자동으로 감지한다.
+    - 단, `--log-config` 옵션을 사용한 경우에는 이 옵션이 무시된다.
+
+
+
 - Gunicorn으로 여러 개의 워커 실행하기
 
   - Fastapi는 내부적으로 uvicorn을 사용한다.
