@@ -49,6 +49,8 @@
   - docker-compose.yml 파일 작성하기
   
   > 전체 설정은 https://github.com/confluentinc/cp-demo의 docker-compose.yml 파일에서 확인 가능하다. 
+  >
+  > 설정에 대한 설명은 https://docs.confluent.io/platform/current/installation/docker/config-reference.html?utm_source=chatgpt.com에서 확인 가능하다.
   
   ```yaml
   connect:
@@ -173,8 +175,6 @@
         CONNECT_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
         CONNECT_INTERNAL_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
         CONNECT_INTERNAL_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
-        CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "true"
-        CONNECT_value_CONVERTER_SCHEMAS_ENABLE: "true"
         CONNECT_REST_ADVERTISED_HOST_NAME: "connect2"
         CONNECT_PLUGIN_PATH: "/usr/share/java"
     
@@ -201,8 +201,6 @@
         CONNECT_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
         CONNECT_INTERNAL_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
         CONNECT_INTERNAL_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
-        CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "true"
-        CONNECT_value_CONVERTER_SCHEMAS_ENABLE: "true"
         CONNECT_REST_ADVERTISED_HOST_NAME: "connect3"
         CONNECT_PLUGIN_PATH: "/usr/share/java"
   ```
@@ -410,9 +408,9 @@
 
 ## Kafka connect worker configuration
 
-> 전체 목록은 아래 문서 참조
+> 모든 worker에 공통적으로 적용되는 설정이다.
 >
-> https://docs.confluent.io/platform/current/connect/references/allconfigs.html
+> 전체 목록은 [링크](https://docs.confluent.io/platform/current/connect/references/allconfigs.html) 참조
 
 - `bootstrap.server`
   - Kafka cluster에 연결하기 위한 `host:port`의 배열을 받는다.
@@ -448,6 +446,25 @@
     - 해당 경로에 파일을 생성하고, 생성한 파일에 상태를 저장한다.
     - 이 옵션은 오직 standalone mode에서만 설정이 가능하며, distributed mode에서는 설정할 수 없다.
   - Connector가 삭제되더라도 파일은 삭제되지 않으며, 파일에 저장된 상태도 삭제되지 않는다.
+
+
+
+- `offset.flush.interval.ms`
+
+  - Task에 대한 offset을 commit하는 주기를 ms 단위로 설정한다.
+    - 기본 값은 60000이다.
+    - 너무 길 경우 offset이 적절하게 이루어지지 않을 위험이 있고, 너무 짧을 경우 성능이 떨어질 수 있다.
+  - Docker로 실행할 경우 아래와 같이 설정하면 된다.
+
+  ```yaml
+  services:
+    kafka-connect:
+      image: confluentinc/cp-kafka-connect:7.5.3
+      container_name: kafka-connect
+      environment:
+        # ...
+        CONNECT_OFFSET_FLUSH_INTERVAL_MS: 10000   # 10초마다 commit
+  ```
 
 
 
@@ -540,8 +557,13 @@
     - 반면에 source로부터 받아오는 data가 schema가 있는 data라 할지라도 `value.converter.schemas.enable`가 false라면 message에 schema는 담기지 않는다.
     - 만약 schema가 없는 data를 `value.converter.schemas.enable` option을 true로 설정하여 가져오려 할 경우 error가 발생한다.
     - `key.converter.schemas.enable`도 마찬가지다.
+  - 단 connector에 따라 `value.converter.schemas.enable`를 kafka connect container를 실행할 때 전역 설정으로 false로 설정해도 schema가 포함되는 경우가 있는데, JDBC source connector가 대표적이다.
+    - 이는 JDBC source connector가 기본적으로 json converter를 사용하고, `value.converter.schemas.enable`를 활성화 한 상태로 실행되기 때문이다.
+    - 그러나 이 경우에도, jdbc source connector를 생성할 때 `value.converter`를 `org.apache.kafka.connect.json.JsonConverter`로 설정하고, `value.converter.schemas.enable`를 false로 설정하면 schema가 포함되지 않는다.
+    - `value.converter.schemas.enable`만 false로 설정하면 schema가 포함된다는 것에 주의해야 한다.
+    
   - 예를 들어 아래와 같이 table 을 생성하고 data를 넣은 후에
-
+  
   ```sql
   CREATE TABLE product (
     id INT NOT NULL,
@@ -552,16 +574,16 @@
   
   INSERT INTO product (id, name) VALUES (0, 'iPad');
   ```
-
+  
   - 아래와 같이 설정하여 Kafka Connect를 실행하고
 
   ```properties
   value.converter=org.apache.kafka.connect.json.JsonConverter
   value.converter.schemas.enable=true
   ```
-
+  
   - 이를 source connector로 가져오면 message의 value는 아래와 같이 구성된다.
-
+  
   ```json
   {
   	"schema": {
@@ -595,17 +617,17 @@
   	}
   }
   ```
-
+  
   - 반면에 아래와 같이 설정하여 Kafka Connect를 실행하고
 
   ```properties
   value.converter=org.apache.kafka.connect.json.JsonConverter
   value.converter.schemas.enable=false
   ```
-
+  
   - 이를 source connector로 가져오면 message의 value는 아래와 같이 구성된다.
     - schema/payload 구조가 아닌 row의 값만 가져오는 것을 확인할 수 있다.
-
+  
   ```json
   {
   	"id": 0,
