@@ -1254,12 +1254,13 @@
   - Float 값으로 된 dense vector들을 저장하기 위한 field이다.
     - 7.3 version에 추가되었다.
     - 원래 최대 dimension 값이 2048이었으나 8.11 version부터는 4096까지 가능해졌다.
+    - 8.11 버전 전까지는 required 값이었으나, 이후부터는 처음 색인되는 vector의 dimension이 기본값으로 설정된다.
     - 이 field는 정렬과 집계의 대상이 될 수 없다.
     - 주로 kNN search에 사용한다.
   - 아래와 같이 색인하면 된다.
     - 별도로 mapping을 설정하지 않은 채 float으로 구성된 128에서 4096 사이의 크기를 가지는 array 값을 색인할 경우 자동으로 `dense_vector` field로 색인된다.
     - 아래에서 설명할 parameter들 중 `dims`를 제외하면 전부 8.0에서 추가됐다.
-
+  
   ```json
   // PUT my-index
   {
@@ -1278,7 +1279,7 @@
     "my_vector" : [0.5, 10, 6]
   }
   ```
-
+  
   - `element_type`
     - Vector를 encoding하기 위한 type을 지정한다.
     - float과 byte를 지원하며, 기본 값은 `float`이다.
@@ -1291,6 +1292,7 @@
   - `index`
     - 만약 true일 경우 kNN search API를 사용할 수 있으나 색인 시간이 상당히 증가한다.
     - 기본 값은 true이다.
+    - false로 설정할경우 binary doc values로만 저장된다.
   - `index_options`
     - HNSW algorithm은 자료 구조가 어떻게 생성될지 결정하는 두 개의 parameter를 가지고 있다.
     - 이들은 결과의 정확성과 검색 속도 사이의 trade-off를 조절한다.
@@ -1301,7 +1303,8 @@
     - kNN search에서 vector 유사도를 판단하는 데 사용할 지표를 설정한다.
     - 각 document의 `_score` 값은 similarity 값으로 대체된다.
     - `index`가 true로 설정되었을 때만 설정이 가능하다.
-    - 기본값은 `cosine`이다.
+    - 만약 `element_type`이 bit일 경우 기본 값은 `l2_norm`이며, 아닐 경우 기본값은 `cosine`이다.
+    - `dot_product`를 사용하기 위해서는 vector가 정규화된 상태여야한다.
 
 
 

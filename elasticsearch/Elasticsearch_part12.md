@@ -1854,43 +1854,17 @@
 
 ## 유사도 검색
 
-- Elasticsearch의 유사도 검색
-
-  - Elasticsearch는 7.3부터 `dense_vector` field를 지원한다.
-
-    - 마찬가지로 7.3부터 `script_score` query에서 `cosine_similarity` 함수를 지원한다.
-
-  - 8.0부터 `_search` API에서 `kNN` search를 지원한다.
-
-  - 8.0부터 ANN(Approximate Nearest Neighbor) 검색을 지원한다.
-
-    - 저차원 vector에서 kNN에 활용하기 위한 KD-trees라는 자료구조가 있다.
-    - Elasticsearch에는 지리 data나 숫자 data를 처리하기 위해 이미 KD-trees가 내장되어 있다.
-
-    - 그러나, 현대의 text 또는 image embedding model들은 대부분 100~1000 사이, 혹은 그 이상의 고차원 vector를 생성한다.
-    - 이렇게 큰 차원에서는 가까운 이웃을 찾는 것이 쉽지 않다.
-
-  - ANN
-    - Approximate Nearest Neighbor algorithm은 Nearest Neighbor algorithm에서 정확도를 희생하여 속도를 개선시킨 algorithm이다.
-    - 항상 정확한 k개의 가장 가까운 vector를 반환하지는 않는다.
-    - 그러나 효율적으로 동작하며, 성능을 유지하면서 거대한 data를 scaling할 수 있게 해준다.
-    - ANN algorithm은 학술적으로 매우 활발히 연구되고 있어 많은 algorithm들이 나와 있다.
-    - 이 algorithm들은 일반적으로 검색 속도와 구현의 복잡성 그리고 색인 속도에서 서로 다른 trade-off를 가지고 있다.
-    - Elasticsearch에서는 HNSW(Hierarchical Navigable Small World graphs) algorithm을 사용한다.
-    - HNSW는 여러 ANN algorithm들을 대상으로 한 benchmark에서 뛰어는 검색 성능을 보여 줬으며, 이미 많은 업계에서 널리 사용되고 있다.
-
-
-
 ### Script score query
 
 - Script score query
 
   - 검색 결과로 반환된 document들의 점수를 script를 사용하여 변경하는 query이다.
     - 아래와 같이 `script_score` 내부의 `query`로 문서들을 검색하고, `script`로 검색된 문서들의 점수를 조정한다.
+    - `script_score.query`를 입력하지 않을 경우 `match_all`로 설정된다.
     - 주의할 점은 최종 점수가 음수일 수는 없다는 것인데, 이는 Lucene이 score를 0 미만으로 설정할 수 없게 되어있기 때문이다.
     - `min_score`는 여기에 설정한 점수 보다 낮은 점수를 가진 document는 반환되지 않게 하기 위한 option이다.
     - `boost`는 `script`에 의해 계산 된 점수에 곱해 최종 점수를 구할 때 사용한다(즉, 최종 점수는 `script가 산출한 점수 * boost`가 된다).
-
+  
   ```json
   // GET /_search
   {
@@ -1907,9 +1881,9 @@
       }
   }
   ```
-
+  
   - 아래와 같이 `_score`를 사용하여 document의 원래 `_score` 값에 접근하는 것이 가능하다.
-
+  
   ```json
   // GET /_search
   {
@@ -1925,14 +1899,14 @@
       }
   }
   ```
-
+  
   - 주의 사항
-
+  
     - 비용이 많이 드는 query이므로 `search.allow_expensive_queries`가 false로 설정되어 있다면 사용할 수 없다.
-
+  
     - `script`를 변경할 때 마다 다시 컴파일해야 하므로, `script`내에서 빈번히 변경되는 값은 `params`로 따로 빼 놓으면 불필요한 컴파일을 막을 수 있다.
     - 특정 document에 script에 사용하는 field의 값이 없는 경우를 check하고자 한다면, 아래와 같이 작성하면 된다.
-
+  
   ```json
   "script" : {
       "source" : "doc['field'].size() == 0 ? 1 : doc['field'].value() * 2",
