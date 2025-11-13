@@ -419,3 +419,119 @@
   }.setCanceledOnTouchOutside(false)
   ```
 
+
+
+
+- 소리와 진동 알림
+
+  - 소리 알림
+
+    - 사용자에게 짧은 소리로 특정한 상황을 알릴 때 사용하는 알림이다.
+
+    - 알림은 자체 녹은한 음원을 쓸 수도 있지만 안드로이드 시스템에 등록된 소리를 사용할 수도 있다.
+
+  - 안드로이드 시스템에 등록된 소리를 이용하는 방법.
+
+    - 안드로이드 시스템은 알림, 알람, 벨소리 등의 소리를 제공하며 이 소리는  `RingtoneManager`로 얻을 수 있다.
+    - `RingtoneManager.getDefaultUri()` 메서드를 사용해 소리의 식별값을 얻는다.
+    - 소리의 식별값은  `Uri` 객체이며, 이 값을 `RingToneManager.getRingtone()` 메서드의 두 번째 파라미터로 전달하면 소리를 재생하는 `RingTone` 객체를 얻을 수 있다.
+    - `RingTone.play()` 메서드를 호출하면 소리가 재생된다.
+
+  ```kotlin
+  val notification: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+  val ringtone = RingToneManager.getRingtone(applicationContext, notification)
+  ringtone.play()
+  ```
+
+  - 자체적으로 준비한 소리를 이용하는 방법.
+    - 음원 파일은 리소스로 등록해서 사용해야 하며, 리소스 디렉터리는 `res/raw`이다.
+    - 음원을 재생하는 클래스는  `MediaPlayer`이며,  `MediaPlayer.start()` 메서드를 호출하면 음원이 재생된다.
+
+  ```kotlin
+  val player: MediaPlayer = MediaPlayer.create(this, R.raw.fallbackring)
+  player.start()
+  ```
+
+  - 진동 알림
+    - 앱에서 진동을 울리게 하려면 먼저 manifest 파일에  `<uses-permission>`으로 퍼미션을 얻어야 한다.
+
+  ```xml
+  <uses-permission android:name="android.permission.VIBRATE" />
+  ```
+
+  - 진동은  `Vibrator` 클래스를 이용한다.
+    - `Vibrator` 객체를 얻는 방법이 API 레벨 31(Android 12)부터 변경되었다.
+    - 이전 버전에서는 `VIBRATOR_SERVICE`로 식별되는 시스템 서비스를 이용했지만, 31버전부터는 `VIBRATOR_MANAGER_SERVICE`로 식별되는 `VibratorManager`라는 시스템 서비스를 얻고 이 서비스에서  `Vibrator`를 이용해야 한다.
+
+  ```kotlin
+  val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      val vibratorManager = this.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+      vibratorManager.defaultVibrator;
+  } else {
+      getSystemService(VIBRATOR_SERVICE) as Vibrator
+  }
+  ```
+
+  - 시간과 패턴을 지정해서 진동 울리기(API 레벨 1부터 제공하는 함수)
+    - API 레벨 1부터 제공한 진동 알림 함수가 26 버전(Android 8)에서  deprecated 되었다.
+    - 26 버전에서 새로운 함수를 제공하지만 이전 버전의 기기 사용자를 위해 여전히 사용해야한다.
+    - API 레벨 1부터 제공했다가  deprecated 된 진동 알림 함수는 아래와 같다.
+    - 첫 번째 함수의 매개 변수는 진동이 울리는 시간을 의미한다.
+    - 두 번째 함수는 진동을 반복해서 울리는 함수로 첫 번째 매개변수에는 진동 패턴을 배열로 지정하고, 두 번째 매개변수에는 이 패턴을 얼마나 반복할지를 지정한다.
+
+  ```kotlin
+  open fun vibrate(milliseconds: Long): Unit
+  
+  // 만약 pattern 파라미터에 500, 1000, 500, 2000을 넘기면 0.5초 쉬고 1초 울리고, 0.5초 쉬고 2초 울린다.
+  // 두 번째 매개변수를 -1로 지정하면 반복하지 않고 패턴대로 한 번만 진동이 울리고, 0으로 지정하면 코드에서 cancel() 함수로 진동 알림을 끄지 않는 한 패턴대로 계속 울린다.
+  open fun vibrate(pattern: LongArray!, repeat: Int): Unit
+  ```
+
+  - 진동의 세기까지 지정해 진동 울리기(API 레벨 26부터 제공하는 함수)
+    - API 레벨 26부터는 진동 정보를 `VibrationEffect` 객체로 지정할 수 있는 `vibrate()` 함수를 제공한다.
+    - `VibrationEffect` 객체로는 진동이 울리는 시간 외에도 진동의 세기까지 제어할 수 있다.
+
+  ```kotlin
+  open fun vibrate(vibe: VibrationEffect!): Unit
+  ```
+
+  - `createOneShot()` 함수로 `VibrationEffect` 객체를 생성할 수 있다.
+    - 이 함수로 만든 `VibrationEffect` 객체를 `vibrate`의 파라미터로 넘기면 `createOneShot()` 함수의 첫 번째 매개변수로 설정한 시간 만큼 진동이 울린다.
+    - 두 번째 매개변수를 이용해 진동의 세기를 지정할 수 있으며, 진동의 세기는 0~255 사이의 숫자로 표현한다.
+    - 0으로 지정하면 진동이 울리지 않고, 255는 기기에서 지원하는 가장 강한 강도로 울린다.
+    - 숫자를 직접 대입해도 되고,  `VibrationEffect.DEFAULT_AMPLITUDE`와 같은 상수를 지정해 기기가 정의한 기본 세기로 진동이 울리게 할 수도 있다.
+
+  ```kotlin
+  open static fun createOneShot(milliseconds: Long, amplitude: Int): VibrationEffect!
+  ```
+
+  - 진동 예시
+
+  ```kotlin
+  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      vibrator.vibrate(
+      	VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE))
+  } else {
+      vibrator.vibrate(500)
+  }
+  ```
+
+  - `createWaveform()` 함수를 사용하면 반복해서 진동을 울릴 수 있다.
+    - 첫 번째 매개변수는 마찬가지로 진동이 울리는 시간 패턴의 배열이다
+    - 두 번째 매개변수는 진동 세기 패턴의 배열이다.
+    - 세 번째 매개변수는 이 패턴의 반복 횟수이다.
+
+  ```kotlin
+  // createWaveform 함수
+  open static fun createWaveform(timings: LongArray!, amplitudes: IntArray!, repeat: Int): VibrationEffect!
+  
+  
+  // 예시, 처음 0.5초 동안 진동이 울리지 않고, 1초간 50만큼의 세기로 울리고, 다시 0.5초간 울리지 않고, 다시 2초간 200만큼의 세기로 울린다.
+  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      vibrator.vibrate(
+      	VibrationEffect.createWaveform(longArrayOf(500, 1000, 500 2000), intArrayOf(0, 50, 0, 200), 		-1))
+  } else {
+      vibrator.vibrate(longArrayOf(500, 1000, 500, 2000), -1)
+  }
+  ```
+
