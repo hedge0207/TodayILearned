@@ -535,3 +535,166 @@
   }
   ```
 
+
+
+- 알림 띄우기
+
+  - 알림(notification) 채널
+    - 상태바는 상단의 한 줄을 의미하며 배터리, 네트워크, 시간 등 시스템의 상태 정보가 출력된다.
+    - 이 상태바에 앱의 정보를 출력하는 것을 알림이라고 한다.
+    - API Level 33 버전부터는 앱에서 알림을 띄우기 위해 사용자에게 퍼미션을 요청해야한다.
+
+  ```xml
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  ```
+
+  - 원래 상태 바는 시스템에서 관리하며, 앱이 직접 제어할 수 없다.
+    - 그런데 앱에서 시스템에 의뢰하면 시스템에서 관리하는 상태 바에 앱의 알림을 출력할 수 있다.
+    - 따라서 앱의 화면을 구성하거나 사용자 이벤트를 처리하는 프로그래밍괴는 구조가 다르며 알림을 위해 시스템이 제공하는 API를 사용해야 한다.
+    - 알림은  `NotificationManager.notify()` 메서드로 발생한다.
+    - 이 메서드에는 `NotificationCompat.Builder`가 생성하는 `Notification` 객체(알림 정보가 저장되는 객체)를 파리미터로 전달한다.
+    - `Notification.Builder`를 생성할 때 `NotificationChannel` 객체를 파리미터로 전달해야한다.
+  - API 레벨 26(Android 8) 버전부터 `Notification.Builder`를 생성하는 방법이 변경되었다.
+    - 26 버전 이전까지는 `NotificationChannel` 정보가 필요 없었다. 
+    - 그러나 26 버전부터 변경되었다.
+
+  ```kotlin
+  // 26 버전에서 deprecated 된 생성자.
+  Builder(context: Context!)
+  
+  // 26 버전에서 변경된 생성자.
+  Builder(context: Context!, channelId: String!)
+  ```
+
+  - 채널
+    - API 레벨 26 버전에서 앱의 알림을 채널로 구분하기 위한 채널이라는 개념이 추가되었다.
+    - 사용자가 환경 설정에서 어떤 앱의 알림을 받을지 말지를 설정할 수 있다.
+    - 26 버전 이전까지는 채널이라는 개념이 없어 사용자가 설정에서 알림을 받지 않겠다고 설정하면 해당 앱의 모든 알림이 발생하지 않았다.
+    - 그러나 채널 개념을 도입하여 앱의 알림을 채널별로 구분할 수 있으며, 받고 싶은 채널의 알림만 선택해서 설정할 수 있다.
+
+  - `NotificationChannel`의 생성자
+    - `NotificationChannel`의 생성자는 채널의 식별값과 설정 화면에 표시할 채널 이름을 문자열로 지정한다.
+    - 세 번째 매개변수는 이 채널에서 발생하는 알림의 중요도이며 아래와 같은 상수로 지정한다.
+    - `NotificationManager.IMPORTANCE_HIGH`: 긴급 상황으로 알림음이 울리며 헤드업으로 표시.
+    - `NotificationManager.IMPORTANCE_DEFAULT`: 높은 중요도이며 알림음이 울림.
+    - `NotificationManager.IMPORTANCE_LOW`: 중간 중요도이며 알림음이 울리지 않음.
+    - `NotificationManager.IMPORTANCE_MIN`: 낮은 중요도이며 알림음도 없고 상태 바에도 표시되지 않음.
+
+  ```kotlin
+  NotificationChannel(id: String!, name: CharSequence!, importance: Int)
+  ```
+
+  - 채널의 각종 정보를 설정하는 함수와 프로퍼티
+    - `setShowBadge()`를 통해 배지 아이콘이 출력되도록 하면 홈 화면의 앱 아이콘에 확인하지 않은 알림 개수가 표시된 배지 아이콘이 보인다.
+
+  ```kotlin
+  // 채널의 설명 설정
+  fun setDescription(description: String!): Unit
+  
+  // 홈 화면의 아이콘에 배지 아이콘 출력 여부
+  fun setShowBadge(showBadge: Boolean): Unit
+  
+  // 알림음 재생
+  fun setSound(sound: Uri!, audioAttributes: AudioAttributes!): Unit
+  
+  // 불빛 표시 여부
+  fun enableLights(lights: Boolean): Unit
+  
+  // 불빛이 표시될 경우, 불빛의 색상
+  fun setLightColor(argb: Int): Unit
+  
+  // 진동 여부
+  fun enableVibration(vibration: Boolean): Unit
+  
+  // 진동이 울릴 경우, 진동의 패턴
+  fun setVibrationPattern(vibrationPattern: LongArray!): Unit
+  ```
+
+  - 알림 빌더는 아래와 같이 작성할 수 있다.
+
+  ```kotlin
+  val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+  val builder: NotificationCompay.Builder
+  
+  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      val channelId = "one-channel"
+      val chennelName = "My Channel One"
+      val chennel = NotificationChannel(
+      	channelId,
+          channelName,
+          NotificationManager.IMPORTANCE_HIGH
+      )
+      
+      channel.descriptiopn = "My Description"
+      channel.setShowBadge(true)
+      val uri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+      val audioAttributes = AudioAttributes.Builder()
+      	.setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+      	.setUsage(AudioAttributes.USAGE_ALARM)
+      	.build()
+      channel.setSound(uri, audioAttributes)
+      channel.enableLights(true)
+      channel.lightColor = Color.RED
+      channel.enableVibration(true)
+      channel.vibrationPattern = longArrayOf(100, 200, 100, 200)
+      
+      manager.createNotificationChannel(channel)
+      
+      builder = NotificationCompat.Builder(this, channelId)
+  } else {
+      builder = NotificationCompat.Builder(this)
+  }
+  ```
+
+
+
+- 알림 객체
+
+  - 알림 빌더를 만든 후에는 이 빌더를 사용해 `Notification` 객체를 만들어야 한다.
+    - 이 객체에 출력할 이미지, 문자열 등의 정보를 담는다.
+    - 알림은 스몰 아이콘과 발생 시각, 제목, 내용 등으로 구성된다.
+    - 앱에서 알림이 발생하면 상태 바에 이미지가 출력되는데, 이를 스몰 아이콘이라 부른다.
+  - 빌더의 setter를 사용하요 알림의 구성 정보를 설정한다.
+
+  ```kotlin
+  builder.setSmallIcon(android.R.drawable.ic_notification_overlay)
+  builder.setWhen(System.currentTimeMillis())
+  builder.setContentTitle("Content Title")
+  builder.setContentText("Content Message")
+  ```
+
+  - 알림을 띄울 때는  `notify()` 메서드를 사용하면 된다.
+    - 첫 번째 매개변수는 알림을 식별하는 데 사용하는 숫자로, 임의의 값을 설정하면 된다.
+    - 이 식별값은 사용자 폰에 발생한 알림을 코드에서 취소할 때 사용한다.
+    - 취소는 `cancel()` 메서드를 사용하면 된다.
+
+  ```kotlin
+  // 알림
+  manager.notify(11, builder.build())
+  
+  // 취소
+  manager.cancel(11)
+  ```
+
+  - 알림이 취소되는 경우
+    - 사용자가 알림을 터치하면 이벤트가 발생할 수 있으며, 이 때 알림은 화면에서 자동으로 사라진다(취소).
+    - 또한 사용자가 알림을 손가락으로 밀어서(스와이프) 취소할 수 있다.
+  - 만약 터치나 스와이프를 하더라도 알림이 사라지지 않게 하려면 빌더의 세터 함수로 지정해야 한다.
+    - `setAutoCancel(false)`로 지정하면 알림을 터치할 때 이벤트는 발생하지만 알림이 사라지지는 않는다.
+    - `setOngoing(true)`로 지정하면 사용자가 알림을 스와이프해도 사리지지 않는다.
+    - 만약 두 가지를 모두 설정했다면 사용자가 알림을 취소할 수 없으며 코드에서 `cancel()` 함수를 호출하여 취소해야한다.
+
+  ```kotlin
+  builder.setAutoCancel(false)
+  builder.setOngoing(true)
+  ```
+
+
+
+- 알림 구성
+  - 알림 터치 이벤트
+    - 대부분의 앱은 사용자가 알림을 터치했을 때 앱의 액티비티 화면을 실행한다.
+    - 이를 위해서는 알림의 터치 이벤트를 구현해야한다.
+    - 그런데 알림은 앱이 관할하는 화면이 아니며 시스템에서 관리하는 상태 바에 출력하는 정보이므로 이 알림에서 발생한 터치 이벤트는 앱의 터이 이벤트로 처리할 수 없다.
+    - 즉 `onTouchEvent()` 함수로는 처리할 수 없다.
+    - 결국 앱에서는 사용자가 알림을 터치했을 때 실행해야 하는 정보를  `Notification` 객체에 담아 두고, 실제 이벤트가 발생하면 이 객체에 등록된 이벤트 처리 내용을 시스템이 처리하는 구조로 처리한다.
