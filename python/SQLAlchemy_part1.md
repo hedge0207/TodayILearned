@@ -677,6 +677,152 @@
 
 
 
+## Connection Pooling
+
+- Connection pool
+
+  - 개요
+    - 메모리에 장시간 유지되는 connection을 효율적으로 재사용하기 위한 표준적인 기술이다.
+    - 메모리에 활성화된 connection들의 pool을 유지하여 재사용할 수 있게 해준다.
+    - 또한 애플리케이션이 사용할 수 있는 전체 connection의 개수를 관리하는 역할도 한다.
+    - SQLAlchemy는 connection pool을 구현한 다양한 구현체를 지원하며, `create_engine()` 메서드를 통해 `Engine` 객체를 생성할 때 이를 인자로 넘길 수 있다.
+  - `Engine` 객체 생성시에 connection pool 설정하기
+    - 아래와 같이 `poolclass` 파리미터에 connection 풀로 사용하고자 하는 `Pool` 클래스를 전달하면 된다.
+    - 설정하지 않을 경우 `QueuePool`로 설정된다.
+    - 단, `QueuePool`은 asyncio와 호환되지 않으므로, `create_async_engine()` 메서드를 통해 `Engine` 객체를 생성할 경우에는  `AsyncAdaptedQueuePool`가 기본값으로 설정된다.
+
+  ```python
+  from sqlalchemy.pool import NullPool
+  
+  engine = create_engine(
+      "postgresql+psycopg2://scott:tiger@localhost/test", poolclass=NullPool
+  )
+  ```
+
+  - 모든 connection pool의 구현체는 connection을 미리 생성하지 않는다.
+    - 오직 connection이 실제로 필요한 상황에만 connection을 생성한다.
+    - 또한 오직 추가 connection이 필요하다고 판단하는 경우(DB에 동시에 요청을 보내야 하는 경우)에만 추가 connection을 생성한다.
+  - 아래와 같이 `Pool`을 직접 사용하는 것도 가능하다.
+    - 첫 번째 인자로 DB와의 connection을 반환하는 함수를 전달하면 된다.
+    - `Pool.connect()`로 connection을 가져오고, `Connection.close()`를 호출하여 connection을 connection pool에 반환한다.
+
+  ```python
+  import sqlalchemy.pool import QueuePool
+  import psycopg2
+  
+  
+  def getconn():
+      c = psycopg2.connect(user="ed", host="127.0.0.1", dbname="test")
+      return c
+  
+  
+  mypool = QueuePool(getconn, max_overflow=10, pool_size=5)
+  
+  
+  # connection 가져오기
+  conn = mypool.connect()
+  
+  # connection 사용
+  cursor_obj = conn.cursor()
+  cursor_obj.execute("select foo")
+  
+  # connection을 pool로 반환
+  conn.close()
+  ```
+
+  - 혹은 `create_pool_from_url()`를 통해서도 `Pool` instance를 바로 사용할 수 있다.
+
+  ```python
+  from sqlalchemy import create_pool_from_url
+  
+  my_pool = create_pool_from_url(
+      "mysql+mysqldb://", max_overflow=5, pool_size=5, pre_ping=True
+  )
+  
+  con = my_pool.connect()
+  con.close()
+  ```
+
+
+
+- Connection pool은 기존에 생성된 connection이 유효하지 않은 상태가 될 경우 이를 복구하는 기능을 지원한다.
+
+  - Connection 복구가 필요한 예시
+    - 예를 들어 connection pool내에 connection들이 생성된 상태에서 DB가 재실행됐다고 가정해보자.
+    - 이 경우 connection pool 내에 있던 기존 connection들은 더 이상 사용할 수 없게 되므로, 복구가 필요하다.
+  - 비관적(pessimistic) 접근 방식
+    - Connection pool에서 connection을 가져올(checkout) 때마다 대해 테스트 구문을 실행하여 DB와의 연결이 여전히 유효한지 확인하는 방식이다.
+    - 테스트 방식은 DB dialect에 따라 다르며, DBAPI에 특화된 ping 메서드를 사용하거나 `SELECT 1` 같은 간단한 SQL 문을 실행하여 연결이 살아 있는지를 테스트한다.
+    - 이 방식은 connection을 가져올 때 마다 테스트 구문을 실행하므로 DB에 약간의 overhead가 발생하지만, 가장 간단하고 신뢰할 수 있는 방법이다.
+    - 아래와 같이 `create_engine()` 메서드 호출시에 `pool_pre_ping`을 True로 설정하면 된다.
+
+  ```python
+  engine = create_engine("mysql+pymysql://user:pw@host/db", pool_pre_ping=True)
+  ```
+
+  - 낙관적(optimistic) 접근 방식
+    - Connection pool에서 connection을 가져올 때 DB와의 연결이 유효한지 확인하지 않고, connection을 사용하는 중에 에러가 발생하면, DB와의 연결이 유효하지 않은 것으로 판단하고 connection pool 내부의 모든 connection을 비활성화 하고 복구하는 방식이다.
+    - 내부적으로는 기존 connection pool을 폐기하고 새로운 connection pool을 생성한다.
+    - 아래 코드는 낙관정 방식의 동작 과정을 보여준다.
+
+  ```python
+  from sqlalchemy import create_engine, exc
+  
+  e = create_engine(...)
+  c = e.connect()
+  
+  try:
+      # 만약 DB와의 연결이 실패하면
+      c.execute(text("SELECT * FROM table"))
+      c.close()
+  except exc.DBAPIError as e:
+      # exception이 발생하고, connection이 비활성화된다.
+      if e.connection_invalidated:
+          print("Connection was invalidated!")
+  
+  # 기존 connection pool을 폐기한 후 새로운 connection pool을 생성한다.
+  c = e.connect()
+  c.execute(text("SELECT * FROM table"))
+  ```
+
+  - `pool_recycle`
+    - 낙관적 접근법을 보완하기 위한 파라미터이다.
+    - `create_engine()` 호출시에 이 파라미터를 설정하면, 설정한 시간이 지난 connection은 connection pool에서 재사용하지 않는다.
+    - 특히 MySQL처럼 일정 시간이 지나면 자동으로 유휴 연결을 종료하는 DB에서 유용하게 사용할 수 있다.
+
+  ```python
+  from sqlalchemy import create_engine
+  
+  e = create_engine("mysql+mysqldb://scott:tiger@localhost/test", pool_recycle=3600)
+  ```
+
+
+
+- `NullPool`
+
+  - Connection pool class인  `Pool`의 구현중 하나이다.
+    - Connection pool을 사용하지 않는 connection 관리 방식이다.
+    - 즉 connection을  pool에 보관했다가 재사용하지 않고, connection이 필요할 때 마다 새로 만들고 사용이 완료되면 즉시 닫는다.
+    - 즉 check out, check in 개념이 없다.
+  - 아래와 같이 설정하면 된다.
+    - Connection pool을 사용하지 않으므로, `create_engine()` 호출시에 pool과 관련된 설정(`pool_size`, `max_overflow` 등)은 설정하지 않는다.
+
+  ```python
+  from sqlalchemy import create_engine
+  from sqlalchemy.pool import NullPool
+  
+  engine = create_engine(
+      "mysql+pymysql://user:password@localhost/testdb",
+      poolclass=NullPool,
+  )
+  ```
+
+  - `NullPool`을 사용할 때는 아래 사항들을 염두에 두어야한다.
+    - 잦은 connection 누수가 예상되거나 테스트, 단발성 스크립트에 사용할 경우 유용하게 사용할 수 있다.
+    - 그러나 대규모 트래픽을 처리해야 하는 경우에는 사용을 지양해야한다.
+
+
+
 
 
 ## Databasse Metadata
