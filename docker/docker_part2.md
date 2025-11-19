@@ -1139,6 +1139,128 @@
 
 
 
+### secrets
+
+- Docker compose의 secrets 관리하기
+
+  - secrets으로 관리할 key를 생성한다.
+
+  ```python
+  from cryptography.fernet import Fernet
+  
+  key = Fernet.generate_key()
+  print(key)  	# b'LLYpQXhGo2dGxE2MGBc2GIVqUPeW1oOT9jGVEsOiF1E='
+  ```
+
+  - key를 저장할 `ferney_key.64` 파일을 작성한다.
+
+  ```
+  LLYpQXhGo2dGxE2MGBc2GIVqUPeW1oOT9jGVEsOiF1E=
+  ```
+
+  - Key를 사용할 Python application을 생성한다.
+
+  ```python
+  import os, pathlib
+  from cryptography.fernet import Fernet
+  
+  
+  def secret_test():
+      key_path = os.environ.get("FERNET_KEY_FILE", "/run/secrets/fernet_key")
+      key_b64 = pathlib.Path(key_path).read_text().strip()
+      f = Fernet(key_b64.encode())
+  
+      token = f.encrypt(b"hello")
+      plain = f.decrypt(token)
+      print(plain)
+  
+  
+  if __name__ == "__main__":
+      secret_test()
+  ```
+
+  - requirements.txt 파일을 작성한다.
+
+  ```
+  cryptography==46.0.2
+  ```
+
+  - Dockerfile을 작성한다.
+
+  ```dockerfile
+  FROM python:3.12.0
+  
+  WORKDIR /app
+  
+  COPY ./requirements.txt .
+  RUN pip install --no-cache-dir -r requirements.txt
+  
+  COPY ./main.py main.py
+  
+  ENTRYPOINT ["python", "main.py"]
+  ```
+
+  - Docker compose 파일을 작성한다.
+
+  ```yaml
+  version: "3.9"
+  
+  services:
+    pyapp:
+      build:
+        context: .
+        dockerfile: Dockerfile
+      container_name: pyapp
+      environment:
+        FERNET_KEY_FILE: /run/secrets/fernet_key
+      secrets:
+        - fernet_key
+  
+  secrets:
+    fernet_key:
+      file: /path/to/secrets/fernet_key.b64
+  ```
+
+  - Container를 실행한다.
+
+  ```bash
+  $ docker compose up
+  
+  # output
+  pyapp  | b'hello'
+  ```
+
+
+
+- `secrets`
+
+  - Secrets은 container 내부에서 `/run/secrets/<secret_name>`에 파일로 저장된다.
+    - 환경 변수의 경우  `docker inspect`로 확인이 가능하지만 secrets는 노출되지 않는다.
+    - 다만, secrets은 환경 변수로 관리하는 것 보다 나은 정도지 완전한 보안을 제공하지는 않는다.
+  - Secrets은 아래와 같이 정의하면 된다.
+    - Compose 파일의 최상단에 `secrets`에 secret을 정의한다.
+    - `secrets.<secret_name>`에는  `environment` 혹은  `file`을 정의한다.
+    - `file`일 경우 파일의 경로를,  `environment`일 경우에는 host에 이미 설정된 환경 변수를 설정한다.
+
+  ```yaml
+  services:
+    myapp:
+      image: myapp:latest
+      secrets:
+        - my_secret
+  secrets:
+    my_secret:
+      file: ./my_secret.txt
+  ```
+
+
+
+
+
+
+
+
+
 
 ## 명령어
 
