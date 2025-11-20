@@ -640,6 +640,98 @@ https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-discover
 
 
 
+
+
+## 한 서버에 cluster 구성 시 주의 사항
+
+- 한 서버에 cluster을 구성할 경우 각 node가 가용한 자원을 명확히 제한해야한다.
+  - 만약 한 서버에 single node와, cluster를 구성하여 둘 간의 차이를 확인하려고 한다고 가정해보자.
+    - 이 때, CPU의 core는 16개이다.
+    - Elasticsearch의 search thread pool의 size는 `int((of allocated processors * 3) / 2) + 1`와 같이 계산된다.
+    - 이 때, 할당된 processor의 개수는 Elasticsearch가 자동으로 탐지한다(`node.processors` 설정을 통해 변경 가능하다).
+    - 4개의 노드(single + 3 node cluster) 모두 별도의 resource 제한을 하지 않고 실행했으므로 각 노드는 모두 16개의 processor가 가용하다고 탐지할 것이다.
+    - 따라서 single의 경우 25개, cluster의 경우 75(25 * 3)개의 search thread pool을 갖게 된다.
+    - 그러나, 당연하게도 둘 사이의 검색 성능이 3배차이가 나지는 않는다.
+    - single node도 자신이 가용하다고 판단한 16개의 processor를 모두 사용하려 할 것이고, cluster에 속한 각 노드들 역시 마찬가지다.
+    - 따라서 이와 같이 설정할 경우 single node일 때와 cluster로 구성했을 때 성능 차이가 거의 발생하지 않게된다.
+    - 오히려 각 노드들 간의 소통 비용이 추가되어 cluster일 때의 성능이 더 낮아질 수도 있다.
+  - 위와 같은 상황을 방지하기 위해서 한 서버에서 cluster를 구성할 때는 명확히 resource를 제한해야 한다.
+    - 위 예시에서는 CPU processor를 예시로 들었지만 memory에도 동일하게 적용된다.
+    - 또한 검색뿐 아니라 색인 등 Elasticsearch에서 수행되는 모든 동작에 통용된다.
+  - 위와 동일한 상황에서 CPU processor수를 제한해서 실행했다고 가정해보자.
+    - 전체 16개의 core를 single node에 4개, cluster에 속한 노드들에 각 4개씩 할당한다.
+    - 이 경우 single node와 cluster 사이에 실질적인 성능 차이가 발생하게된다.
+    - 그러나, 전체 core가 4개인데 single node에 4개, cluster에 속한 노드들에 각 4개씩 제한하여 할당한다고 해서 성능 차이가 발생하지는 않는다.
+
+
+
+- Docker를 사용하여 실행할 경우 아래와 같이 CPU 수를 제한할 수 있다.
+
+  - docker-compose.yml
+
+  ```yaml
+  services:
+    node1:
+      container_name: node1
+      image: docker.elastic.co/elasticsearch/elasticsearch:8.17.9
+      cpus: 4
+      # ...
+    
+    node2:
+      container_name: node2
+      image: docker.elastic.co/elasticsearch/elasticsearch:8.17.9
+      cpus: 4
+      # ...
+  
+    node3:
+      container_name: node3
+      image: docker.elastic.co/elasticsearch/elasticsearch:8.17.9
+      cpus: 4
+      # ...
+  ```
+
+  - Docker swarm의 경우
+    - `deploy.resources.limits`에 제한하고자 하는 resource를 입력한다.
+    - 이 때 아래와 같이 문자열이 아닌 int로 `cpus: 4`와 같이 작성할 수도 있지만, 아래와 같이 문자열로 작성하는 것이 권장된다.
+
+  ```yaml
+  services:
+    node1:
+      container_name: node1
+      image: docker.elastic.co/elasticsearch/elasticsearch:8.17.9
+      deploy:
+        resources:
+          limits:
+            cpus: "4.0"
+      # ...
+    
+    node2:
+      container_name: node2
+      image: docker.elastic.co/elasticsearch/elasticsearch:8.17.9
+      deploy:
+        resources:
+          limits:
+            cpus: "4.0"
+      # ...
+  
+    node3:
+      container_name: node3
+      image: docker.elastic.co/elasticsearch/elasticsearch:8.17.9
+      deploy:
+        resources:
+          limits:
+            cpus: "4.0"
+      # ...
+  ```
+
+
+
+
+
+
+
+
+
 # Docker stack으로 설치하기
 
 - Test 환경 구성
