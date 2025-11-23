@@ -1,3 +1,120 @@
+# Elasticsearch Vector DB
+
+- Lexical search의 한계
+
+  - Lexical search의 경우 비구조화된 데이터(사진, 음향 등)를 대상으로 검색을 할 수 없다.
+  - Lexical search는 입력된 검색어 그 자체 혹은 그 변형(stemmping이나 유의어 등)과 일치하는 문서를 찾는다.
+    - 검색어나 문서의 의미에는 집중하지 않고 검색어와 문서를 구성하는 단어들에만 집중한다.
+  - 따라서 아래와 같이 의미적으로는 전혀 연관이 없지만, 일치하는 단어들이 포함된 문서들이 검색되게 된다.
+    - 검색 된 결과 중 실제 사용자가 얻고자 했던 정보와 관련된 정보는 하나도 없다.
+    - 또한 다의어나 동음이의어가 있을 경우에도 전혀 상관 없는 문서들이 검색되는 문제가 발생할 수 있다.
+
+  ```json
+  // PUT lexical/_bulk
+  {"index":{}}
+  {"text":"A german shepherd watches the house"}
+  {"index":{}}
+  {"text":"I'm a English teacher"}
+  {"index":{}}
+  {"text":"We are going on holidays to Nice"}
+  
+  
+  // GET lexical/_search
+  {
+      "query": {
+          "match": {
+            "text": "nice german teacher"
+          }
+      }
+  }
+  
+  // output
+  [
+      {
+          "_index": "lexical",
+          "_id": "H_R_dpoBQQRAfducKgqk",
+          "_score": 1.1149852,
+          "_source": {
+              "text": "I'm a English teacher"
+          }
+      },
+      {
+          "_index": "lexical",
+          "_id": "HvR_dpoBQQRAfducKgqk",
+          "_score": 0.95778096,
+          "_source": {
+              "text": "A german shepherd watches the house"
+          }
+      },
+      {
+          "_index": "lexical",
+          "_id": "IPR_dpoBQQRAfducKgqk",
+          "_score": 0.89470756,
+          "_source": {
+              "text": "We are going on holidays to Nice"
+          }
+      }
+  ]
+  ```
+
+  - Lexical mismatch
+    - 의미는 같지만 단어가 달라서 검색이 실패하는 문제를 의미한다.
+    - 동의어, 형태소의 변화, 언어 표현의 다양성 등으로 인해 발생하는 문제이다.
+    - 예를 들어 "휴대폰 수리"와 "핸드폰 고치기"는 같은 의미이지만 서로 다른 단어로 구성되어 있다. 따라서 lexical search로 검색하려면 추가적인 작업이 필요하다.
+
+
+
+- 거리 기반 유사도
+  - L1 distance(Manhattan distance)
+    - 아래와 같이 두 벡터 사이의 거리를 계산한다.
+    - $d(x,y)=∑^n_{i=1}∣x_i−y_i∣$
+    - 예를 들어 두 벡터 x, y가 각각 (1, 2), (4, 3)이라면 두 벡터의 L1 distance는 $|1-4|+|2-3|$으로 계산하여 4가 된다.
+  - L2 distance(Euclidean distance)
+    - L1 distance와는 달리 두 벡터 사이의 직선 거리를 아래와 같이 계산한다.
+    - $d(x,y)=\sqrt{∑^n_{i=1}(x_i−y_i)^2}$
+    - 예를 들어 두 벡터 x, y가 각각 (1, 2), (4, 3)이라면 두 벡터의 L2 distance는 $\sqrt{(1−4)^2+(2−3)^2}$가 되어 3.16이 된다.
+  - Linf distance(L-infinity distance)
+    - 두 벡터의 차이 중 큰 값을 거리로 계산한다.
+    - $d(x,y)=max_i|x_i−y_i|$
+    - 예를 들어 두 벡터 x, y가 각각 (1, 2), (4, 3)이라면 두 벡터의  L infinity distance는 $max(|1-4|, [2-3])$으로 3이 된다.
+
+
+
+- 각도 기반 유사도
+  - Cosine similarity
+    - 두 벡터 사이의 각도를 계산한다.
+    - $s_{cos}(x,y)={x⋅y \over |x|\times|y|}$
+    - Cosine similarity는 항상 -1과 1을 포함하는 그 사이의 값을 가지며, -1에 가까울수록 유사하지 않음을, 0이면 유사도가 없음을, 1에 가까울수록 유사함을 나타낸다.
+    - 예를 들어 두 벡터 x, y가 각각 (1, 2), (4, 3)이라면 두 벡터의 cosine similarity는 $(1⋅4)+(2⋅3)\over (1^2+2^2)^{1/2}+(4^2+3^2)^{1/2}$이 되어 0.894427가 된다.
+    - 이를 각도로 표현하면 약 $26^\circ$이다.
+  - Dot product similarity(scalar or inner product)
+    - Cosine similarity는 두 벡터 사이의 각도만 계산할 뿐 magnitude(length, 원점으로부터 벡터까지의 거리)를 고려하지 않는다는 문제가 있다.
+    - 즉 두 벡터 (1, 1)과 (10000, 10000)은 다른 magnitude를 갖고 있는데, 각도가 완전히 같으므로 유사하다고 판단하게 된다.
+    - 반면 dot product는 각도와 함께 magnitude도 계산에 포함시킨다.
+    - $s_{dot}=|x|\times|y|\times cos\ a$
+    - 예를 들어 두 벡터 x, y가 각각 (1, 2), (4, 3)이라면 두 벡터의 dot product similarity는 $((1^2+2^2)^{1/2}+(4^2+3^2)^{1/2})⋅cos(26^\circ)$가 되어 약 10이다.
+    - 주의할 점은 모든 벡터를 정규화(각 벡터의 길이를 1로)한다면 dot product similarity와 cosine similarity는 완전히 동일해진다는 것이다($|x| |y| = 1$이기 때문).
+    - 벡터를 정규화하면 벡터의 magnitude는 무의미해지고 각도만으로 유사도 계산이 가능해지며 이를 통해 색인이나 검색 속도를 향상시킬 수 있다.
+    - 최신 embedding model들은 대부분 정규화를 전제로 설계되어 출력 자체를  L2-normalized 형태로 갖게 한다.
+
+
+
+- Magnitude와 normalization
+  - Magnitude는 원점과 vector 사이의 거리를 의미한다.
+    - 예를 들어 5차원 벡터 A가 (2,1,3,6,2)일 때 magnitude는 아래와 같이 계산한다.
+    - $∥A∥=\sqrt{2^2+1^2+3^2+6^2+2^2}=\sqrt{4+1+9+36+4}=\sqrt{54}≈7.348$
+  - 정규화는 벡터의 magnitude를 1로 만드는 과정을 의미한다.
+    - 벡터의 각 요소들을 벡터의  magnitude로 나누면 된다.
+    - $Anormalized={A\over∥A∥}=({2\over7.348},{1\over7.348},{3\over7.348},{6\over7.348},{2\over7.348})≈(0.272,0.136,0.408,0.817,0.272)$
+    - 이 정규화된 벡터의 길이를 다시 계산하면 아래와 같이 1이 된다.
+    - $\sqrt{0.272^2+0.136^2+0.408^2+0.817^2+0.272^2}=0.999...≈1$
+
+
+
+
+
+
+
 # kNN search
 
 - Elasticsearch의 유사도 검색
