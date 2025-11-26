@@ -357,3 +357,405 @@
     - Collection이 load된 이후에 추가된 entity들은 자동으로 load된다.
     - 다만 검색과 query는 메모리 사용량이 많은 작업이므로 비용을 절감하기 위해, 현재 사용하지 않는 컬렉션은 해제(release)할 것을 권장한다.
 
+
+
+
+
+- Collection 생성하기
+
+  - Schema 생성하기
+
+  ```python
+  from pymilvus import MilvusClient, DataType
+  
+  client = MilvusClient(
+      uri="http://localhost:19530",
+      token="root:Milvus"
+  )
+  
+  schema = MilvusClient.create_schema(
+      auto_id=False,
+      enable_dynamic_field=True,
+  )
+  
+  schema.add_field(field_name="my_id", datatype=DataType.INT64, is_primary=True)
+  schema.add_field(field_name="my_vector", datatype=DataType.FLOAT_VECTOR, dim=5)
+  schema.add_field(field_name="my_varchar", datatype=DataType.VARCHAR, max_length=512)
+  ```
+
+  - Collection에 대한 index 생성하기
+    - 특정 field에 대한 검색을 보다 빠르게 수행하기 위해 해당 field에 index를 설정하는 것이 가능하다.
+    - Index는 collection내의 entity들의 순서를 기록한다.
+
+  ```python
+  index_params = client.prepare_index_params()
+  
+  index_params.add_index(
+      field_name="my_id",
+      index_type="AUTOINDEX"
+  )
+  
+  index_params.add_index(
+      field_name="my_vector", 
+      index_type="AUTOINDEX",
+      metric_type="COSINE"
+  )
+  ```
+
+  - Collection 생성하기
+    - 아래와 같이 `index_params`와 함께 생성하면 collection 생성시에 collection이 load 된다.
+    - 그러나 `index_params`없이 생성할 경우 collection 생성시에 collection이 load되지 않는다.
+
+  ```python
+  client.create_collection(
+      collection_name="customized_setup_1",
+      schema=schema,
+      index_params=index_params
+  )
+  
+  client.get_load_state(
+      collection_name="customized_setup_1"
+  )
+  ```
+
+
+
+- Collection 조회하기
+
+  - Collection 목록 조회
+
+  ```py
+  from pymilvus import MilvusClient, DataType
+  
+  client = MilvusClient(
+      uri="http://localhost:19530",
+      token="root:Milvus"
+  )
+  
+  res = client.list_collections()
+  ```
+
+  - 특정 collection 상세 정보 조회
+
+  ```python
+  res = client.describe_collection(
+      collection_name="quick_setup"
+  )
+  
+  print(res)
+  """
+  {
+      'collection_name': 'quick_setup', 
+      'auto_id': False, 
+      'num_shards': 1, 
+      'description': '', 
+      'fields': [
+          {
+              'field_id': 100, 
+              'name': 'id', 
+              'description': '', 
+              'type': <DataType.INT64: 5>, 
+              'params': {}, 
+              'is_primary': True
+          }, 
+          {
+              'field_id': 101, 
+              'name': 'vector', 
+              'description': '', 
+              'type': <DataType.FLOAT_VECTOR: 101>, 
+              'params': {'dim': 768}
+          }
+      ], 
+      'functions': [], 
+      'aliases': [], 
+      'collection_id': 456909630285026300, 
+      'consistency_level': 2, 
+      'properties': {}, 
+      'num_partitions': 1, 
+      'enable_dynamic_field': True
+  }
+  
+  """
+  ```
+
+
+
+- Collection 수정하기
+
+  - Collection 이름 변경
+
+  ```python
+  from pymilvus import MilvusClient
+  
+  client = MilvusClient(
+      uri="http://localhost:19530",
+      token="root:Milvus"
+  )
+  
+  client.rename_collection(
+      old_name="my_collection",
+      new_name="my_new_collection"
+  )
+  ```
+
+  - Collection 속성 설정하기
+    - `collection.ttl.seconds`: collection의 특정 데이터가 일정 시간 후에 사라지도록 TTL을 설정한다.
+    - `mmap.enabled`: memory mapping을 허용할지 여부를 설정한다.
+    - `partitionkey.isolation`: partition key isolation 활성화 여부를 설정한다.
+    - `dynamicfield.enabled`: dynamic field를 허용할지 여부를 설정한다.
+    - `allow_insert_auto_id`: auto ID를 활성화할지 여부를 설정한다.
+    - `timezone`: timezone을 설정한다.
+
+  ```python
+  from pymilvus import MilvusClient
+  
+  client.alter_collection_properties(
+      collection_name="my_collection",
+      properties={"collection.ttl.seconds": 60}
+  )
+  ```
+
+  - Collection 속성 삭제하기
+
+  ```python
+  client.drop_collection_properties(
+      collection_name="my_collection",
+      property_keys=[
+          "collection.ttl.seconds"
+      ]
+  )
+  ```
+
+
+
+- Collection load하고 release하기
+
+  - Collection load하기
+
+  ```python
+  from pymilvus import MilvusClient
+  
+  client = MilvusClient(
+      uri="http://localhost:19530",
+      token="root:Milvus"
+  )
+  
+  client.load_collection(
+      collection_name="my_collection"
+  )
+  
+  res = client.get_load_state(
+      collection_name="my_collection"
+  )
+  ```
+
+  - 특정 field만 load하기
+    - Memory 사용량을 줄이고 검색 성능을 향상시키기 위해 특정 field만 load하는 것이 가능하다.
+    - 단, 이는 아직(v2.6 기준) 실험 단계이며 운영 환경에서 사용을 권장하지 않는다.
+
+  ```python
+  client.load_collection(
+      collection_name="my_collection",
+      # highlight-next-line
+      load_fields=["my_id", "my_vector"] # Load only the specified fields
+      skip_load_dynamic_field=True # Skip loading the dynamic field
+  )
+  
+  res = client.get_load_state(
+      collection_name="my_collection"
+  )
+  ```
+
+  - Collection release하기
+
+  ```python
+  client.release_collection(
+      collection_name="my_collection"
+  )
+  
+  res = client.get_load_state(
+      collection_name="my_collection"
+  )
+  
+  print(res)
+  ```
+
+
+
+- Collection 삭제하기
+
+  - 아래와 같이 삭제할 수 있다.
+
+  ```python
+  from pymilvus import MilvusClient
+  
+  client = MilvusClient(
+      uri="http://localhost:19530",
+      token="root:Milvus"
+  )
+  
+  client.drop_collection(
+      collection_name="my_collection"
+  )
+  ```
+
+
+
+- Schema
+
+  - Schema는 collection의 데이터 구조를 정의한다.
+    - 데이터 구조를 잘 정의할수록 데이터가 잘 조직화되어 검색 성능 향상을 기대할 수 있다.
+    - Schema는 하나의 primary key와 최대 4개의 vector field를 가질 수 있으며, 여러 개의 scalar field를 가질 수 있다.
+  - Schema 생성하기
+
+  ```python
+  from pymilvus import MilvusClient, DataType
+  
+  schema = MilvusClient.create_schema()
+  ```
+
+  - Primary field 추가하기
+    - Primary field는 오직 INT64 또는 VarChar type에만 설정이 가능하다.
+
+  ```python
+  schema.add_field(
+      field_name="my_id",
+      datatype=DataType.INT64,
+      is_primary=True,
+      auto_id=False
+  )
+  ```
+
+  - Vector field 추가하기
+    - 아래 예시에서 사용한 `FLOAT_VECTOR` 외에도 다양한 type을 설정할 수 있다.
+
+  ```python
+  schema.add_field(
+      field_name="my_vector",
+      datatype=DataType.FLOAT_VECTOR,
+      dim=5
+  )
+  ```
+
+  - Scalar field 추가하기
+
+  ```python
+  schema.add_field(
+      field_name="my_varchar",
+      datatype=DataType.VARCHAR,
+      max_length=512
+  )
+  
+  schema.add_field(
+      field_name="my_int64",
+      datatype=DataType.INT64,
+  )
+  
+  schema.add_field(
+      field_name="my_bool",
+      datatype=DataType.BOOL,
+  )
+  
+  schema.add_field(
+      field_name="my_json",
+      datatype=DataType.JSON,
+  )
+  
+  schema.add_field(
+      field_name="my_array",
+      datatype=DataType.ARRAY,
+      element_type=DataType.VARCHAR,
+      max_capacity=5,
+      max_length=512,
+  )
+  ```
+
+
+
+- Dense Vector
+
+  - Dense vector field 추가하기
+    - `datatype`에 원하는 dense vector type을 설정하고  `dim`에 vector의  dimension을 설정한다.
+
+  ```python
+  from pymilvus import MilvusClient, DataType
+  
+  client = MilvusClient(uri="http://localhost:19530")
+  
+  schema = client.create_schema(
+      auto_id=True,
+      enable_dynamic_fields=True,
+  )
+  
+  schema.add_field(field_name="pk", datatype=DataType.VARCHAR, is_primary=True, max_length=100)
+  schema.add_field(field_name="dense_vector", datatype=DataType.FLOAT_VECTOR, dim=4)
+  ```
+
+  - Dense vector type은 아래와 같다.
+    - `FLOAT_VECTOR`: 32-bit floating-point numbers를 저장하기 위한 type이다.
+    - `FLOAT16_VECTOR`: 16-bit half-precision floating-point numbers를 저장하기 위한  type이다.
+    - `BFLOAT16_VECTOR`: 16-bit Brain Floating Point (bfloat16) numbers를 저장하기 위한 type이다.
+    - `INT8_VECTOR`: 각 차원의 개별 요소가 8-bit integers (int8)인 vector를 저장하기 위한 type이다(HNSW index에만 사용 가능하다).
+  - Vector field에 설정할 index 생성하기
+    - `metric_type`의 경우 위에서 살펴본 dense_vector type과 무관하게 `COSINE`, `L2`, `IP` 중 하나의 값을 사용할 수 있으며, 기본값은 `COSINE`이다.
+    - `index_type`도 마찬가지로 여러 타입이 있으며,  `AUTOINDEX`는 범용적으로 사용할 수 있는 type이다.
+
+  ```python
+  index_params = client.prepare_index_params()
+  
+  index_params.add_index(
+      field_name="dense_vector",
+      index_name="dense_vector_index",
+      index_type="AUTOINDEX",
+      metric_type="IP"
+  )
+  ```
+
+  - Collection 생성하기
+    - 위에서 생성한 schema와 index를 가지고 collection을 생성한다.
+
+  ```python
+  client.create_collection(
+      collection_name="my_collection",
+      schema=schema,
+      index_params=index_params
+  )
+  ```
+
+  - 데이터 삽입하기
+
+  ```python
+  data = [
+      {"dense_vector": [0.1, 0.2, 0.3, 0.7]},
+      {"dense_vector": [0.2, 0.3, 0.4, 0.8]},
+  ]
+  
+  client.insert(
+      collection_name="my_collection",
+      data=data
+  )
+  ```
+
+  - 유사도 검색 실행하기
+
+  ```python
+  search_params = {
+      "params": {"nprobe": 10}
+  }
+  
+  query_vector = [0.1, 0.2, 0.3, 0.7]
+  
+  res = client.search(
+      collection_name="my_collection",
+      data=[query_vector],
+      anns_field="dense_vector",
+      search_params=search_params,
+      limit=5,
+      output_fields=["pk"]
+  )
+  
+  print(res)
+  ```
+
+
+

@@ -1,7 +1,3 @@
-> https://wikidocs.net/book/2155 참고
-
-
-
 # 텍스트 전처리
 
 ## Tokenization
