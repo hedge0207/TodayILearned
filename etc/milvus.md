@@ -124,3 +124,236 @@
     - 각 streaming node는 query plan을 생성하고, 이를 토대로 local growing data에 검색을 수행함과 동시에 query node와 통신해 historical results를 받아온 뒤 이를 하나의 shard result로 통합한다.
     - 마지막으로 proxy는 모든 shard result들을 모아 최종 결과로 병합하고 client에 반환한다.
 
+
+
+
+
+
+
+## 설치
+
+- Milvus deployment options
+  - Milvus lite
+    - Milvus의 경량화 버전으로, Python package 형태로 사용이 가능하다.
+    - 제한된 자원을 가진 기기에서 사용하거나, 빠르게 프로토타입을 만들어야 할 때 유용하게 사용할 수 있다.
+    - 수백만개의 vector까지는 milvus lite로 충분히 작업이 가능하다.
+  -  Milvus standalone
+    - 단일 server에 사용해야 할 때 선택할 수 있는 옵션이다.
+    - Docker, Docker Compose등을 통해 설치가 가능하다.
+  - Milvus distributed
+    - 여러 server에서 Milvus를 사용해야 할 경우 선택해야 하는 옵션이다.
+    - Kubernetes cluster를 통해 설치가 가능하다.
+
+
+
+- Milvus lite 설치
+
+  - Python package를 설치한다.
+
+  ```bash
+  $ pip install -U pymilvus[milvus-lite]
+  ```
+
+  - 아래와 같이 사용한다.
+
+  ```python
+  from pymilvus import MilvusClient
+  client = MilvusClient("./milvus_demo.db")
+  ```
+
+
+
+- Milvus standalone 설치
+
+  - docker-compose.yml
+
+  ```yaml
+  version: '3.5'
+  
+  services:
+    etcd:
+      container_name: milvus-etcd
+      image: quay.io/coreos/etcd:v3.5.18
+      environment:
+        - ETCD_AUTO_COMPACTION_MODE=revision
+        - ETCD_AUTO_COMPACTION_RETENTION=1000
+        - ETCD_QUOTA_BACKEND_BYTES=4294967296
+        - ETCD_SNAPSHOT_COUNT=50000
+      volumes:
+        - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/etcd:/etcd
+      command: etcd -advertise-client-urls=http://etcd:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+      healthcheck:
+        test: ["CMD", "etcdctl", "endpoint", "health"]
+        interval: 30s
+        timeout: 20s
+        retries: 3
+  
+    minio:
+      container_name: milvus-minio
+      image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+      environment:
+        MINIO_ACCESS_KEY: minioadmin
+        MINIO_SECRET_KEY: minioadmin
+      ports:
+        - "9001:9001"
+        - "9000:9000"
+      volumes:
+        - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/minio:/minio_data
+      command: minio server /minio_data --console-address ":9001"
+      healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+        interval: 30s
+        timeout: 20s
+        retries: 3
+  
+    standalone:
+      container_name: milvus-standalone
+      image: milvusdb/milvus:v2.6.4
+      command: ["milvus", "run", "standalone"]
+      security_opt:
+      - seccomp:unconfined
+      environment:
+        ETCD_ENDPOINTS: etcd:2379
+        MINIO_ADDRESS: minio:9000
+        MQ_TYPE: woodpecker
+      volumes:
+        - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/milvus:/var/lib/milvus
+      healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+        interval: 30s
+        start_period: 90s
+        timeout: 20s
+        retries: 3
+      ports:
+        - "19530:19530"
+        - "9091:9091"
+      depends_on:
+        - "etcd"
+        - "minio"
+  
+  networks:
+    default:
+      name: milvus
+  ```
+
+  - Container 실행하기
+
+  ```bash
+  $ docker compose up
+  ```
+
+
+
+
+
+
+
+## Database와 Collection
+
+- Database
+
+  - Data를 조직화하고 관리하기 위한 논리적 단위이다.
+    - Collection보다 상위 개념이다.
+    - 논리적으로 분리된 데이터들을 생성하여 multi-tenancy가 가능하다.
+  - Database 생성하기
+
+  ```python
+  from pymilvus import MilvusClient
+  
+  client = MilvusClient(
+      uri="http://localhost:19530",
+      token="root:Milvus"
+  )
+  
+  client.create_database(
+      db_name="my_database_1"
+  )
+  ```
+
+  - 아래와 같이 생성시에 속성 값을 설정하는 것도 가능하며, 설정 가능한 속성값들은 아래와 같다.
+    - `database.replica.number`: replica의 개수.
+    - `database.resource_groups`: resource group.
+    - `database.diskQuota.mb`: DB가 최대로 사용할 수 있는 disk 공간.
+    - `database.max.collections`: DB에 생성할 수 있는 collection의 최대 개수.
+    - `database.force.deny.writing`: 쓰기 작업을 강제로 막을지 여부.
+    - `database.force.deny.reading`: 읽기 작업을 강제로 막을지 여부.
+    - `timezone`: timezone
+
+  ```python
+  client.create_database(
+      db_name="my_database_2",
+      properties={
+          "database.replica.number": 3
+      }
+  )
+  ```
+
+  - Database 조회하기
+
+  ```python
+  # 모든 database 이름 조회
+  client.list_databases()
+  
+  # 특정 database 상세 정보 조회
+  client.describe_database(
+      db_name="default"
+  )
+  ```
+
+  - Database 속성 수정하기
+
+  ```python
+  client.alter_database_properties(
+      db_name="my_database_1",
+      properties={
+          "database.max.collections": 10
+      }
+  )
+  ```
+
+  - Database 속성 삭제하기
+
+  ```python
+  client.drop_database_properties(
+      db_name="my_database_1",
+      property_keys=[
+          "database.max.collections"
+      ]
+  )
+  ```
+
+  - Database switching하기
+
+  ```python
+  client.use_database(
+      db_name="my_database_2"
+  )
+  ```
+
+  - Database 삭제하기
+    - default database는 삭제가 불가능하다.
+    - DB를 삭제하기 전에 DB에 생성된 모든 collection들을 삭제해야 한다.
+
+  ```python
+  client.drop_database(
+      db_name="my_database_2"
+  )
+  ```
+
+
+
+- Collection
+  - 하나의 DB에는 여러 개의 collection을 생성할 수 있다.
+    - Collection에 저장되는 데이터를 entity라 부른다.
+    - Collection은 RDB의 table과 유사하며, entity는 record와 유사하다.
+    - Collection은 2차원 테이블로 구성된다.
+    - 각각의 column은 field를 나타내고, 각 row는 entity를 나타낸다.
+  - 하나의 collection은 하나 이상의 shard로 구성된다.
+    - 기본적으로 모든 collection들은 하나의 shard를 가진다.
+    - Collection을 생성할 때 shard의 개수를 지정할 수 있다.
+  - Load와 Release
+    - Collection을 load하는 것은 컬렉션에서 유사도 검색과 query를 수행하기 위한 선행 조건이다. 
+    - Collection을 load하면, Milvus는 각 field의 모든 index 파일과 raw data를 memory에 적재해 검색과 query에 빠르게 응답할 수 있도록 한다.
+    - Collection이 load된 이후에 추가된 entity들은 자동으로 load된다.
+    - 다만 검색과 query는 메모리 사용량이 많은 작업이므로 비용을 절감하기 위해, 현재 사용하지 않는 컬렉션은 해제(release)할 것을 권장한다.
+
