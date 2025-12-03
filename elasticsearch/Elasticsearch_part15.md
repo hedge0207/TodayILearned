@@ -489,8 +489,8 @@
 
   - vector data 색인하기
     - `dense_vector` type으로 색인한다.
-    - `dims` 옵션에 검색할 query와 같은 차원을 입력한다(`index` 옵션을 true로 줬을 경우 1024를 넘을 수 없고, false로 주더라도 2048을 넘을 수 없다).
-    - 만일 approximate kNN을 사용할 것이 아니라면 `index` 옵션을 false로 주거나 아예 빼버리면 된다(text type과 달리 dense_vector의 index 옵션의 기본값은 false이다).
+    - `dims` 옵션에 검색할 query와 같은 차원을 입력한다(4096을 초과해서 설정할 수 없다).
+    - 만일 approximate kNN을 사용할 것이 아니라면 `index` 옵션을 false로 설정하면 된다(기본값은 true).
 
   ```json
   // PUT product-index
@@ -564,4 +564,321 @@
     - 따라서 `dot_product`를 사용할 경우 vector의 길이를 계산하는 연산을 수행할 필요가 없기에, 성능상 `cosine` 보다 낫다.
 
 
+
+- kNN search와 kNN query의 차이
+
+  - 최상위 계층에 `knn`을 사용하여 검색하는 것을 kNN search라하고, `query`내부에 `knn`을 추가하는 것을 kNN query라 한다.
+
+  ```json
+  // knn search
+  {
+      "_source": false,
+      "fields": [
+          "price"
+      ],
+      "query":{
+          "range":{
+              "gte": 100
+          }
+      },
+      "knn": {
+          "field": "title_vector",
+          "query_vector": [0.1, 3.2, 2.1],
+          "k": 3,
+          "num_candidates": 100,
+          "filter": {
+              "range": {
+                  "price": {
+                      "gte": 100
+                  }
+              }
+          }
+      }
+  }
+  
+  // knn query
+  {
+      "size": 3,
+      "_source": false,
+      "fields": [
+          "price"
+      ],
+      "query": {
+          "bool": {
+              "must": {
+                  "knn": {
+                      "field": "title_vector",
+                      "query_vector": [0.1, 3.2, 2.1],
+                      "num_candidates": 100
+                  }
+              },
+              "filter": {
+                  "range": {
+                      "price": {
+                          "gte": 100
+                      }
+                  }
+              }
+          }
+      }
+  }
+  ```
+
+  - kNN search는 아래 과정을 거쳐 동작한다.
+    - 사용자가 Elasticsearch로 검색 요청을 보낸다.
+    - Coordinator node는 data node들에 kNN search 요청을 전달한다.
+    - 각 data node는 kNN search를 수행하고, 각자 top-k개의 결과를 coordinator node로 전송한다.
+    - Coordinator node는 각 data node가 전송한 local top-k개를 병합하여 global top-k개의 결과를 생성한다.
+    - 이후 coordinator node는 병합된 global top-k개의 결과를 `query`에 작성된 query와 함께 다시 각 data node에 전송한다.
+    - Data node들은 query를 검색한 결과를 global top-k개의 결과에 추가하여 coordinator에 반환한다.
+    - Coordinator는 이 결과를 병합하여 사용자에게 반환한다.
+    - 따라서 위 예시의 경우 `knn.k`는 3으로 설정했으므로, `query`와 일치하는 문서의 개수가 3개 미만이라도 3개의 문서를 반환하게 된다.
+    - 반대로 `knn.k`를 3으로 설정했더라도, `query`와 일치하는 문서는 전부 반환하므로 3개 이상의 문서가 반환될 수 있다.
+    - 이렇게 구현된 이유는 사용자가 최소한 `k`개의 문서는 반환받을 수 있도록 하기 위함이다.
+  - kNN query는 아래 과정을 거쳐 동작한다.
+    - kNN query는  kNN search와 달리 `k` parameter의 기본값이  `size`로 설정된다. 일반적인 query와 마찬가지로  `size`를 통해 반환 받을 문서의 개수를 결정한다.
+    - 사용자가 Elasticsearch로 검색 요청을 보낸다.
+    - Coordinator node는 data node들에 query(kNN + others)를 전달한다.
+    - 각 data node는 query에 따라 검색을 수행하고 size만큼의 결과를 coordinator node로 전송한다.
+    - 결과를 받은 coordinator node는 각 data node가 전송한 결과를 병합하여 size만큼의 문서를 사용자에게 반환한다.
+  - 예시 index 생성 및 데이터 색인
+
+  ```json
+  // PUT products
+  {
+      "mappings": {
+          "dynamic": "strict",
+          "properties": {
+              "department": {
+                  "type": "keyword"
+              },
+              "brand": {
+                  "type": "keyword"
+              },
+              "description": {
+                  "type": "text"
+              },
+              "embedding": {
+                  "type": "dense_vector",
+                  "index": true,
+                  "similarity": "l2_norm"
+              },
+              "price": {
+                  "type": "float"
+              }
+          }
+      }
+  }
+  
+  // POST products/_bulk?refresh=true
+  {"index":{"_id":1}}
+  {"department":"women","brand": "Levi's", "description":"high-rise red jeans","embedding":[1,1,1,1],"price":100}
+  {"index":{"_id":2}}
+  {"department":"women","brand": "Calvin Klein","description":"high-rise beautiful jeans","embedding":[1,1,1,1],"price":250}
+  {"index":{"_id":3}}
+  {"department":"women","brand": "Gap","description":"every day jeans","embedding":[1,1,1,1],"price":50}
+  {"index":{"_id":4}}
+  {"department":"women","brand": "Levi's","description":"jeans","embedding":[2,2,2,0],"price":75}
+  {"index":{"_id":5}}
+  {"department":"women","brand": "Levi's","description":"luxury jeans","embedding":[2,2,2,0],"price":150}
+  {"index":{"_id":6}}
+  {"department":"men","brand": "Levi's", "description":"jeans","embedding":[2,2,2,0],"price":50}
+  {"index":{"_id":7}}
+  {"department":"women","brand": "Levi's", "description":"jeans 2023","embedding":[2,2,2,0],"price":150}
+  ```
+
+  - kNN query 내부에도 filter 사용이 가능하다.
+
+  ```json
+  // GET products/_search
+  {
+    "size": 3,
+    "query": {
+      "knn": {
+        "field": "embedding",
+        "query_vector": [2, 2, 2, 0],
+        "num_candidates": 10,
+        "filter": {
+          "term": {
+            "department": "women"
+          }
+        }
+      }
+    }
+  }
+  ```
+
+  - kNN query는 kNN search에 비해 보다 다양한 결과를 얻을 수 있다.
+    - 그리고 이를 collapse나 aggregation에 사용할 수 있다.
+
+  ```json
+  // GET products/_search
+  {
+    "size": 3,
+    "query": {
+      "knn": {
+        "field": "embedding",
+        "query_vector": [2, 2, 2, 0],
+        "num_candidates": 10,
+        "filter": {
+          "term": {
+            "department": "women"
+          }
+        }
+      }
+    },
+    "collapse": {
+      "field": "brand"
+    }
+  }
+  ```
+
+  - 반면 위와 유사한 검색을  kNN search로 수행하면, 다른 결과가 나오게 된다.
+
+  ```json
+  // GET products/_search?size=3
+  {
+    "knn": {
+      "field": "embedding",
+      "query_vector": [2, 2, 2, 0],
+      "k": 3,
+      "num_candidates": 10,
+      "filter": {
+        "term": {
+          "department": "women"
+        }
+      }
+    },
+    "collapse": {
+      "field": "brand"
+    }
+  }
+  ```
+
+  - 이는  aggregation에서도 마찬가지다.
+    - 두 검색의  aggregation 결과는 다르다.
+
+  ```json
+  // GET products/_search
+  {
+    "size": 0,
+    "query": {
+      "knn": {
+        "field": "embedding",
+        "query_vector": [2, 2, 2, 0],
+        "num_candidates": 10,
+        "filter": {
+          "term": {
+            "department": "women"
+          }
+        }
+      }
+    },
+    "aggs": {
+      "brands": {
+        "terms": {
+          "field": "brand"
+        }
+      }
+    }
+  }
+  
+  // GET products/_search
+  {
+    "size": 0,
+    "knn": {
+      "field": "embedding",
+      "query_vector": [2, 2, 2, 0],
+      "k": 3,
+      "num_candidates": 10,
+      "filter": {
+        "term": {
+          "department": "women"
+        }
+      }
+    },
+    "aggs": {
+      "brands": {
+        "terms": {
+          "field": "brand"
+        }
+      }
+    }
+  }
+  ```
+
+
+
+- kNN query의 유연성
+
+  - kNN query는 `query` 내부에 작성할 수 있다는 특성 덕분에, 매우 유연하게 사용할 수 있다.
+    - 예를 들어 아래와 같이 bool query 내부에서 사용이 가능하다.
+
+  ```json
+  // GET products/_search?include_named_queries_score
+  {
+    "size": 3,
+    "query": {
+      "bool": {
+        "should": [
+          {
+            "knn": {
+              "field": "embedding",
+              "query_vector": [2, 2, 2, 0],
+              "num_candidates": 10,
+              "_name": "knn_query"
+            }
+          },
+          {
+            "match": {
+              "description": {
+                "query": "luxury",
+                "_name": "bm25query"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+  ```
+
+  - `function_score` 같은 복잡한 query 내부에서 사용하는 것도 가능하다.
+
+  ```json
+  // GET products/_search
+  {
+    "size": 3,
+    "query": {
+      "function_score": {
+        "query": {
+          "knn": {
+            "field": "embedding",
+            "query_vector": [2, 2, 2, 0],
+            "num_candidates": 10,
+            "_name": "knn_query"
+          }
+        },
+        "functions": [
+          {
+            "filter": {
+              "match": {
+                "department": "men"
+              }
+            },
+            "weight": 100
+          },
+          {
+            "filter": {
+              "match": {
+                "department": "women"
+              }
+            },
+            "weight": 50
+          }
+        ]
+      }
+    }
+  }
+  ```
 
