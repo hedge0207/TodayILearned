@@ -882,3 +882,228 @@
   }
   ```
 
+
+
+- Lexical search의 점수와  semantic search의 점수를 결합하기
+  - 두 방식은 최종 점수의 범위에 차이가 있다.
+    - 일반적으로  BM25 혹은  TF-IDF로 계산하는  lexical search의 경우 점수에 상한이 없다.
+    - 그러나  semantic search의 경우 일반적으로 점수에 상한이 있다(cosine 유사도의 경우 0~2)
+  - 따라서 두 방식을 결합하기 위해서는 두 방식이 계산한 점수를 적절히 결합하여 최종 점수를 계산할 방법이 있어야한다.
+    - 최종 점수를 계산하는 다양한 방식이 있지만 아래 두 방식이 가장 대표적이다.
+    - Convex Combination(CC, Linear Combination)
+    - Reciprocal Rank Fusion(RRF)
+  - Convex combination
+    - 정규화된 lexical search의 결과 점수와 semantic search의 결과 점수에 각각 가중치 α, β(0≤α,β)를 주는 방식이다.
+    - $score_{convex}(doc)=\alpha\times score_{lex}(doc)+\beta \times score_{sem}(doc)$
+    - CC는 렉시컬 점수와 시맨틱 점수의 가중 평균으로 볼 수 있다.
+    - 가중치가 0과 1 사이이면 해당 쿼리의 영향을 감소시키는 역할을 하며, 가중치가 1보다 크면 해당 쿼리의 영향을 강화시키는 데 사용된다.
+  - Reciprocal rank fusion
+    - RRF는 CC와 달리 점수 보정이나 정규화를 전혀 필요로 하지 않는다.
+    - 단순히 결과 집합에서의 순위(rank)에 따라 문서에 점수를 부여하며, 점수가 낮게 매겨진 문서의 중요도를 조정하기 위한 임의의 상수 *k*를 사용하는 아래 공식을 통해 최종 점수를 계산한다.
+    - $socre_{rrf}(doc)={1\over k+rank_{lex}(doc)}+{1 \over k+rank_{sem}(doc)}$
+  - Elasticsearch는 위 두 가지 방식을 모두 지원한다.
+
+
+
+- 각 방식의 점수 계산 예시
+
+  - 예를 들어 세 개의 문서를 대상으로 아래와 같은 점수와 순위가 나왔다고 가정해보자.
+
+  | 문서 | lexical score | lexical rank | semantic score | semantic rank |
+  | ---- | ------------- | ------------ | -------------- | ------------- |
+  | A    | 0.9           | 1            | 0.2            | 3             |
+  | B    | 0.4           | 3            | 0.8            | 1             |
+  | C    | 0.6           | 2            | 0.6            | 2             |
+
+  - CC
+
+    - α=0.5, β=0.5라고 가정한다.
+    - 문서 A의 최종 점수는 $0.5×0.9 + 0.5×0.2 = 0.55$
+    - 문서 B의 최종 점수는 $0.5×0.4 + 0.5×0.8 = 0.60$
+    - 문서 C의 최종 점수는 $0.5×0.6 + 0.5×0.6 = 0.60$
+
+  - RRF
+
+    - k=60이라고 가정한다.
+
+    - 문서 A의 최종 점수는 $1/(60+1) + 1/(60+3) ≈ 0.01639 + 0.01626 = 0.03265$
+    - 문서 B의 최종 점수는 $1/(60+3) + 1/(60+1) ≈ 0.01626 + 0.01639 = 0.03265$
+    - 문서  C의 최종 점수는 $1/(60+2) + 1/(60+2) ≈ 0.01639 + 0.01639 = 0.03278$
+
+
+
+- `retriever`
+
+  - 여러 단계에 걸쳐서 Elasticsearch에 요청해야 했던 검색을 일종의 파이프라인처럼 구성하여 한 번의 요청으로 처리할 수 있게 해주는 기능이다.
+    - Elasticsearch 8.14부터 추가되어 8.16부터 일반적으로 사용이 가능한 기능이다.
+    - Lexical search와 semantic search를 결합하기 위해서도 사용할 수 있다.
+    - linear, rule, RRF, text similarity re-ranker는 commercial license(Enterprise)가 필요하다.
+  - Dense vector를 대상으로 hybrid 검색 실행하기
+    - 아래와 같이 lexical query(예시의 경우  `match`)를 `knn` query와 함께 사용하면 된다.
+    - `rrf` retriever를 사용하여 표준  retriever로 실행한 lexical 검색 결과 점수와 semantic 검색 결과 점수를 결합한다.
+    - 아래 query는 먼저 전역 범위에서 vector 기반 상위 5개 문서를 먼저 검색하고, 그 결과를 lexical 결과와 결합한 최종적으로 가장 적합한 상위 10개 문서를 반환한다.
+
+  ```json
+  // POST my-index/_search
+  {
+    "size": 10,
+    "_source": false,
+    "fields": [ "price" ],
+    "retriever": {
+      "rrf": { 
+        "retrievers": [ 
+          {
+            "standard": { 
+              "query": {
+                "match": {
+                  "text-field": "fox"
+                }
+              }
+            }
+          },
+          {
+            "knn": { 
+              "field": "title_vector",
+              "query_vector": [0.1, 3.2, 2.1],
+              "k": 5,
+              "num_candidates": 100
+            }
+          }
+        ]
+      }
+    }
+  }
+  ```
+
+  - RRF의 랭킹에 영향을 미치는 두 개의 parameter를 설정 가능하다.
+    - `rank_constant`,  `rank_window_size`(기본값은 `size`)
+    - 아래 쿼리는 앞선 예와 동일한 방식으로 동작하지만, 다른 점은 vector 쿼리와 lexical 쿼리에서 가져오는 문서 수가 단순히 10개가 아니라 `rank_window_size` 값만큼 더 많이 조회된다는 점이다.
+    - 이렇게 조회된 문서들을 RRF 방식으로 랭킹한 뒤, 최종적으로 1위부터 `size`까지의 상위 문서들이 결과로 반환된다.
+
+  ```json
+  // POST my-index/_search
+  {
+    "size": 10,
+    "_source": false,
+    "fields": [ "price" ],
+    "retriever": {
+      "rrf": { 
+        "retrievers": [ 
+          // ...
+        ],
+        "rank_constant": 60, 
+        "rank_window_size": 100
+      }
+    }
+  }
+  ```
+
+
+
+- Vector quantization
+
+  - 고차원 벡터를 더 작은 차원으로 압축하여 메모리 사용량을 줄이는 기법이다.
+
+    - 벡터를 손실 압축하므로 정확도는 떨어질 수 있다.
+
+  - Elasticsearch에서는 `dense_vector` type을 저장할 때 quantization 방식을 선택할 수 있다.
+
+    - 이를 통해 보다 적은 메모리를 사용하여 검색이 가능하다.
+
+    - 다만, 정확도가 떨어지는 것은 감수해야하며, float type일 때만 가능하다.
+    - 또한 quantized된 벡터와 원본 벡터를 함께 저장하기에 추가적인 디스크 공간을 필요로한다.
+    - 예를 들어 40GB의 벡터를 int8로 quantization하여 저장할 경우 40GB의 원본 벡터와 10GB의 quantized된 벡터가 함께 저장되어 50GB의 용량이 필요하다.
+    - 그러나 검색에 필요한 메모리는 10GB로 감소한다.
+    - 384 차원 이상의 벡터를  float element_type으로 저장할 때는 quantization을 수행하는 것이 강하게 권장된다.
+
+  - Quantization된 vector 값으로 검색하는 방법
+
+    - Query vector가 입력되면 query vector 역시 동일한 방식으로 quantization을 수행한다.
+    - 그 후 quantization된 query vector와 기존에 이미 quantization되어 있던 vector들 사이의 유사도를 비교한다.
+
+  - Elasticsearch에서 제공하는 방식은 아래와 같다.
+
+    - `int8`: 각 차원의 vector를 1-byte integer로 quantization한다. 메모리 사용량을 75% 가량 줄일 수 있으며, 약간의 정확도 손실이 있다. 이 방식을 사용하려면 모든 벡터의 차원이 짝수여야 한다.
+    - `int4`: 각 차원의 vector를 half-byte interger로 quantization한다. 메모리 사용량을 87% 가량 줄일 수 있으며, 정확도 손실이 있다.
+    - `bbq`(Better binary quantization): 각 차원의 vector를 single bit로 Better binary quantization quantization한다. 메모리 사용량을 96%가량 줄일 수 있으며, 큰 정확도 손실이 있다. 검색 단계에서, 더 많은 후보를 가져오거나(oversampling), re-ranking을 통해 정확도 손실을 완호화할 수 있다. 이 방식은 벡터의 차원이 64 이상일 때만 사용할 수 있다.
+
+  - `bbq` 사용시 정확도 손실 보완 방법.
+
+    - 예를 들어 다른 방식에서 top 10개의 후보만 추렸다면,  `bbq`를 통해서는 top 100개의 후보를 추린다.
+    - 그 이후 후보군의 원본 vector(quantization을 거치지 않은 vector)를 대상으로  reranking을 수행한다.
+    - 즉 낮은 정확도로 빠르게 검색하고, 이후에 높은 정확도를 위해 재평가하는 방식으로 `bbq` 방식의 낮은 정확도를 보완할 수 있다.
+
+  - Quantization과 outlier
+
+    - Quantization을 수행할 때는 outlier들을 적절히 처리해줘야한다.
+    - 예를 들어 아래에서 살펴볼 scalar quantization의 경우 전체 범위를 한정된 수의 버킷에 매핑하는 과정을 거친다.
+    - 이 때 각 벡터값들이 여러 버킷에 고르게 분포되어야 quantization이 잘 됐다고 할 수 있다.
+    - 만약 벡터 값을 int8로 quantization한다고 가정해보자.
+    - 약 95%의 값이 [-1, 1]사이에 있는데, 1% 정도의 아주 일부의 값이 -10이나 12 같은 값일 경우 이 상태에서 quantization을 진행할 때 단순히 min/max 기반으로 범위를 잡으면 전체 범위는 [-10, 12]가 되어 범위는 22가 된다.
+    - 이를 int8로 표현할 수 있는 256개의 버킷으로 나누면 한 버킷 당 폭은 22/256이 되어 0.086 정도가 된다.
+    - 문제는 앞서 말했듯 95%의 데이터는 [-1, 1]구간에 몰려 있는데, 이 범위는 2로 이 안에서 쓸 수 있는 버킷의 수는 2/0.086이 되어 23개 정도 뿐이다.
+    - 즉 진짜 중요한 값들이 모여있는 구간에 버킷을 너무 적게 쓰게 되는 문제가 발생한다.
+    - 이처럼 outlier를 처리하지 않을 경우 outlier를 커버하기 위해 전체 스케일이 지나치게 크게 잡히는 문제가 발생한다.
+    - 만약 가운데 95%만 사용해서 quantization을 진행한다면 범위는 [-1, 1]이 되어 2가 되고, 버킷 당 폿은 2/256이되어 0.078이 된다.
+    - 이제 [-1, 1]이 거의 전 범위에 속하므로 이 구간 안에 256개의 버킷을 거의 다 쓸 수 있고, 0.078간격으로 정밀하게 표현 가능해진다.
+
+  - Elasticsearch에서는 outlier처리를 위해  `dense_vector` type의 `index_option`에 `confidence_interval` 옵션을 제공한다.
+
+
+
+- Scalar quantization
+  - 벡터의 각 차원 값을 더 작은 데이터 타입의 구간으로 나누어 담는 방식이다.
+    - 즉 고차원 벡터의 각 스칼라 값(한 요소)을 개별적으로 더 낮은 비트 수로 근사(quantize) 하여 저장 공간을 줄이는 기법이다.
+    - 예를 들어 float32로 벡터가 있다고 가정해보자.
+    - 1차원 값 한 개의 크기는 4bytes이고, 768차원이라면 하나의 벡터는 3072 bytes(약 3KB)가 되고, 문서가 100만개 있다면 전체 크기는 3GB가 된다.
+    - 만약 1차원 값 한 개의 크기를 1bytes로 줄이면 하나의 벡터는 768bytes가 되고, 문서가 100만개 있어도 약 700MB 정도면 된다.
+  - 동작 방식
+    - 예를 들어  -1에서 1 사이의 값을 갖는 벡터를 -127에서 127까지 표현할 수 있는 int8로 quantization한다고 가정해보자.
+    - -127~127까지의 각 구간을 하나의 버킷으로 보고 각 벡터 값을 버킷에 담는 방식으로 quantization을 수행한다.
+  - 정보의 손실
+    - Quantization을 거치면서 정보의 손실이 발생할 수 있다.
+    - 단, 차원의 수가 클수록 quantization으로 인해 발생하는 오차는 줄어들게 된다.
+    - 따라서 정확도와 성능 사이에서 적절한 타협을 해야한다.
+  - 계산 방식
+    - 값을 버킷에 매핑하는 공식은 아래와 같다.
+    - $max$는 범위의 최댓값, $min$은 범위의 최솟값, $N$은 버킷의 총 개수(int8의 경우 256)를 의미한다.
+    - $bucket(x)= ⌊{x-min \over max-min} \times N⌋$
+  - Outlier가 버킷 배분에 미치는 악영향
+    - 예를 들어 outlier를 포함한 [-10, -0.9, -0.5, -0.2, 0.1, 0.4, 0.7, 0.9, 5]와 같은 vector를  int8로 quantization하려고 한다.
+    - 이 때, 각 값의 버킷은 [0, 9, 10, 10, 10, 11, 11, 11, 15]가 된다.
+    - -10, 5 같은 outlier들 때문에 버킷이 고르게 분포되지 못 했다.
+    - 만약 outlier를 제한 [-0.9, -0.5, -0.2, 0.1, 0.4, 0.7, 0.9]를 대상으로 int8로 quantization하면 각 값의 버킷은 [0, 3, 6, 8, 12, 13, 15]로 여러 버킷에 고르게 분포되게 된다.
+
+
+
+- `dense_vector`의 `similarity`에 설정할 수 있는 값들. 
+
+  - `dot_product`
+    - `element_type`이 float일 경우 magnitude가 1(unit-length)로 정규화되어 있어야 색인이 가능하며 query vector 역시 unit-length여야한다.
+    - `element_type`이 byte일 경우 모든 벡터의 magnitude가 동일하지 않아도 색인이 가능하지만 결과가 부정확해질 수 있다. 
+    - query vector 역시 magnitude가 동일해야 정확한 결과를 얻을 수 있다.
+    - `element_type`에 따라 최종 점수를 계산하는 방식이 달라진다.
+
+  - `cosine`
+    - 색인을 수행하면서 자동으로 unit-length로 정규화를 수행한다.
+    - 이를 통해 내부적으로 dot_product를 사용해 더 효율적인 방식으로 유사도를 계산할 수 있게 된다.
+    - 원래의 정규화되지 않은 벡터는 스크립트를 통해 접근이 가능하다.
+    - 코사인 유사도는 벡터의 magnitude가 0인 경우 정의되지 않기 때문에 이러한 벡터는 허용되지 않는다.
+
+  - `max_inner_product`
+    - MIPS를 위해 사용하는 타입이다.
+    - MIPS는 Maximum Inner Product Search의 약자로 inner product가 가장 높은 vector를 찾는 검색 방식이다.
+    - Vector 공간에서 가장 가까운 vector를 찾는 것이 아니라 inner product가 가장 높은 vector를 찾는 것이다.
+    - `dot_product`와는 달리 벡터가 정규화 되어 있지 않아도 된다.
+
+
+
+
+- 정규화된 상태에서는 dot product값과 cosine값과 max inner product 결과값이 모두 동일하다.
+  - 그러나 이는 결과 값이 동일하다는 것이지 Elasticsearch의 검색 결과로 산출 되는 점수가 동일하다는 의미는 아니다.
+  - 각 유사도 유형 별로 점수를 계산하는 방식이 다르기 때문이다.
+    - 예를 들어 Elasticsearch에서 dot_product는 element_type이 float일 경우 `(1 + dot_product(query, vector)) / 2`와 같이 계산한다.
+    - 반면에 `max_inner_product`는 `max_inner_product(query, vector) + 1`와 같이 계산된다.
+    - 이 때 정규화된 상태에서는 `max_inner_product(query, vector)`의 값과 `dot_product(query, vector)`의 값이 동일하므로 이를 x로 두면 dot_product는 `(1+x)/2`가 되고, `max_inner_product`의 값은 `1+x`가 되어 Elasticsearch 계산 결과는 항상 `max_inner_product`가 `dot_product`의 두 배가 된다.
+    - 마찬가지 이유료 dot_product의 element_type이 float일 경우에는 cosine과 동일한 점수가 나오지만, bytes일 경우에는 점수가 달라지게 된다.
+
