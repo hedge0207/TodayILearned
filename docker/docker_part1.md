@@ -816,6 +816,83 @@
 
 
 
+- Binary로 설치하기
+
+  > https://docs.docker.com/engine/install/binaries/
+
+  - Docker 실행에 필요한 파일들을 패키지 매니저(yum, apt 등) 없이 직접 내려받는 방식이다.
+    - 패키지 매니저를 사용하여 설치할 경우 패키지 의존성이 문제가 될 수 있는데, binary의 경우 실행에 필요한 파일들이 모두 포함되어 있어 의존성을 걱정하지 않아도 된다.
+    - 또한 OS나 패키지 매니저의 버전으로 부터 어느 정도 독립적으로 설치가 가능하다.
+    - 다만 자동 업데이트가 불가능하므로 업데이트가 필요할 때 마다 수동으로 업데이트를 실행해야 한다.
+  - 설치하기
+    - [Docker engine 다운로드 링크](https://download.docker.com/linux/static/)에서 적절한 버전을 선택하여 내려받는다.
+
+  ```bash
+  # 적절한 버전을 선택하여 내려받는다.
+  $ curl -fsSL https://download.docker.com/linux/static/{path}/{to}/{file}.tgz -o docker.tgz
+  
+  # 받은 파일의 압축을 해제한다.
+  $ tar xzvf /path/to/docker.tgz
+  
+  # (optional) binary들을 executable path(e.g. /use/bin)으로 옮긴다.
+  $ sudo cp docker/* /usr/bin/
+  
+  # Docker daemon을 실행한다.
+  $ sudo dockerd &
+  ```
+
+  - 기존 Docker 업그레이드하기
+    - 설치와 완전히 동일한 방식으로 업그레이드가 가능하다.
+    - Binary 파일들만 교체하면 된다.
+    - 교체 전에 현재 실행 중인 docker daemon을 정지해야한다.
+
+  ```bash
+  # 기존에 실행 중인 docker daemone을 정지한다(방법은 실행 방식에 따라 달라진다).
+  
+  # 적절한 버전을 선택하여 내려받는다.
+  $ curl -fsSL https://download.docker.com/linux/static/{path}/{to}/{file}.tgz -o docker.tgz
+  
+  # 받은 파일의 압축을 해제한다.
+  $ tar xzvf /path/to/docker.tgz
+  
+  # (optional) binary들을 executable path(e.g. /use/bin)으로 옮긴다.
+  $ sudo cp docker/* /usr/bin/
+  
+  # Docker daemon을 실행한다.
+  $ sudo dockerd &
+  ```
+
+
+
+- Docker compose 설치하기
+
+  - Docker compose v2 이전까지 Docker compose는 Docker engine과 별개의 애플리케이션으로 설치해야 했다.
+
+    - Docker compose V2가 되면서 Docker compose가 Docker engine의 plugin 형태로 함께 설치된다.
+    - 그러나 여전히 별개의 application으로 설치하는 것도 가능한데, 이를 standalone이라 부른다.
+
+  - Standalone으로 설치하기
+
+    > https://docs.docker.com/compose/install/standalone/
+    >
+    > https://github.com/docker/compose/releases
+
+    - Docker compose를 standalone으로 설치하면 Docker engine 버전의 영향을 덜 받는다.
+    - 다만 standalone으로 설치할 경우 V2라 하더라도 `docker compose`가 아닌 `docker-compose` 명령어를 사용해야 한다.
+
+  ```bash
+  # 원하는 버전을 다운 받는다.
+  $ curl -SL https://github.com/docker/compose/releases/download/v{version}/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
+  
+  # 다운 받은 docker-compose 파일에 실행 권한을 추가한다.
+  $ chmod +x /usr/local/bin/docker-compose
+  
+  # soft link를 추가한다.
+  $ sudo ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+  ```
+
+  - Standalone으로 설치한 Docker compose를 upgrade하려면 `/usr/local/bin/docker-compose` 파일만 새로운 `docker-compose` 파일로 변경해주면 된다.
+
 
 
 
