@@ -146,9 +146,170 @@
 
 
 
+- 소프트맥스 회귀 실습
 
+  > 아이리스 품종 데이터로 실습을 진해한다.
+  >
+  > https://www.kaggle.com/datasets/saurabh00007/iriscsv에서 데이터를 다운 받아야한다.
 
+  - 필요한 패키지 들을 설치한다.
 
+  ```bash
+  $ pip install pandas seaborn scikit-learn tensorflow
+  ```
+
+  - 아이리스 품종 데이터에 대한 이해
+    - 아래와 같이 다운 받은 데이터 파일에서 5개의 샘플을 확인한다.
+    - 데이터는 6개의 열로 구성된 총 150개의 샘플로 구성되어 있다.
+    - 특성에 해당하는 `SepalLengthCm`, `SepalWidthCm`, `PetalLengthCm`, `PetalWidthCm` 4개의 열이 있다.
+    - 마지막 열  `Species`는 해당 샘플이 어떤 품종인지를 의미하며, Iris‑setosa, Iris‑versicolor, Iris‑virginica 라는 3 개의 품종으로 구성되고, 이 실습에서 예측해야 하는 레이블에 해당한다.
+    - 즉 이 실습은 주어진 샘플 데이터의 4개의 특성으로부터 3개의 품종 중 어떤 품종인지를 예측하는 것이다.
+
+  ```python
+  import pandas as pd
+  import seaborn as sns
+  import matplotlib.pyplot as plt
+  from sklearn.model_selection import train_test_split
+  from tensorflow.keras.utils import to_categorical
+  
+  
+  data = pd.read_csv("Iris.csv", encoding="latin1")
+  print(data[:5])
+  
+  """
+     Id  SepalLengthCm  SepalWidthCm  PetalLengthCm  PetalWidthCm      Species
+  0   1            5.1           3.5            1.4           0.2  Iris-setosa
+  1   2            4.9           3.0            1.4           0.2  Iris-setosa
+  2   3            4.7           3.2            1.3           0.2  Iris-setosa
+  3   4            4.6           3.1            1.5           0.2  Iris-setosa
+  4   5            5.0           3.6            1.4           0.2  Iris-setosa
+  """
+  ```
+
+  - 3개 품종이 4개의 특성에 대해 어떤 분포를 가지고 있는지 확인하기 위해 아래와 같이 시각화가 가능하다.
+    - 4개의 특성 `SepalLengthCm`, `SepalWidthCm`, `PetalLengthCm`, `PetalWidthCm`에 대하 모든 쌍의 조합인 16개의 경우에 대해서 산점도를 그린다.
+    - 만약 동일한 특성의 쌍일 경우에는 히스토그램으로 나타낸다. 
+
+  ```python
+  sns.set(style="ticks", color_codes=True)
+  g = sns.pairplot(data, hue="Species", palette="husl")
+  g.savefig("iris.png")
+  ```
+
+  - 아래와 같이 종과 `SepalLengthCm` 특성에 대한 연관 관계를 출력할 수 도 있다.
+    - 아래 코드 실행시, 위에서 시각한 코드와 별도로 실행해야하며, 그렇지 않을 경우 이전 결과에 덮어씌워진다.
+
+  ```python
+  ax = sns.barplot(x='Species', y='SepalWidthCm', data=data)
+  ax.figure.savefig("species_sepal_width_cm.png")
+  ```
+
+  - 150개의 샘플 데이터에 각 품종이 몇 개씩 있는지 확인한다.
+    - 모두 동일하게 50개씩 있는 것을 확인할 수 있다.
+    - 즉 각 레이블에 대한 분포가 균일하다. 
+
+  ```python
+  print(data['Species'].value_counts())
+  
+  """
+  Species
+  Iris-setosa        50
+  Iris-versicolor    50
+  Iris-virginica     50
+  Name: count, dtype: int64
+  """
+  ```
+
+  - 레이블에 해당하는 `Species` 열에 대해 전부 수치화를 진행한다.
+    - 우선 원-핫 인코딩을 수행하기 전 0, 1, 2로 정수 인코딩을 수행한다.
+    - 그 후 여전히 동일한 분포를 보이는지 확인한다.
+
+  ```python
+  # 정수 인코딩 수행
+  data['Species'] = data['Species'].replace(['Iris-virginica','Iris-setosa','Iris-versicolor'],[0,1,2])
+  
+  # 분포 재확인
+  print(data['Species'].value_counts())
+  
+  """
+  Species
+  1    50
+  2    50
+  0    50
+  Name: count, dtype: int64
+  """
+  ```
+
+  - 특성과 품종을 각각 독립 변수와 종속 변수 데이터로 분리하는 작업을 수행한다.
+    - 이후 확인을 위해 5개의 데이터를 출력해본다.
+
+  ```python
+  data_X = data[['SepalLengthCm', 'SepalWidthCm', 'PetalLengthCm', 'PetalWidthCm']].values
+  data_y = data['Species'].values
+  print(data_X[:5])
+  """
+  [[5.1 3.5 1.4 0.2]
+   [4.9 3.  1.4 0.2]
+   [4.7 3.2 1.3 0.2]
+   [4.6 3.1 1.5 0.2]
+   [5.  3.6 1.4 0.2]
+  """
+  print(data_y[:5])	# [1 1 1 1 1]
+  ```
+
+  - 훈련 데이터와 테스트 데이터를 분리하고 레이블에 대해 원-핫 인코딩을 수행한다.
+    - 훈련 데이터와 테스트 데이터를 8:2로 나눈다.
+
+  ```python
+  # 훈련 데이터와 테스트 데이터를 나눈다.
+  X_train, X_test, y_train, y_test = train_test_split(data_X, data_y, train_size=0.8, random_state=1)
+  
+  # 원-핫 인코딩을 수행한다.
+  y_train = to_categorical(y_train)
+  y_test = to_categorical(y_test)
+  ```
+
+  - 소프트맥스 회귀 실행하기
+    - 입력의 차원이 4이므로 `input_dims`를 4로 설정하고, 출력의 차원이 3이므로 `output_dims`(가장 앞의 인자)를 3으로 설정한다.
+    - 활성화 함수는 소프트맥스 함수를 사용하므로 `activation`의 인자값으로 `softmax`를 설정한다.
+    - 오차 함수로는 크로스 엔트로피 함수를 사용하는데, 시그모이드 함수를 사용한 이진 분류에서는 `binary_crossentropy`를 사용했지만, 다중 클래스 분류 문제에서는 `categorical_crossentropy`를 사용한다.
+    - 옵티마이저로는 경사 하강법의 일종인 adam을 사용한다(특별한 이유가 있는 것은 아니다).
+    - 전체 데이터에 대한 훈련 횟수는 200번이다.
+    - `validation_data`에 테스트 데이터를 입력하면 각 훈련 횟수마다 테스트 데잍터에 대한 정확도를 출력해준다.
+    - 단, 이는 정확도가 측정되고는 있지만 기계는 해당 데이터를 가지고 가중치를 업데이트하지 않는다.
+    - 출력에서 accuracy는 훈련 데이터에 대한 정확도이고,  val_accuracy는 테스트 데이터에 대한 정확도를 의미한다.
+
+  ```python
+  model = Sequential()
+  model.add(Dense(3, input_dim=4, activation='softmax'))
+  model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+  history = model.fit(X_train, y_train, epochs=200, batch_size=1, validation_data=(X_test, y_test))
+  ```
+
+  - 에포크에 따른 정확도 그래프를 출력하려면 아래와 같이 하면 된다.
+    - 그래프를 확인해보면 에포크가 증가함에 따라 오차가 점차적으로 감소하는 것을 볼 수 있다.
+
+  ```python
+  epochs = range(1, len(history.history['accuracy']) + 1)
+  plt.plot(epochs, history.history['loss'])
+  plt.plot(epochs, history.history['val_loss'])
+  plt.title('model loss')
+  plt.ylabel('loss')
+  plt.xlabel('epoch')
+  plt.legend(['train', 'val'], loc='upper left')
+  plt.show()
+  ```
+
+  - 테스트 데이터를 사용하여 정확도를 측정할 수 있다.
+    - Keras의 `Sequential.evaluate()` 메서드를 사용하면 된다.
+
+  ```python
+  print("\n 테 스 트 정 확 도 : %.4f" % (model.evaluate(X_test, y_test)[1]))
+  
+  # 테 스 트 정 확 도 : 1.0000
+  ```
+
+  
 
 
 
