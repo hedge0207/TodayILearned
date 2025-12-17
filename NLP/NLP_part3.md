@@ -537,6 +537,288 @@ for x1 in [0, 1]:
 
 
 
+- 주로 사용되는 활성화 함수(비선형 함수)들
+
+  - 계단 함수(Step function)
+    - 계단 함수는 실제로는 거의 사용되지 않지만, 배우는 과정에서 많이 사용되는 함수이다.
+
+  ```python
+  import numpy as np
+  import matplotlib.pyplot as plt
+  
+  
+  def step(x):
+      return np.array(x > 0, dtype=int)
+  x = np.arange(-5.0, 5.0, 0.1)
+  y = step(x)
+  plt.title('Step Function')
+  plt.plot(x,y)
+  plt.show()
+  ```
+
+  - 시그모이드 함수(Sigmoid function)
+    - 시그모이드 함수의 출력값이 0 또는 1에 가까워지면 그래프의 기울기가 완만해지는 모습을 볼 수 있다.
+    - 이 완만해지는 구간에서는 미분값이 0에 가까운 아주 작은 값이고, 가운데 점선 부근의 기울기가 큰 구간의 미분값은 최대값이 0.25이다.
+    - 즉 시그모이드 함수를 미분한 값은 0.25 이하의 값이다.
+    - 은닉층에서는 거의 사용하지 않고 주로 이진 분류를 위해 출력층에서 사용한다.
+
+  ```python
+  import numpy as np
+  import matplotlib.pyplot as plt
+  
+  
+  def sigmoid(x):
+      return 1/(1+np.exp(-x))
+  x = np.arange(-5.0, 5.0, 0.1)
+  y = sigmoid(x)
+  
+  plt.plot(x, y)
+  plt.plot([0,0],[1.0,0.0], ':')
+  plt.title('Sigmoid Function')
+  plt.show()
+  ```
+
+  - 시그모이드 함수를 활성 함수로 하는 인공 신경망의 학습 과정
+    - 인공 신경망은 입력에 대해서 순전파(forward propagation) 연산을 한다.
+    - 순전파 연산을 통해 나온 예측값과 실제값의 오차를 손실 함수를 통해 계산하고, 이 손실(오차,  loss)을 미분하여 기울기를 구한다.
+    - 이를 통해 출력층에서 입력층 방향으로 가중치와 편향을 업데이트 하는 과정인 역잔파(back propagation)를 수행한다.
+    - 시그모이드 함수의 문제점은 미분을 해서 기울기를 구할 때 발생한다.
+  - 기울기 소실(Vanishing gradient) 문제
+    - 시그모이드를 활성화 함수로 사용하는 인공 신경망의 층을 쌓는다면, 가중치와 편향을 업데이트 하는 과정에서 0에 가까운 값이 누적해서 곱해지게 되면서 앞단에는 기울기(미분값)가 잘 전달되지 않게 된다.
+    - 이러한 현상을 기울기 소실 문제라고 한다.
+    - 시그모이드 함수를 사용하는 은닉층의 개수가 많아질경우 0에 가까운 기울기가 계속 곱해지면서 앞단(입력층에 가까운 쪽)에서는 거의 기울기를 전파받을 수 없게 되어(즉  $w$가 업데이트 되지 않아) 학습이 잘 이루어지지 않는다.
+    - 따라서 시그모이드 함수를 은닉층에서 사용하는 것은 지양해야 한다.
+
+  - 하이퍼볼릭 탄젠트 함수(Hyperbolic tangent function)
+    - 입력값을 -1과 1 사이의 값으로 변환한다.
+    - 시그모이드 함수와 같은 기울기 소실 문제가 발생한다.
+    - 그러나 시그모이드 함수와는 달리 출력 값이 0을 중심으로 하고 있으며 하이퍼볼릭 탄제느 함수를 미분했을 때의 최대값은 1로 시그모이드 함수의 최대값인 0.25보다는 크다.
+    - 따라서 미분했을 때 시그모이드 함수보다는 전반적으로 큰 값이 나오게 되어 기울기 소실 증상이 적은 편이다.
+
+  ```python
+  import numpy as np
+  import matplotlib.pyplot as plt
+  
+  
+  x = np.arange(-5.0, 5.0, 0.1)
+  y = np.tanh(x)
+  
+  plt.plot(x, y)
+  plt.plot([0,0],[1.0,-1.0], ':')
+  plt.axhline(y=0, color='orange', linestyle='--')
+  plt.title('Tanh Function')
+  plt.show()
+  ```
+
+  - 렐루 함수(ReLU)
+    - 수식은 $f(x)=max(0,x)$로 아주 간단하며, 인공 신경망 은닉층에서 가장 많이 사용되는 함수이다.
+    - 음수를 입력하면 0을 출력하고, 양수를 입력하면 입력값을 그대로 반환하는 것이 특징인 함수로, 출력값이 특정 양수값에 수렴하지 않는다.
+    - 0 이상의 입력값의 경우에는 미분값이 항상 1이다.
+    - 깊은 신경망의 은닉층에서 시그모이드 함수보다 훨씬 더 잘 동작하며, 어떤 연산이 필요한 것이 아니라 단순 임계값이므로 연산 속도도 빠르다.
+    - 다만 입력값이 음수면 기울기(미분값)도 0이 된다는 문제가 있으며, 이 뉴런은 다시 회생하는 것이 매우 어렵다.
+    - 이 문제를 죽은 렐루(dying ReLU)라고 한다.
+
+  ```python
+  import numpy as np
+  import matplotlib.pyplot as plt
+  
+  
+  def relu(x):
+      return np.maximum(0, x)
+  
+  x = np.arange(-5.0, 5.0, 0.1)
+  y = relu(x)
+  
+  plt.plot(x, y)
+  plt.plot([0,0],[5.0,0.0], ':')
+  plt.title('Relu Function')
+  plt.show()
+  ```
+
+  - 리키 렐루(Leaky ReLU)
+    - 죽은 렐루 문제를 보완하기 위해 등장한 함수이다.
+    - 입력값이 음수일 경우 0이 아니라 0.001과 같은 매우 작은 수를 반환한다.
+    - 수식은  $f(x)=max(ax, x)$로, $a$는 하이퍼파라미터로 새는(leaky) 정도를 의미하며 일반적으로 0.01의 값을 가진다.
+
+  ```py
+  import numpy as np
+  import matplotlib.pyplot as plt
+  
+  
+  a = 0.01
+  
+  def leaky_relu(x):
+      return np.maximum(a*x, x)
+  
+  x = np.arange(-5.0, 5.0, 0.1)
+  y = leaky_relu(x)
+  
+  plt.plot(x, y)
+  plt.plot([0,0],[5.0,0.0], ':')
+  plt.title('Leaky ReLU Function')
+  plt.show()
+  ```
+
+  - 소프트맥스 함수(Softmax function)
+    - 은닉층에서는 ReLU 혹은 그 변형 함수들을 사용하는 것이 일반적이다.
+    - 반면 소프트맥스 함수는 시그모이드 함수처럼 출력층에서 주로 사용된다.
+    - 시그모이드 함수가 두 가지 선택지 중 하나를 고르는 이진 분류 문제에 사용된다면 소프트맥스 함수는 세 가지 이상의 상호 배타적인 선택지 중 하나를 고르는 다중 클래스 분류 문제에 주로 사용된다.
+    - 즉 딥 러닝으로 이진 분류를 할 대는 출력층에서 로지스틱 회귀를 사용하고, 다중 클래스 문제를 풀 때는 소프트맥스 회귀를 사용한다고 생각할 수 있다.
+
+  ```python
+  import numpy as np
+  import matplotlib.pyplot as plt
+  
+  
+  x = np.arange(-5.0, 5.0, 0.1)
+  y = np.exp(x) / np.sum(np.exp(x))
+  
+  plt.plot(x, y)
+  plt.title('Softmax Function')
+  plt.show()
+  ```
+
+
+
+- 행렬곱으로 이해하는 신경망
+
+  - 순전파(Forward Propagation)
+    - 인공 신경망에서 입력층에서 출력층 방향으로 예측값의 연산을 진행하는 과정을 순전파라고 한다.
+    - 신경망의 순전파는 행렬의 곱셈으로 이해할 수 있다.
+  - 입력의 차원이 3, 출력의 차원이 2인 인공 신경망은 아래와 같이 구현이 가능하다.
+    - 활성화 함수는 임의로 소프트맥스를 사용하도록 한다.
+
+  ```python
+  from tensorflow.keras.models import Sequential
+  from tensorflow.keras.layers import Dense
+  
+  
+  model = Sequential()
+  model.add(Dense(2, input_dim=3, activation='softmax'))
+  ```
+
+  - Keras에서는 `summary()` 메서드를 사용하여 모델에 존재하는 모든 매개변수(가중치와 편향)의 개수를 확인할 수 있다.
+    - `summary()` 메서드 내에 출력하는 로직이 포함되어 있다.
+    - `Params`를 확인해보면 매개변수의 개수가 8개인 것을 확인할 수 있는데, 학습 가능한 매개변수인 가중치와 편향의 개수가 총 합해서 8개라는 의미이다.
+
+  ```python
+  model.summary()
+  """
+  Model: "sequential"
+  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┓
+  ┃ Layer (type)                         ┃ Output Shape                ┃         Param # ┃
+  ┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━┩
+  │ dense (Dense)                        │ (None, 2)                   │               8 │
+  └──────────────────────────────────────┴─────────────────────────────┴─────────────────┘
+   Total params: 8 (32.00 B)
+   Trainable params: 8 (32.00 B)
+   Non-trainable params: 0 (0.00 B)
+  """
+  ```
+
+  - 위 내용을 행렬의 곱으로 표현하면 아래와 같다.
+    - 입력의 차원이 3, 출력의 차원이 2인데, 이를 신경망의 용어로 표현하면 입력층의 뉴런이 3개, 출력층의 뉴런이 2개이다.
+    - 입력층의 3개 뉴런과 출력층의 2개 뉴런 사이에는 총 6개의 연결이 존재하는데, 이는 이 신경망에서 가중치 $w$의 개수가 6개임을 의미한다.
+    - 이를 행렬곱 관점에서는 3차원 벡터에서 2차원 벡터가 되기 위해서 3 * 2 행렬을 곱했다고 이해할 수 있다.
+    - 그리고 이 행렬 각각의 원소가 각각의 $w$가 되는 것이다.
+    - 편향 $b$의 개수는 항상 출력의 차원을 기준으로 확인하면 되는데, 이 인공 신경망의 경우 출력의 차원이 2이므로 편향 또한 두 개이다.
+    - 가중치의 개수가 총 6개이고, 편향의 개수가 두 개이므로 총 학습 가능한 매개변수의 수는 8개이다.
+
+  $$
+  \begin{bmatrix}
+  x_{1}\ \ x_{2} \ \ x_{3}\\
+  \end{bmatrix}
+  \times
+  \begin{bmatrix}
+  w_1 \ w_4\\
+  w_2 \ w_5\\
+  w_3 \ w_6
+  \end{bmatrix}
+  +
+  \begin{bmatrix}
+  b_1 \ b_2
+  \end{bmatrix}
+  =
+  \begin{bmatrix}
+  y_1 \ y_2
+  \end{bmatrix}
+  $$
+
+  - 이때, 입력 벡터를 X, 출력 벡터를 W, 가중치 행렬을 W, 편향 벡터를 B라고 하면 인공 신경망은 결국 아래와 같이 표현이 가능하다.
+
+  $$
+  Y=XW + B
+  $$
+
+  - 행렬곱으로 병렬 연산 이해하기
+
+    - 인공 신경망을 행렬 곱으로 구현하면 병렬 연산도 가능하다.
+    - 위의 예시에서는 데이터 중 1개의 샘플만 처리했다고 가정했으나, 인공 신경망이 4개의 샘플을 동시에처리한다고 가정하면, 아래와 같이 표현할 수 있다.
+
+    $$
+    \begin{bmatrix}
+    x_{1}\ \ x_{2} \ \ x_{3}\\
+    x_{1}\ \ x_{2} \ \ x_{3}\\
+    x_{1}\ \ x_{2} \ \ x_{3}\\
+    x_{1}\ \ x_{2} \ \ x_{3}
+    \end{bmatrix}
+    \times
+    \begin{bmatrix}
+    w_1 \ w_4\\
+    w_2 \ w_5\\
+    w_3 \ w_6
+    \end{bmatrix}
+    +
+    \begin{bmatrix}
+    b_1 \ b_2
+    \end{bmatrix}
+    =
+    \begin{bmatrix}
+    y_1 \ y_2
+    \end{bmatrix}
+    $$
+
+
+
+- 행렬곱으로 다층 퍼셉트론의 순전파 이해하기
+
+  - 아래와 같은 인경신경망을 Keras로 구현하면 아래와 같다.
+    - 입력층은 4개의 입력과 8개의 출력을 가진다.
+    - 은닉층1은 8개의 입력과 8개의 출력을 가진다.
+    - 은닉층2는 8개의 입력과 3개의 출력을 가진다.
+    - 출력층은 3개의 입력과 3개의 출력을 가진다.
+
+  ```python
+  from tensorflow.keras.models import Sequential
+  from tensorflow.keras.layers import Dense
+  
+  model = Sequential()
+  
+  # 4개의 입력과 8개의 출력
+  model.add(Dense(8, input_dim=4, activation='relu'))
+  
+  # 8개의 출력
+  model.add(Dense(8, activation='relu'))
+  
+  # 3개의 출력
+  model.add(Dense(3, activation='softmax'))
+  ```
+
+  - 배치의 크기가 1일 때 입력층과 은닉층1 사이에 생기는 가중치와 편향 행렬의 크기는 아래와 같이 구할 수 있다.
+
+    - 입력 행렬 X의 크기는 1 * 4(배치 크기 * 벡터의 차원)이고, 출력은 8개이므로, 출력 행렬 Y의 크기는 1 * 8이 된다($X_{1\times 4} \times W_{n \times j} + B_{m \times j}=Y_{1 \times 8}$)
+
+    - 그런데 가중치 행렬 W의 행은 입력 행렬 X의 열과 같아야 한다($X_{1\times 4} \times W_{4 \times j} + B_{m \times j}=Y_{1 \times 8}$).
+    - 편향 행렬 B는 출력행렬 Y의 크기에 영향을 주지 않으므로 편향 행렬 B의 크기는 출력 행렬 Y의 크기와 같다($X_{1\times 4} \times W_{4 \times j} + B_{1 \times 8}=Y_{1 \times 8}$).
+    - 가중치 행렬 W의 열은 출력 행렬 Y의 열과 동일해야한다($X_{1\times 4} \times W_{4 \times 8} + B_{1 \times 8}=Y_{1 \times 8}$).
+
+  - 은닉층 1과 은닉층2 사이에 생기는 가중치완 편향 행렬의 크기, 은닉층2와 출력층 사이에 생기근 가중치와 편향의 크기도 위와 같은 방법으로 구하면 아래와 같다.
+
+    - 은닉층1과 은닉층2: $X_{1\times 8} \times W_{8 \times 3} + B_{1 \times 8}=Y_{1 \times 8}$
+    - 은닉층2와 출력층: $X_{1\times 8} \times W_{8 \times 3} + B_{1 \times 3}=Y_{1 \times 3}$
+
+
+
 
 
 
