@@ -119,5 +119,164 @@
   | Relationship type | Screaming snake_case | OWNS_VEHICLE |
   | Property          | camelCase            | firstName    |
 
+
+
+
+- Graph RAG
+  - RAG는 일반적으로 데이터를 저장하는데 vector DB만 사용한다.
+    - 검색하고자 하는 문서를 embeddinga하여 vector DB에 저장하고 이를 검색시에 활용한다.
+  - Graph RAG는 vector DB뿐 아니라 graph DB도 함께 사용하여 데이터를 저장한다.
+  - 일반적인 흐름은 아래와 같다.
+    - 사용자 질의를 embedding하여 Vector DB에서 관련 entity 후보를 검색한다.
+    - 검색된 entity를 graph DB의 seed node로 매핑한다.
+    - Seed node를 기준으로 k-hop 또는 조건 기반 그래프 탐색을 수행해 관련 sub graph를 구성한다.
+    - Sub graph를 요약·구조화하여 prompt의 context로 LLM에 전달한다.
+    - LLM이 해당 context를 근거로 답변을 생성한다.
+
+
+
+- Graph RAG 구성하기
+
+  > https://neo4j.com/blog/developer/graphrag-agent-neo4j-milvus/ 참고
+  >
+  > 전체 코드는 https://github.com/milvus-io/bootcamp/blob/master/bootcamp/RAG/advanced_rag/langgraph-graphrag-agent-local.ipynb에서 확인 가능하다.
+
+  - 본 예시에서 구성할 agent는 아래 세 가지 주요 개념을 가지고 있다.
+    - Routing: Query에 기반하여 vector DB를 사용할지, graph DB를 사용할지, 혹은 둘 다 사용할지를 결정하는 mechanism이다.
+    - Fallback: 첫 검색이 충분하지 않을 경우 agent는 Tavily를 사용하여 다시 web 검색을 수행한다.
+    - Self-correction: Agent는 자신이 생성한 답변을 평가하여 hallucination이나 부정확한 내용을 교정한다.
+  - 위 세 가지 주요 개념 외에 아래와 같은 component들도 포함된다.
+    - Retrieval: 데이터를 저장하고, 사용자의 query에 대해 문서를 검색하기 위해 Milvus를 vector DB로 사용한다.
+    - Graph enhancement: 탐색된 문서로부터 knowledge graph를 생성하고, 관계와 엔티티 정보를 통해 문맥을 더욱 풍부하게 만든다.
+    - LLMs integration: 로컬 LLM인 Llama 3.1 8B를 사용해 답변을 생성하고 검색된 정보의 관련성과 정확성을 평가한다. Neo4j의 질의 언어인 Cypher 생성에는 GPT-4o를 사용한다.
+  - Graph RAG 구조
+    - Question routing:  Agent는 우선 질문을 분석하여 vector search와 graph search 혹을 둘 다 사용하는 것 중 뭐가 가장 적절한지를 결정한다.
+    - Retrieval: Routing 결과에 따라 질문과 과련된 문서들이 Milvus 또는 Neo4j graph에서 수집된다.
+    - Generation: LLM은 수집된 context를 사용하여 답변을 생성한다.
+    - Evaluation: Agent는 LLM이 생성한 답변의 관련성, 정확성, hallucination 가능성에 대해 평가한다.
+    - Refinement: 만약 답변이 만족스럽지 않다면, agent는 error를 교정하고 검색 결과를 정제한다.
+
+  ![langgraph_adaptive_rag.png](graphdb.assets/RAG_Agent_langGraph.png)
+
+  - Graph 생성
+    - `cypher_llm`는 LLM instance를 입력하며, 이 instance를 통해 사용자의 질의를 기반으로 graph에서 연관된 정보를 추울하기 위한 Cypher query를 생성한다.
+
+  ```python
+  # Cypher query 생성을 위한 llm instance를 생성한다.
+  llm = ChatOllama(model=local_llm, temperature=0)
   
+  # Chain
+  graph_rag_chain = GraphCypherQAChain.from_llm(
+          cypher_llm=llm,
+          qa_llm=llm,
+          validate_cypher=True,
+          graph=graph,
+          verbose=True,
+          return_intermediate_steps=True,
+          return_direct=True,
+      )
+  
+  # 실행한다.
+  question = "agent memory"
+  generation = graph_rag_chain.invoke({"query": question})
+  ```
+
+  - Graph DB를 사용하여 검색하기
+
+  ```python
+  # Composite Vector + Graph Generations
+  cypher_prompt = PromptTemplate(
+      template="""You are an expert at generating Cypher queries for Neo4j.
+      Use the following schema to generate a Cypher query that answers the given question.
+      Make the query flexible by using case-insensitive matching and partial string matching where appropriate.
+      Focus on searching paper titles as they contain the most relevant information.
+      
+      Schema:
+      {schema}
+      
+      Question: {question}
+      
+      Cypher Query:""",
+      input_variables=["schema", "question"],
+  )
+  
+  # QA prompt
+  qa_prompt = PromptTemplate(
+      template="""You are an assistant for question-answering tasks. 
+      Use the following Cypher query results to answer the question. If you don't know the answer, just say that you don't know. 
+      Use three sentences maximum and keep the answer concise. If topic information is not available, focus on the paper titles.
+      
+      Question: {question} 
+      Cypher Query: {query}
+      Query Results: {context} 
+      
+      Answer:""",
+      input_variables=["question", "query", "context"],
+  )
+  
+  llm = ChatOpenAI(model="gpt-4o", temperature=0)
+  
+  # Chain
+  graph_rag_chain = GraphCypherQAChain.from_llm(
+      cypher_llm=llm,
+      qa_llm=llm,
+      validate_cypher=True,
+      graph=graph,
+      verbose=True,
+      return_intermediate_steps=True,
+      return_direct=True,
+      cypher_prompt=cypher_prompt,
+      qa_prompt=qa_prompt,
+  )
+  
+  
+  # Example input data
+  question = "What paper talks about Multi-Agent?"
+  generation = graph_rag_chain.invoke({"query": question})
+  print(generation)
+  ```
+
+  - Vector DB를 사용하여 검색하기
+
+  ```python
+  # Example input data
+  question = "What paper talks about Multi-Agent?"
+  
+  # Get vector + graph answers
+  docs = retriever.invoke(question)
+  vector_context = rag_chain.invoke({"context": docs, "question": question})
+  ```
+
+  - Graph DB의 결과와 vector DB의 결과를 결합하기
+
+  ```py
+  composite_chain = prompt | llm | StrOutputParser()
+  answer = composite_chain.invoke({"question": question, "context": vector_context, "graph_context": graph_context})
+  
+  print(answer)
+  ```
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
