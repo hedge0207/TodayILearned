@@ -105,22 +105,6 @@
 
 
 
-- Neo4j
-
-  - 대표적인 graph DB이다.
-    - 2007년부터 [오픈소스](https://github.com/neo4j/neo4j)로 개발되었다.
-    - Cypher라는 전용 query language를 사용한다.
-    - Java, Python, Go 등에서 사용할 수 있는 라이브러리를 지원한다.
-  - Naming conventions
-
-  | Graph entity      | Style                | Example      |
-  | ----------------- | -------------------- | ------------ |
-  | Node label        | PascalCase           | VehicleOwner |
-  | Relationship type | Screaming snake_case | OWNS_VEHICLE |
-  | Property          | camelCase            | firstName    |
-
-
-
 
 - Graph RAG
   - RAG는 일반적으로 데이터를 저장하는데 vector DB만 사용한다.
@@ -358,6 +342,144 @@
 - Graph RAG를 테스트하기에 적절한 dataset들
   - https://github.com/Alab-NII/2wikimultihop
   - https://github.com/yixuantt/MultiHop-RAG
+  - https://github.com/hotpotqa/hotpot
+
+
+
+
+
+# Neo4j
+
+- Neo4j
+
+  - 대표적인 graph DB이다.
+    - 2007년부터 [오픈소스](https://github.com/neo4j/neo4j)로 개발되었다.
+    - Cypher라는 전용 query language를 사용한다.
+    - Java, Python, Go 등에서 사용할 수 있는 라이브러리를 지원한다.
+  - Enterprise 버전과 community 버전이 있다.
+    - Community 버전의 경우 단일 DB만 사용할 수 있으며, 추가 DB를 생성할 수 없다.
+
+  - Naming conventions
+
+  | Graph entity      | Style                | Example      |
+  | ----------------- | -------------------- | ------------ |
+  | Node label        | PascalCase           | VehicleOwner |
+  | Relationship type | Screaming snake_case | OWNS_VEHICLE |
+  | Property          | camelCase            | firstName    |
+
+
+
+- Docker로 시작하기
+
+  - Neo4j 공식 이미지를 pull 받는다.
+    - Enterprise edition의 경우 tag에 `-enterprise` suffix가 붙으며, community edition은 아무 것도 붙지 않는다.
+    - tag의 `ubi9` 또는  `bullseye`는 base image를 나타내며, 각기 redhat, debian 운영체제이고, 아무 것도 붙지 않은 경우 `bullseye`와 동일하다.
+
+  ```bash
+  $ docker pull neo4j:ubi9
+  ```
+
+  - Docker compose 파일 작성하기
+
+  ```yaml
+  services:
+    neo4j:
+      image: neo4j:ubi9
+      volumes:
+          - /$HOME/neo4j/logs:/logs
+          - /$HOME/neo4j/config:/config
+          - /$HOME/neo4j/data:/data
+          - /$HOME/neo4j/plugins:/plugins
+      environment:
+          - NEO4J_AUTH=neo4j/your_password
+      ports:
+        - "7474:7474"
+        - "7687:7687"
+      restart: always
+  ```
+
+  - 실행하기
+
+  ```bash
+  $ docker compose up
+  ```
+
+  - 이후 7474 port로 접근하면 web ui로 noe4j에 접근이 가능하다.
+
+
+
+- Cypher 개요
+
+  - Neo4j에서 사용하는 query language이다.
+    - 소괄호는 node를, 화살표 사이의 대괄호(`-[]->`)는 relationship을 나타낸다.
+
+  ```cypher
+  (:Sally)-[:LIKES]->(:Graphs)
+  (:Sally)-[:IS_FRIENDS_WITH]->(:John)
+  (:Sally)-[:WORKS_FOR]->(:Neo4j)
+  ```
+
+  - Node label과 relationship type
+    - Node들은 label을 통해 그룹화된다.
+    - Label을 통해 그룹화 된 node들은 RDB의 table과 유사한 개념이라고 생각하면 된다.
+    - Relationship은 각 node들이 어떤 관계로 연결되어 있는지를 나타낸다.
+
+  - Node variable
+    - Cypher에서 node를 변수로 나타낼 수 있다.
+    - 반드시 소문자로 작성해야 한다.
+    - 아래 예시는 `p`라는 변수에 `Person` label이 붙은 node들을 할당한 것이다.
+
+  ```cypher
+  MATCH (p:Person)
+  RETURN p
+  ```
+
+  - Relationship을 설정할 때는 방향을 설정해줘야한다.
+    - Undirected relationship은 direction이 없음을 뜻하는 것이 아니라 어느 방향으로든 탐색이 가능하다는 것을 의미한다.
+
+  ```cypher
+  (p:Person)-[:LIKES]->(t:Technology)
+  (p:Person)<-[:LIKES]-(t:Technology)
+  MATCH (p:Person)-[:LIKES]-(t:Technology)
+  ```
+
+  - Relationship variable
+    - Node와 마찬가지로 relationship도 변수에 할당할 수 있다.
+
+  ```cypher
+  MATCH (p:Person)-[r:LIKES]->(t:Technology)
+  RETURN p,r,t
+  ```
+
+  - Property
+    - Node나 relationship에 추가적인 정보를 저장할 수 있으며, 이를 property라고 부른다.
+    - 다양한 type의 property를 저장할 수 있다.
+    - Property는 아래와 같이 중괄호를 사용하여 key:value 형태로 설정이 가능하다.
+
+  ```cypher
+  CREATE (sally:Person {name:'Sally'})-[r:IS_FRIENDS_WITH]->(john:Person {name:'John'})
+  RETURN sally, r, john
+  ```
+
+  - Pattern
+    - Graph pattern matching은 graph에서 데이터를 탐색하고, 설명하고, 추출하는 데 가장 핵심이 되는 개념이다.
+    - 예를 들어 `(sally:Person {name:'Sally'})-[l:LIKES]->(g:Technology {type: "Graphs"})`와 같은 pattern은 각기 다른 query에서 clause로 사용할 수 있다.
+    - 아래 예시의 경우 위 pattern을 각기`CREATE` query와 `MATCH` query에서 cluase로 활용하는 예시이다.
+
+  ```cypher
+  CREATE (sally:Person {name: "Sally"})-[r:LIKES]->(t:Technology {type: "Graphs"})
+  
+  MATCH (sally:Person {name: "Sally"})-[r:LIKES]->(t:Technology {type: "Graphs"})
+  RETURN sally,r,t
+  ```
+
+  - Pattern variable
+    - Pattern을 변수에 할당하는 것도 가능하다.
+
+  ```cypher
+  MATCH p = (sally:Person {name: "Sally"})-[r:LIKES]->(t:Technology {type: "Graphs"})
+  RETURN p
+  ```
 
 
 
