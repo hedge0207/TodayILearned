@@ -359,13 +359,6 @@
   - Enterprise 버전과 community 버전이 있다.
     - Community 버전의 경우 단일 DB만 사용할 수 있으며, 추가 DB를 생성할 수 없다.
 
-  - Naming conventions
-
-  | Graph entity      | Style                | Example      |
-  | ----------------- | -------------------- | ------------ |
-  | Node label        | PascalCase           | VehicleOwner |
-  | Relationship type | Screaming snake_case | OWNS_VEHICLE |
-  | Property          | camelCase            | firstName    |
 
 
 
@@ -480,6 +473,14 @@
   MATCH p = (sally:Person {name: "Sally"})-[r:LIKES]->(t:Technology {type: "Graphs"})
   RETURN p
   ```
+  
+  - Naming conventions
+  
+  | Graph entity      | Style                | Example      |
+  | ----------------- | -------------------- | ------------ |
+  | Node label        | PascalCase           | VehicleOwner |
+  | Relationship type | Screaming snake_case | OWNS_VEHICLE |
+  | Property          | camelCase            | firstName    |
 
 
 
@@ -487,11 +488,215 @@
 
 
 
+## Graph data model
+
+> Neo4j에서 제공하는 [예시 데이터셋](https://neo4j.com/docs/getting-started/appendix/example-data/) 중 영화 데이터 셋을 가지고 graph data model을 생성한다.
+
+- Domain을 정의하기 위해서, 먼저 application을 어디에 사용할 것인지를 정의해야 한다.
+  - 즉, application이 어떤 종류의 질문에 답해야 하는지를 정의해야 한다.
+  - 이를 위해서는 예상 되는 질문들을 나열해보는 것이 도움이 된다.
+    - 예시에서는 아래 질문들에 답하기 위한 application을 만든다고 가정한다.
+    - Which people acted in a movie?
+    - Which person directed a movie?
+    - Which movies did a person act in?
+    - How many users rated a movie?
+    - Who was the youngest person to act in a movie?
+    - Which role did a person play in a movie?
+    - Which is the highest rated movie in a particular year according to imDB?
+    - Which drama movies did an actor act in?
+    - Which users gave a movie a rating of 5?
+  - 위 질문들에 답하기 위해 알아야 하는 정보들에는 아래와 같은 것들이 있다.
+    - Differentiation between a person who acted in a movie, who directed a movie, and who rated a movie.
+    - What ratings were given, how many there are, and when they were submitted.
+    - Which role an actor played in a movie and what their age is.
+    - The genres of the movies.
+    - Etc.
 
 
 
+- Data model
+  - Data model은 domain의 node와 relationship그리고 label, type, property를 묘사하기 위한 것이다.
+  - 실제 data를 포함하지는 않지만, use case에 해당하는 질문들에 답하기 위해 어떤 정보들이 필요한지를 보여준다.
+  - 이 단계에서는 https://arrows.app과 같은 도구를 사용하여 아래와 같이 model을 정의한다.
+
+![Sample data model featuring two nodes for person and movie connected through two relationships](graphdb.assets/sample-data-model.svg)
 
 
+
+- Instance model
+
+  - 실제 model에서 저장하고 처리할 data를 표현하는 model이다.
+    - Instance model을 통해 data가 어떻게 node, relationship, property로 구성될지를 알 수 있다.
+
+  ![Sample data model contaning nodes for movies and people with the properties title](graphdb.assets/instance-example.svg)
+
+  - 위와 같은 모델을 아래와 같이 실제로 생성한다.
+
+  ```cypher
+  CREATE (Apollo13:Movie {title: 'Apollo 13', tmdbID: 568, released: '1995-06-30', imdbRating: 7.6, genres: ['Drama', 'Adventure', 'IMAX']})
+  CREATE (TomH:Person {name: 'Tom Hanks', tmdbID: 31, born: '1956-07-09'})
+  CREATE (MegR:Person {name: 'Meg Ryan', tmdbID: 5344, born: '1961-11-19'})
+  CREATE (DannyD:Person {name: 'Danny DeVito', tmdbID: 518, born: '1944-11-17'})
+  CREATE (JackN:Person {name: 'Jack Nicholson', tmdbID: 514, born: '1937-04-22'})
+  CREATE (SleeplessInSeattle:Movie {title: 'Sleepless in Seattle', tmdbID: 858, released: '1993-06-25', imdbRating: 6.8, genres: ['Comedy', 'Drama', 'Romance']})
+  CREATE (Hoffa:Movie {title: 'Hoffa', tmdbID: 10410, released: '1992-12-25', imdbRating: 6.6, genres: ['Crime', 'Drama']})
+  ```
+
+
+
+- Entity 정의하기
+
+  - Label
+    - 질문에서 가장 많이 등장하는 명사가 label이 된다.
+    - 예를 들어 "Which person acted in a movie?", "How many users rated a movie?" 와 같은 질문에서 자주 등장하는 명사들인  Person, Movie, User가 label이 된다.
+  - Property
+    - 마찬가지로 질문들에서 등장하는 정보를 기반으로 property를 설정해야한다.
+
+  | question                                                     | property                     |
+  | ------------------------------------------------------------ | ---------------------------- |
+  | Which people acted in a movie?<br />Which person directed a movie?<br />Which movies did a person act in? | name, title                  |
+  | Who was the youngest person to act in a movie?               | name, title, age             |
+  | What is the highest rated movie in a particular year according to imDB? | released, imDB rating, title |
+
+  - Relationship
+    - 질문에 등장하는 동사가 node 사이의 관계를 나타내는 relationship이 된다.
+    - 예를 들어 "Which person acted in a movie?"라는 질문에서는 "acted in"이라는 관계를 뽑아낼 수 있다.
+    - Relationship은 반드시 방향을 가져야한다.
+    - Relationship에 property를 설정하여 두 노드의 관계에 대해 보다 풍부한 정보를 제공할 수 있다.
+    - 예를 들어 `ACTED_IN`이라는 relationship에 `roles`라는 property를 추가하면 "Which role did a person play in a movie?"와 같은 질문에 답할 수 있게 된다.
+
+
+
+- Data model refactoring하기
+
+  - Data model과 graph를 변경하는 것을 의미한다.
+    - 주로 아래와 같은 이유로 수행한다.
+    - 현재 data model이 모든 use case를 충족하지 못 할 경우.
+    - Graph가 커짐에 따라 기존의 cypher로는 작업을 최적으로 수행하지 못 할 경우.
+  - 기존에 아래와 같이 model을 생성했다고 가정해보자.
+
+  ```cypher
+  CREATE (Apollo13:Movie {title: 'Apollo 13', tmdbID: 568, released: '1995-06-30', imdbRating: 7.6, genres: ['Drama', 'Adventure', 'IMAX']})
+  CREATE (TomH:Person {name: 'Tom Hanks', tmdbID: 31, born: '1956-07-09'})
+  CREATE (MegR:Person {name: 'Meg Ryan', tmdbID: 5344, born: '1961-11-19'})
+  CREATE (DannyD:Person {name: 'Danny DeVito', tmdbID: 518, born: '1944-11-17'})
+  CREATE (JackN:Person {name: 'Jack Nicholson', tmdbID: 514, born: '1937-04-22'})
+  CREATE (SleeplessInSeattle:Movie {title: 'Sleepless in Seattle', tmdbID: 858, released: '1993-06-25', imdbRating: 6.8, genres: ['Comedy', 'Drama', 'Romance']})
+  CREATE (Hoffa:Movie {title: 'Hoffa', tmdbID: 10410, released: '1992-12-25', imdbRating: 6.6, genres: ['Crime', 'Drama']})
+  
+  MERGE (TomH)-[:ACTED_IN {roles:'Jim Lovell'}]->(Apollo13)
+  MERGE (TomH)-[:ACTED_IN {roles:'Sam Baldwin'}]->(SleeplessInSeattle)
+  MERGE (MegR)-[:ACTED_IN {roles:'Annie Reed'}]->(SleeplessInSeattle)
+  MERGE (DannyD)-[:DIRECTED]->(Hoffa)
+  MERGE (DannyD)-[:ACTED_IN {roles:'Robert "Bobby" Ciaro'}]->(Hoffa)
+  MERGE (JackN)-[:ACTED_IN {roles:'Hoffa'}]->(Hoffa)
+  
+  CREATE (Sandy:User {name: 'Sandy Jones', userID: 1})
+  CREATE (Clinton:User {name: 'Clinton Spencer', userID: 2})
+  
+  MERGE (Sandy)-[:RATED {rating:5}]->(Apollo13)
+  MERGE (Sandy)-[:RATED {rating:4}]->(SleeplessInSeattle)
+  MERGE (Clinton)-[:RATED {rating:3}]->(Apollo13)
+  MERGE (Clinton)-[:RATED {rating:3}]->(SleeplessInSeattle)
+  MERGE (Clinton)-[:RATED {rating:3}]->(Hoffa)
+  ```
+
+  - 새로운 use case가 추가되어, 위 model을 refactoring 해야 하는 상황이 됐다.
+    - 예를 들어 "What movies are available in English?"와 같은 질문이 추가되어, 영화에 언어 property를 추가해야 한다고 가정해보자.
+    - 아래와 같이 모든 영화에 `language` property를 추가하면 된다.
+
+  ```cypher
+  MATCH (Apollo13:Movie {title:'Apollo 13'})
+  MATCH (SleeplessInSeattle:Movie {title:'Sleepless in Seattle'})
+  MATCH (Hoffa:Movie {title:'Hoffa'})
+  SET Apollo13.languages = ['English']
+  SET SleeplessInSeattle.languages = ['English']
+  SET Hoffa.languages = ['English', 'Italian', 'Latin']
+  ```
+
+  - 문제는 모든 데이터의 변경은 중복의 위험을 내포하며, 이는 graph의 성능을 저하시킬 수 있다는 것이다.
+    - 예를 들어, 아래와 같이 `language`가 "English"인 모든 영화를 찾으려고 한다고 가정해보자.
+    - 모든 영화의 `language`에 "English"가 포함되어 있기 때문에, 아래 cypher를 실행하면 모든 node가 결과로 반환된다.
+
+  ```cypher
+  MATCH (m:Movie)
+  WHERE 'English' IN m.languages
+  RETURN m.title
+  ```
+
+  - 위와 같은 방식은 아래와 같은 두 가지 문제를 야기한다.
+    - 첫 째로, `language`가 "English"인 노드를 찾기 위해서는, 결국 모든 노드를 탐색해야한다.
+    - 둘 째로, 동일한 property 값이 node들에 중복으로 저장된다(위 예시의 경우  "English"라는 property 값이 모든 노드에 중복 저장된다).
+  - 이 문제를 해결하는 방법은 아래와 같다.
+    - Language를 property가 아닌 새로운 node로 생성하고, 이를  Movie와 연결하는 것이다.
+    -  이렇게 하면, 단순히 특정 Language node와 연결된 Movie 노드만 탐색하면 되므로 탐색의 범위도 줄고, 데이터가 중복 저장되지도 않는다.
+    - 아래 cypher를 통해 기존에 property로 설정된 language들을 node로 변환하고, language property는 제거한다.
+
+  ```cypher
+  MATCH (m:Movie)
+  WITH m, m.languages AS languages
+  UNWIND languages AS language
+  MERGE (l:Language {name: language})
+  MERGE (m)-[:IN_LANGUAGE]->(l)
+  REMOVE m.languages
+  ```
+
+  - 새로운 graph는 아래와 같다.
+
+  ![Refactored graph with new language nodes for English](graphdb.assets/language-nodes.svg)
+
+  - Relationship refactoring하기
+    - Relationship refactoring을 통해 탐색할 node의 개수를 줄여 query 성능을 향상시킬 수 있다.
+    - 예를 들어 1995년에 영화에 출연한 배우에 대한 탐색을 빈번하게 해야 하는 상황이라면, 아래와 같이 새로운 relationship을 추가하여 탐색 대상 노드를 줄일 수 있다.
+
+  ```cypher
+  MATCH (p:Person)-[:ACTED_IN_1995]-(m:Movie)
+  WHERE p.name = 'Tom Hanks'
+  RETURN m.title AS Movie
+  ```
+
+
+
+- Intermediate nodes
+
+  - Intermediate node란 graph에 필요하지만 초기 model에 딱 맞지는 않는 node를 의미한다.
+
+    - 때로는 하나의 관계에 많은 정보를 담아야 할 필요가 있다. 
+    - 수학적 그래프에서는 이를 하이퍼엣지(hyperedge), 즉 두 개를 초과하는 노드를 연결하는 관계로 해결할 수 있으나 Neo4j에서는 하이퍼엣지를 지원하지 않기 때문에, intermediary node를 사용하는 방식으로 이를 구현할 수 있다.
+    - 예를 들어 회사에 근무하는 사원에 대해 회사와 역할에 대한 정보를 담아야 한다고 가정해보자.
+    - 수학적 그래프에서는 아래 그림과 같이 `WORKED_AT`이라는 relationship을 `Person`을 `Company`과 `Role` 모두와 견결하는 데 사용할 수 있다.
+
+    ![An example of a hyperedge in which a relationship is connected to two nodes](graphdb.assets/hyperedge.svg)
+
+    - 그러나 Neo4j에서는 이러한 방식을 지원하지 않기 때문에, intermediate node를 사용해야 한다.
+
+    ![Instead of using one single relationship to both Company and Role nodes](graphdb.assets/refactored-hyperedge.svg)
+
+    - 위 그림에서 `Employment` node는  employment event라는 추상적인 개념을 나타내며, 이 노드를 통해 서로 다른 세 노드가 연결된다.
+
+  - Sharing context
+
+    - 위와 동일한 예시에서, David라는 새로운 Person 노드가 추가되었다고 가정해보자.
+
+    ![Graph showing shared context between employment and company nodes](graphdb.assets/intermediate-nodes-employement-sharing-context-example.svg)
+
+    - 이 예시는 공통 event(intermediate event)를 사용하여 여러 노드 간에 공유되는 맥락을 표현할 수 있음을 보여준다.
+    - `Person` 노드들이 `Role` 노드와 `Company` 노드를 통해 맥락을 공유한다.
+    - `Employment` 노드는 개인의 경력 이력**, **같은 회사에서 근무한 서로 다른 사람들 간의 겹침, 또는 같은 역할을 수행했던 사람들과 같은 세부 정보를 추적할 수 있는 경로를 제공한다.
+    - 이를 통해 "Who worked at the same company at the same time?"와 같은 질문에 답할 수 있게 된다.
+
+  - Sharing data
+
+    - Intermediate nodes는 데이터를 공유할 수 있게 함으로써 중복 데이터를 줄여준다..
+    - 아래 예시에서는 Sarah가 Lucy에게 이메일을 보내면서, David와 Claire를 참조(CC)로 함께 포함시킨다.
+
+    ![Example graph with a node for Sarah sending an email to David and Claire with the message testing](graphdb.assets/sarah-email-before.svg)
+
+    - 만약 `Email`이라는 intermediate node를 추가하여 모델을 팬아웃(fan-out) 구조로 설계하면, 모든 relationship에 반복되던 `content` property를 분리하여 중복을 줄일 수있다.
+
+    ![Example of how to not repeat a same property by turning it into an intermediate node](graphdb.assets/sarah-email-after.svg)
+
+  - Organizing data
 
 
 
