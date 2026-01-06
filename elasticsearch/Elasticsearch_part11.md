@@ -732,6 +732,18 @@
 
 
 
+- Page cache(File system cache)
+  - OS level에서 관리하는 cache이다.
+    - Page cache의 기본적인 개념은 disk에서 읽은 데이터를 memory에 적재하여, 다음에는 data를 disk가 아닌 memory에서 읽을 수 있도록하는 것이다.
+    - Application은 동일한 system call을 수행하지만, OS는 disk에서 직접 읽는 대신 page cache를 사용할 수 있다.
+  - Elasticsearch 역시 page cache를 활용한다.
+    - Disk에 있는 데이터에 접근하는 대신에, page cache를 통해 데이터에 훨씬 빠르게 접근할 수 있게 된다.
+    - 이것이 가용한 memory의 절반만 heap memory로 할당하는 이유이다.
+    - Inverted index를 memory에 로드할 때 heap memory가 아닌 page cache를 사용한다.
+    - 정확히는 일부는 heap memory에, 대부분의 데이터는 page cache에 로드한다.
+
+
+
 ### 검색 쿼리 튜닝하기
 
 - copy_to

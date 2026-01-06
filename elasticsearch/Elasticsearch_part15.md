@@ -270,6 +270,13 @@
 
 
 
+- dense_vector 타입을 색인할 때 `_source.exclude`를 통해 색인은 되게 하되 저장은 되지 않게 하면 크기를 줄일 수 있다.
+
+  - 경우에 따라 다르겠지만 색인시에 `_source.excludes`를 통해 vector 값을 저장하지 않으면 인덱스 크기가 상당히 감소한다.
+
+  - flat일 경우와  hnsw일 경우의 감소 폭이 다르다.
+    - hnsw일 경우 상당히 감소하지만, flat일 경우 거의 차이가 없다.
+
 
 
 # kNN search
@@ -1117,3 +1124,64 @@
   }
   ```
 
+
+
+- kNN 검색에 필요한 메모리
+  - kNN 검색을 수행할 경우, data node에 충분한 메모리가 필요하다.
+    - HNSW 검색을 수행하기 위해서는 vector와 HNSW 그래프가 메모레이 올라가야 한다.
+    - 필요한 메모리의 양은, vector의 개수, vector의 차원, quantization 여부 `index_options.m`값 등에 의해 결정된다.
+    - 주의할 점은 여기서 말하는 memory는 java heap memory와는 분리된 filesystem cache에 사용되는 메모리라는 점이다.
+  - Vector를 위해 필요한 메모리의 양은 아래와 같이 구할 수 있다.
+    - `element_type: float`: `num_vectors * num_dimensions * 4`
+    - `element_type: float` with `quantization: int8`: `num_vectors * (num_dimensions + 4)`
+    - `element_type: float` with `quantization: int4`: `num_vectors * (num_dimensions/2 + 4)`
+    - `element_type: float` with `quantization: bbq`: `num_vectors * (num_dimensions/8 + 12)`
+    - `element_type: byte`: `num_vectors * num_dimensions`
+    - `element_type: bit`: `num_vectors * (num_dimensions/8)`
+  - HNSW 그래프를 위해 필요한 메모리의 양은 아래와 같이 구할 수 있다.
+    - `num_vectors * 4 * HNSW.m`. 
+    - `HNSW.m` 의 기본값은 16이므로, 기본적으로 `num_vectors * 4 * 16` 만큼의 memory가 필요하다.
+  - Vector와 HNSW 그래프 외에도 RAM이 필요한 경우가 있으므로 어느 정도의 buffer도 확보해야 한다.
+    - 예를 들어 text, numerics field들의 경우 file system cache를 사용하므로, 이들을 위한 공간도 남겨둬야한다.
+
+
+
+- Warm up filesystem cache
+  - Elasticsearch를 실행하던 장치가 재실행될 경우, filesystem cache가 비워지게 된다.
+    - 이 경우 index의 데이터 다시 메모리에 올려 검색 속도를 증가시키기 까지 일정 시간이 소요된다.
+  - Elasticsearch에서는 `index.store.preload`설정을 통해 특정 확장자를 가진 파일들을 보다 빠르게 memory에 load할 수 있는 기능을 제공한다.
+    - `elasticsearch.yml`에 설정하여 전체 index에 적용되도록 할 수도 있고, 개별 index 마다 적용되도록 할 수도 있다.
+    - 다만, 너무 많은 파일을 읽게 될 경우 filesystem cache가 모든 데이터를 hold하지 못하게 되어 오히려 검색 속도가 하락할 수 있으므로 주의해야한다.
+  - 빠른 kNN 검색을 위해, 설정해야 하는 파일 확장자는 아래와 같다.
+    - `vex`: HNSW graph를 저장한다.
+    - `vec`: 모든 type(`float`, `byte`, `bit`)의 양자화되지 않은 vector 값들을 저장한다.
+    - `veq`: `int4` 또는 `int8`로 양자화된 vector 값들을 저장한다.
+    - `veb` : `bbq`로 양자화된 binary vector 값들을 저장한다.
+    - `vem`, `vemf`, `vemq`, `vemb`: metadata를 저장한다. 일반적으로 매우 적은 양이며 굳이 pre loading을 하지 않아도 된다.
+  - Dynamic setting으로 index 생성 이후에도, close만 하면 변경이 가능하다.
+  
+  ```json
+  POST my_index/_close
+  
+  PUT my_index/_settings
+  {
+    "index.store.preload": ["vex", "vec", "veq", "veb", "vem"]
+  }
+  
+  POST my_index/_open
+  ```
+
+
+
+- kNN search와 segment 개수의 관계
+  - 각각의 segment들은 고유한 HNSW graph를 가진다.
+    - 따라서 segment의 개수가 적을수록, 탐색해야 하는 graph의 개수가 적어지므로 보다 빠른 검색이 가능하다.
+    - 그러나 결과의 정확도는 떨어질 수 있다. 
+  - Segment size의 최대치를 늘리기
+    - `index.merge.policy.max_merged_segment` 설정을 통해 segment의 최대 크기를 조정할 수 있다.
+    - 기본값은 5GB이지만, vector의 차원이 큰 경우 10GB나 20GB로 늘리는 변경하는 것을 고려해 볼만하다.
+  - Bulk indexing 중에 큰 segment 생성하기
+    - 만약 색인 중에 준 실시간 검색이 요구되지 않는다면, `index.refresh_interval`을 -1로 설정함으로써 refresh가 발생하지 않도록 하고, 추가적인 segement가 생성되는 것을 방지할 수 있다.
+    - Flushing 전에 보다 많은 document들을 받기 위해서 indexing buffer를 충분히 활용하는 것도 방법이 될 수 있다.
+    - `indices.memory.index_buffer_size`의 기본 값은 heap size의 10%인데, 32GB와 같이 충분한 heap size가 확보되었을 경우, 이 설정을 변경할 필요는 거의 없다.
+    - 다만, `index.translog.flush_threshold_size`를 늘려 indexing buffer를 최대한 활용하도록 조정할 수 있다.
