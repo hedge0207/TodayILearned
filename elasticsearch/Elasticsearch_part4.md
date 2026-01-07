@@ -1299,6 +1299,8 @@
     - `index`가 true일 때만 설정이 가능하다.
     - `m`: HNSW graph에서 각 node가 연결될 이웃의 수를 설정한다(기본값은 16).
     - `ef_construction`: 각 새 노드에 대한 최근접 이웃 목록을 수집하는 동안 추적할 후보 수를 설정한다(기본값은 100).
+    - flat type으로 색인할 경우 knn query를 수행하면 완전 탐색을 수행한다.
+    - 그러나 HNSW로 색인할 경우 knn query를 통한 ANN 검색과 script_score query를 사용한 완전 탐색이 모두 가능하다.
   - `similarity`
     - kNN search에서 vector 유사도를 판단하는 데 사용할 지표를 설정한다.
     - 각 document의 `_score` 값은 similarity 값으로 대체된다.
