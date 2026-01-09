@@ -486,8 +486,6 @@
 
 
 
-
-
 ## Graph data model
 
 > Neo4j에서 제공하는 [예시 데이터셋](https://neo4j.com/docs/getting-started/appendix/example-data/) 중 영화 데이터 셋을 가지고 graph data model을 생성한다.
