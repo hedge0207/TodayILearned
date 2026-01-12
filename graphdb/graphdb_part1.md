@@ -694,7 +694,283 @@
 
     ![Example of how to not repeat a same property by turning it into an intermediate node](graphdb.assets/sarah-email-after.svg)
 
-  - Organizing data
+
+
+
+
+
+
+## Neo4j실습
+
+> [MetaQA](https://github.com/yuyuz/MetaQA) 데이터 셋을 사용한다.
+
+- 사전 준비
+
+  - Neo4j Python package를 설치한다.
+
+  ```bash
+  $ pip install neo4j
+  ```
+
+  - Noe4j python client를 통해 Neo4j에 정상적으로 연결이 되는지 확인한다.
+
+  ```python
+  from neo4j import GraphDatabase
+  
+  
+  URI = "neo4j://localhost"
+  AUTH = ("neo4j", "your_password")
+  
+  with GraphDatabase.driver(URI, auth=AUTH) as driver:
+      res = driver.verify_connectivity()
+  ```
+
+  - Text to cypher를 위해 Ollama를 설치하고, llama3.2 model을 다운 받는다.
+    - Ollama는 [링크](https://ollama.com/download)에서 설치가 가능하다.
+    - 설치가 완료된 후, 아래 명령어를 실행하여 llama3.2를 다운 받는다.
+
+  ```bash
+  $ ollama run llama3.2
+  ```
+
+  - `ollama` Python package도 설치한다.
+
+  ```bash
+  $ pip install ollama
+  ```
+
+
+
+- MetaQA 데이터셋 살펴보기
+
+  - Knowledge base는 아래와 같이 구성되어 있다.
+    - "|"를 기준으로 세 부분으로 나뉘며 왼쪽은 영화 이름, 오른쪽은 엔티티, 가운데는 영화와 엔티티 사이의 관계이다.
+    - Relationship의 종류에 따라 오른쪽에 오는 엔티티의 종류가 달라진다.
+
+  ```
+  Flags of Our Fathers|has_tags|flag
+  The Bride Wore Black|directed_by|François Truffaut
+  The Bride Wore Black|written_by|Cornell Woolrich
+  The Bride Wore Black|written_by|François Truffaut
+  The Bride Wore Black|starred_actors|Jeanne Moreau
+  ```
+
+  - 관계의 종류는 아래와 같다.
+
+  ```python
+  class Relationship(Enum):
+      RELEASE_YEAR = "RELEASE_YEAR"
+      HAS_GENRE = "HAS_GENRE"
+      HAS_IMDB_RATING = "HAS_IMDB_RATING"
+      WRITTEN_BY = "WRITTEN_BY"
+      HAS_TAGS = "HAS_TAGS"
+      IN_LANGUAGE = "IN_LANGUAGE"
+      HAS_IMDB_VOTES = "HAS_IMDB_VOTES"
+      STARRED_ACTORS = "STARRED_ACTORS"
+      DIRECTED_BY = "DIRECTED_BY"
+  ```
+
+  - QA는 아래와 같이 구성되어 있다.
+    - 3-hop까지의 데이터를 제공한다.
+    - 질문과 정답은 `\t`으로 구분하며, 정답이 복수일 경우 각 정답은 `|`로 구분한다.
+    - `vanilla`은 기본적이고 정형화된 형태의 질문 데이터고, `ntm`은 실제 사람들이 물어볼 법한 자연스러운 말투(variations)에 대해서도 모델이 정답을 잘 찾는지 테스트하기 위한 형태의 질문 데이터이다.
+
+  ```
+  # 1-hop
+  what movies did [Temuera Morrison] act in	Once Were Warriors|Tracker|River Queen
+  
+  # 2-hop
+  what are the languages spoken in the films directed by [Joel Zwick]	Greek
+  
+  # 3-hop
+  the films that share directors with the film [Black Snake Moan] were in which genres	Drama|Music
+  ```
+
+
+
+- 그래프 생성하기
+
+  - Relationship에 따라 node의 label이 달라지므로, 아래와 같이 둘을 매핑해준다.
+
+  ```python
+  class NodeLabel(Enum):
+      YEAR = "Year"
+      GENRE = "Genre"
+      RATING = "Rating"
+      WRITER = "Writer"
+      TAG = "Tag"
+      LANGUAGE = "Language"
+      VOTE = "Vote"
+      ACTOR = "Actor"
+      DIRECTOR = "Director"
+  
+  
+  class Relationship(Enum):
+      RELEASE_YEAR = "RELEASE_YEAR"
+      HAS_GENRE = "HAS_GENRE"
+      HAS_IMDB_RATING = "HAS_IMDB_RATING"
+      WRITTEN_BY = "WRITTEN_BY"
+      HAS_TAGS = "HAS_TAGS"
+      IN_LANGUAGE = "IN_LANGUAGE"
+      HAS_IMDB_VOTES = "HAS_IMDB_VOTES"
+      STARRED_ACTORS = "STARRED_ACTORS"
+      DIRECTED_BY = "DIRECTED_BY"
+  
+      @property
+      def target_label(self) -> NodeLabel:
+          mapping = {
+              Relationship.RELEASE_YEAR: NodeLabel.YEAR,
+              Relationship.HAS_GENRE: NodeLabel.GENRE,
+              Relationship.HAS_IMDB_RATING: NodeLabel.RATING,
+              Relationship.WRITTEN_BY: NodeLabel.WRITER,
+              Relationship.HAS_TAGS: NodeLabel.TAG,
+              Relationship.IN_LANGUAGE: NodeLabel.LANGUAGE,
+              Relationship.HAS_IMDB_VOTES: NodeLabel.VOTE,
+              Relationship.STARRED_ACTORS: NodeLabel.ACTOR,
+              Relationship.DIRECTED_BY: NodeLabel.DIRECTOR,
+          }
+          return mapping[self]
+  ```
+
+  - 그래프 구성을 위한 코드를 작성한다.
+
+  ```python
+  from neo4j import GraphDatabase, ManagedTransaction
+  
+  
+  def create_metaqa_graph(tx: ManagedTransaction, movie_title: str, rel: str, entity_name: str):
+      try:
+          rel_enum = Relationship(rel.upper())
+          target_label = rel_enum.target_label.value
+      except ValueError:
+          target_label = "Entity"
+  
+      query = (
+          f"MERGE (m:Movie {{title: $movie_title}}) "
+          f"MERGE (e:{target_label} {{name: $entity_name}}) "
+          f"MERGE (m)-[:{rel_enum.value}]->(e)"
+      )
+      tx.run(query, movie_title=movie_title, entity_name=entity_name)
+  
+  
+  URI = "neo4j://localhost"
+  AUTH = ("neo4j", "your_password")
+  
+  with GraphDatabase.driver(URI, auth=AUTH) as driver:
+      with driver.session() as session:
+          with open("./metaqa/kb.txt", "r") as f:
+              for line in f.readlines():
+                  movie, relationship, entity = line.rstrip().split("|")
+                  session.execute_write(create_metaqa_graph, movie, relationship, entity)
+  ```
+
+
+
+
+- Graph 탐색하기
+
+  - 아래와 같이 Gemini에게 전달하기 위한 템플릿을 작성한다.
+    - 템플릿에는 스키마 정보와, 답변 형식에 대한 정보를 포함한다.
+
+  ```python
+  SCHEMA = """
+  Node labels and properties:
+  - Movie(title: string)  // unique by title
+  - Year(name: string)
+  - Genre(name: string)
+  - Rating(name: string)
+  - Writer(name: string)
+  - Tag(name: string)
+  - Language(name: string)
+  - Vote(name: string)
+  - Actor(name: string)
+  - Director(name: string)
+  
+  Relationships (directed):
+  - (Movie)-[:RELEASE_YEAR]->(Year)
+  - (Movie)-[:HAS_GENRE]->(Genre)
+  - (Movie)-[:HAS_IMDB_RATING]->(Rating)
+  - (Movie)-[:WRITTEN_BY]->(Writer)
+  - (Movie)-[:HAS_TAGS]->(Tag)
+  - (Movie)-[:IN_LANGUAGE]->(Language)
+  - (Movie)-[:HAS_IMDB_VOTES]->(Vote)
+  - (Movie)-[:STARRED_ACTORS]->(Actor)
+  - (Movie)-[:DIRECTED_BY]->(Director)
+  """
+  
+  SYSTEM = f"""
+  You are a Neo4j Cypher expert.
+  Generate a SINGLE read-only Cypher query that answers the user question using ONLY the provided schema.
+  
+  Rules:
+  - Use only MATCH / WHERE / WITH / RETURN / ORDER BY / LIMIT.
+  - DO NOT use CREATE, MERGE, DELETE, SET, CALL, LOAD CSV, APOC.
+  - Always include LIMIT (default 25 if not specified by user).
+  - Use parameter placeholders ($param) for user-provided strings.
+  - Return JSON format only with keys: cypher, params.
+  - Do NOT use Markdown, code blocks, or backticks. Output raw JSON only.
+  Schema:
+  {SCHEMA}
+  """
+  ```
+
+  - 위에서 작성한 템플릿을 기반으로 text를 cypher로 변환하는 코드를 작성한다.
+    - 반환된 cypher를 검증하는 코드도 함께 작성한다.
+
+  ```python
+  import json
+  import re
+  
+  from ollama import chat, ChatResponse
+  
+  
+  def text_to_cypher(question: str) -> dict:
+      prompt = SYSTEM + "\nUser question: " + question
+      response: ChatResponse = chat(model='llama3.2', messages=[
+          {
+              "role": "user",
+              "content": prompt
+          }
+      ])
+      return json.loads(response.message.content)
+  
+  DISALLOWED = re.compile(r"\b(CREATE|MERGE|DELETE|SET|CALL|LOAD\s+CSV|APOC)\b", re.I)
+  
+  def validate_cypher(cypher: str) -> str:
+      if DISALLOWED.search(cypher):
+          raise ValueError("Disallowed clause detected in generated Cypher.")
+      if "LIMIT" not in cypher.upper():
+          cypher = cypher.rstrip() + " LIMIT 25"
+      return cypher
+  ```
+
+  - 그래프를 탐색하는 코드를 작성한다.
+
+  ```python
+  URI = "neo4j://localhost"
+  AUTH = ("neo4j", "your_password")
+  
+  def run_question(question: str):
+      output = text_to_cypher(question)
+      cypher = validate_cypher(output["cypher"])
+      params = output.get("params", {})
+  
+      with GraphDatabase.driver(URI, auth=AUTH) as driver:
+          with driver.session() as session:
+              result = session.run(cypher, params)
+              return [r.data() for r in result]
+  
+  with open("./metaqa/1hop/vanilla/qa_dev.txt", "r") as f:
+      for line in f.readlines():
+          question, answers = line.rstrip().split("\t")
+          res = run_question(question)
+  ```
+
+  - 모델의 한계로 text to cypher가 잘 동작하지 않는 문제가 있지만, 1-hop까지는 어느 정도 답을 찾아낼 수 있다.
+
+
+
+
 
 
 
