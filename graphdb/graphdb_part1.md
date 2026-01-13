@@ -215,6 +215,49 @@
 
 
 
+- Graph RAG를 구현하는 방법
+
+  - 노드 및 관계 추출(Node and relation extraction).
+
+    - 이 접근법은 지식 그래프의 구성 요소인 정점(노드)과 간선(관계)을 임베딩하는 방식이다.
+    - 이때 질의에 사용되는 임베딩 방법과 같은 임베딩 기법을 활용한다.
+    - 예를 들어, *“Graph Reasoning for Question Answering with Triplet Retrieval”* (Li 외, 2023) 연구에서는 knowledge graph triplet(node1, relationship, node2)을 문장 형태로 선형화한 뒤 임베딩하여 가장 관련성 높은 트리플을 검색하는 방법을 제안한다.
+    - 예를 들어 [(Albert Einstein, born_in, Ulm), (Albert Einstein, field, Physics)]와 같은 knowledge graph triplet이 있다고 가정해보자.
+    - 이 knowledge graph triplet을 각각 [“Albert Einstein was born in Ulm.", “Albert Einstein’s field is Physics.”]와 같은 문장 형태로 만든 후, 각 문장을 임베딩하는 방식이다.
+    - 그러나 이 방식은 knowledge graph triplet이 일종의 “청크(chunk)” 역할을 한다는 점에서 전통적인 RAG와 매우 유사하다.
+    - 그 결과, 관계 경로(path)나 그래프 탐색(graph traversal)과 같은 지식 그래프 고유의 수학적·구조적 특성을 충분히 활용하지 못한다는 한계가 있다.
+
+  - 그래프 클러스터링 및 클러스터 요약(Graph clustering and cluster summarization).
+
+    > Microsoft: https://arxiv.org/pdf/2404.16130
+
+    - 이 기법은 유사한 노드들을 클러스터로 묶고, 질의에 답하는 데 가장 관련성 높은 클러스터를 선택하는 방식이다. 
+    - 클러스터를 요약함으로써 LLM과 상호작용하기 전에 그래프의 복잡도를 줄일 수 있다.
+    - 즉 전체 graph에서 유사한 node들을 cluster로 묶은 후, 해당 cluster에 대한 요약을 작성한다.
+    - 사용자가 질문을 던지면, 시스템은 개별 node가 아니라 미리 생성된 cluster에 대한 요약들을 검색한다.
+    - 이 때, cluster는 계층을 가진다. 예를 들어 아인슈타인, 뉴턴 등의 노드는 물리학자 라는 cluster로 묶이며, 물리학자 cluster, 화학자 cluster 등은 학자라는 더 상위 cluster로 묶인다.
+    - 이 접근법은 혁신적이지만, 고차원 데이터를 포함하는 대규모 그래프의 경우 계산 비용이 매우 크다는 단점이 있다.
+
+  - Query를 graph query로 변환(Transforming the query into a Graph Query).
+
+    - Text-to-SQL 기법에서 영감을 받은 이 접근법은 사용자의 자연어 질의를 그래프 데이터베이스 질의로 변환한다(e.g. Neo4j의 Cypher). 
+    - 이후 해당 그래프 질의를 실행하여 LLM이 처리할 수 있는 가장 관련성 높은 서브그래프를 추출한다.
+    - 하지만 이 방식은 데이터베이스 형태의 질의로 효과적으로 변환될 수 있는 질문에만 적용 가능하다.
+    - 또한 이러한 질의를 실행할 수 있는 그래프 데이터베이스에 데이터를 저장해야 하므로, 하이브리드 RAG 아키텍처를 위해 문서용과 그래프용, 두 개의 별도 데이터 저장소를 유지해야 하는 문제가 발생한다.
+
+    - 또한 LLM이 부정확한 graph query를 작성할 경우의 예외 처리도 확실히 해야 한다.
+
+
+
+- GraphRAG를 Vector RAG, Full text search와 결합하기
+  - GraphRAG를 vector RAG와 결합하는 방식은 크게 아래 두 가지가 있다.
+    - GraphDB의 조회 결과와 vectorDB의 조회 결과를 모두 LLM에 전달하여 답변을 생성하는 방식.
+    - VectorDB를 통해 graphDB에서 탐색할 node를 찾고 해당 node의 sub graph를 탐색하는 방식.
+  - Full text search와 결합하기
+    - 일반적으로 vectorDB를 조회하기 전에 vectorDB의 탐색 범위를 줄이거나, 정확히 특정한 keyword(특히 고유 명사)가 포함되어야 할 경우에 full text search와 함께 사용한다.
+
+
+
 - Graph RAG 구성하기
 
   > https://neo4j.com/blog/developer/graphrag-agent-neo4j-milvus/ 참고
@@ -358,6 +401,7 @@
     - Java, Python, Go 등에서 사용할 수 있는 라이브러리를 지원한다.
   - Enterprise 버전과 community 버전이 있다.
     - Community 버전의 경우 단일 DB만 사용할 수 있으며, 추가 DB를 생성할 수 없다.
+    - 또한  community 버전의 경우 clustering 기능을 지원하지 않는다.
 
 
 
@@ -481,6 +525,19 @@
   | Node label        | PascalCase           | VehicleOwner |
   | Relationship type | Screaming snake_case | OWNS_VEHICLE |
   | Property          | camelCase            | firstName    |
+  
+  - `MERGE` clause
+    - Node와 relationship을 생성하기 위해 사용하는 clause이다.
+    - `CREATE`와의 차이는 `CREATE`는 이미 node가 있어도 중복으로 생성하는 데 반해,  `MERGE`는 생성하지 않는다는 것이다.
+  
+  ```cypher
+  MERGE (m:Movie {title: "Arthur the King"})
+  MERGE (u:User {name: "Adam"})
+  MERGE (u)-[r:RATED {rating: 5}]->(m)
+  RETURN u, r, m
+  ```
+
+
 
 
 
