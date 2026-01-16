@@ -849,3 +849,309 @@
   GET _cat/ping
   ```
 
+
+
+
+
+
+
+## 점수 계산 plugin 개발
+
+> Elasticsearch 8.11 기준으로 작성한다.
+
+- Elasticsearch에서 점수를 계산하는 plugin에는 두 종류가 있다.
+  - 검색된 모든 문서의 점수를 계산하는 plugin
+    - 매칭되는 문서의 점수를 계산하므로 매우 효율적으로 실행되어야 한다.
+    - 아래에서 구현해볼 plugin이 이 유형에 속한다.
+  - 검색된 top-k 개의 문서들을 rescoring하는 plugin
+    - 검색 결과를 미세 조정하는데 주로 사용한다.
+    - [Elasticsearch repository](https://github.com/elastic/elasticsearch/tree/main/plugins/examples/rescore)에서 예시를 확인할 수 있다.
+
+
+
+- 코드 구현하기
+
+  - 전체 프로젝트 구조는 아래와 같다.
+
+  ```
+  my-plugin-project/
+  ├── build.gradle
+  ├── src/
+  │   └── main/
+  │       ├── java/
+  │       │   └── com/example/similarity/
+  │       │       ├── MyCustomSimilarity.java
+  │       │       └── MySimilarityPlugin.java
+  │       └── resources/
+  │           ├── plugin-descriptor.properties
+  │           └── META-INF/
+  │               └── services/
+  │                   └── org.elasticsearch.plugins.Plugin
+  ```
+
+  - build.gradle 파일을 아래와 같이 작성한다.
+
+  ```groovy
+  plugins {
+      id 'java'
+  }
+  
+  group 'com.example'
+  version '1.0.0'
+  
+  repositories {
+      mavenCentral()
+      maven { url "https://artifacts.elastic.co/maven" }
+  }
+  
+  dependencies {
+      compileOnly "org.elasticsearch:elasticsearch:8.11.0"
+  }
+  
+  java {
+      toolchain {
+          languageVersion = JavaLanguageVersion.of(21)
+      }
+  }
+  
+  jar {
+      manifest {
+          attributes(
+                  'Licensed-In': 'Elasticsearch'
+          )
+      }
+  }
+  ```
+
+  - MyCustomSimilarity.java 파일을 작성한다.
+    - `org.apache.lucene.search.similarities.Similarity`를 상속 받는 클래스를 선언하고, `scorer()` 메서드를 오버라이딩한다.
+
+  ```java
+  package com.example.similarity;
+  
+  import org.apache.lucene.search.similarities.Similarity;
+  import org.apache.lucene.index.FieldInvertState;
+  import org.apache.lucene.search.CollectionStatistics;
+  import org.apache.lucene.search.TermStatistics;
+  
+  
+  public class MyCustomSimilarity extends Similarity {
+  
+    @Override
+    public long computeNorm(FieldInvertState state) {
+      // 필드 길이 등에 따른 정규화 값 (간단히 1 리턴)
+      return 1L;
+    }
+  
+    @Override
+    public SimScorer scorer(float boost, CollectionStatistics collectionStats, TermStatistics... termStats) {
+      return new SimScorer() {
+        @Override
+        public float score(float freq, long norm) {
+          // 빈도수(freq)에 부스트 값을 곱한 값을 점수로 사용한다.
+          return freq * boost;
+        }
+      };
+    }
+  }
+  ```
+
+  - MySimilarityPlugin.java 파일을 작성한다.
+    - Java plugin을 등록하는 로직을 구현한다.
+    - 아래 예시에서는 `MapperPlugin`를 구현했지만, 다른 클래스를 구현하여 다른 방식으로 plugin으로 등록하는 것도 가능하다.
+
+  ```java
+  package com.example.similarity;
+  
+  import org.elasticsearch.index.IndexModule;
+  import org.elasticsearch.plugins.Plugin;
+  import org.elasticsearch.plugins.MapperPlugin;
+  
+  public class MySimilarityPlugin extends Plugin implements MapperPlugin {
+  
+    @Override
+    public void onIndexModule(IndexModule indexModule) {
+      indexModule.addSimilarity("my_custom_similarity",
+        (settings, version, scriptService) -> new MyCustomSimilarity());
+    }
+  }
+  ```
+
+  - plugin-descriptor.properties 파일을 작성한다.
+    - Plugin 경로에 이 파일이 없으면 Elasticsearch 실행 시 error가 발생한다.
+
+  ```properties
+  description=Custom Similarity Plugin for ES 8.11
+  version=1.0.0
+  name=my-custom-similarity
+  classname=com.example.similarity.MySimilarityPlugin
+  java.version=21
+  elasticsearch.version=8.11.0
+  ```
+
+  - 위 프로젝트를 빌드한 결과로 생성된 jar 파일과 plugin-descriptor.properties 파일을 Elasticsearch의 plugin 경로로 옮긴다.
+    - Elasticsearch Docker기준으로 `/usr/share/elasticsearch/plugin`이다.
+    - 이 경로에 새로운 디렉터리를 생성하고 해당 디렉터리 내부에 위 두 파일을 이동시킨다.
+  - 이 상태에서 Elasticsearch를 실행하면, Elasticsearch가 실행되면서 plugin을 인식하고 실행된다.
+
+
+
+- 테스트
+
+  - Plugin이 정상적으로 추가되었는지 확인한다.
+
+  ```http
+  GET _cat/plugins
+  ```
+
+  - 검색 테스트를 위한 index를 생성한다.
+    - BM25로 점수를 계산하는 field와 위해서 구현한 방식으로 점수를 계산하는 field를 하나씩 생성한다.
+
+  ```json
+  // PUT my_index
+  {
+    "settings": {
+      "index": {
+        "similarity": {
+          "my_custom_sim": {
+            "type": "my_custom_similarity"
+          }
+        }
+      }
+    },
+    "mappings": {
+      "properties": {
+        "bm25_field":{
+          "type": "text"
+        },
+        "custom_sim_field": {
+          "type": "text",
+          "similarity": "my_custom_sim" 
+        }
+      }
+    }
+  }
+  ```
+
+  - 데이터를 삽입한다.
+
+  ```json
+  // PUT my_index/_doc/1
+  {
+    "bm25_field":"foo foo",
+    "custom_sim_field":"foo foo"
+  }
+  ```
+
+  - BM25 점수를 먼저 확인한다.
+
+  ```json
+  // GET my_index/_search
+  {
+    "query": {
+      "match": {
+        "bm25_field": "foo"
+      }
+    }
+  }
+  
+  // output
+  {
+    "took": 2,
+    "timed_out": false,
+    "_shards": {
+      "total": 1,
+      "successful": 1,
+      "skipped": 0,
+      "failed": 0
+    },
+    "hits": {
+      "total": {
+        "value": 1,
+        "relation": "eq"
+      },
+      "max_score": 0.39556286,
+      "hits": [
+        {
+          "_index": "my_index",
+          "_id": "1",
+          "_score": 0.39556286,
+          "_source": {
+            "bm25_field": "foo foo",
+            "custom_sim_field": "foo foo"
+          }
+        }
+      ]
+    }
+  }
+  ```
+
+  - 점수 계산 plugin에 구현한 방식대로 점수가 계산되는지 확인한다.
+
+  ```json
+  // GET my_index/_search
+  {
+    "explain": true, 
+    "query": {
+      "match": {
+        "custom_sim_field": "foo bar"
+      }
+    }
+  }
+  
+  // output
+  {
+    "took": 4,
+    "timed_out": false,
+    "_shards": {
+      "total": 1,
+      "successful": 1,
+      "skipped": 0,
+      "failed": 0
+    },
+    "hits": {
+      "total": {
+        "value": 1,
+        "relation": "eq"
+      },
+      "max_score": 2,
+      "hits": [
+        {
+          "_shard": "[my_index][0]",
+          "_node": "i586hh37TmWwYt-Nb1RXwQ",
+          "_index": "my_index",
+          "_id": "1",
+          "_score": 2,
+          "_source": {
+            "bm25_field": "foo foo",
+            "custom_sim_field": "foo foo"
+          },
+          "_explanation": {
+            "value": 2,
+            "description": "sum of:",
+            "details": [
+              {
+                "value": 2,
+                "description": "weight(custom_sim_field:foo in 0) [PerFieldSimilarity], result of:",
+                "details": [
+                  {
+                    "value": 2,
+                    "description": "score(freq=2.0), with freq of:",
+                    "details": [
+                      {
+                        "value": 2,
+                        "description": "freq, occurrences of term within document",
+                        "details": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+  ```
+
