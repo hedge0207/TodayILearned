@@ -1129,7 +1129,7 @@
 
 - kNN 검색에 필요한 메모리
   - kNN 검색을 수행할 경우, data node에 충분한 메모리가 필요하다.
-    - HNSW 검색을 수행하기 위해서는 vector와 HNSW 그래프가 메모레이 올라가야 한다.
+    - HNSW 검색을 수행하기 위해서는 vector와 HNSW 그래프가 메모리에 올라가야 한다.
     - 필요한 메모리의 양은, vector의 개수, vector의 차원, quantization 여부 `index_options.m`값 등에 의해 결정된다.
     - 주의할 점은 여기서 말하는 memory는 java heap memory와는 분리된 filesystem cache에 사용되는 메모리라는 점이다.
   - Vector를 위해 필요한 메모리의 양은 아래와 같이 구할 수 있다.
@@ -1143,7 +1143,7 @@
     - `num_vectors * 4 * HNSW.m`. 
     - `HNSW.m` 의 기본값은 16이므로, 기본적으로 `num_vectors * 4 * 16` 만큼의 memory가 필요하다.
   - 예시
-    - 만약 1024 차원의 벡터 1M개를 대상으로 HNSW algorithm을 사용하여 검색을 수행해야 한다면, 대략적으로 필요한 메모리를 아래와 같이 계산할 수 있다.
+    - 만약 1024 차원의 벡터 1M개를 quantization하지 않고 HNSW algorithm을 사용하여 검색을 수행해야 한다면, 대략적으로 필요한 메모리를 아래와 같이 계산할 수 있다.
     - HNSW graph에 64,000,000 bytes, vector에 4,096,000,000 bytes가 필요해서, 총 4,160,000,000 bytes가 필요하다.
   
   $$
@@ -1186,6 +1186,32 @@
   - 데이터의 개수가 많을 수록 warm up을 하지 않으면 검색 속도가 느려지게 된다.
     - 데이터가 적을 경우 warm up을 거치지 않아도 단 시간에 page cache에 데이터를 load할 수 있지만, 데이터가 많아질수록 page cache에 load하는 데 걸리는 시간이 길어지게 된다.
     - 따라서 대량의 데이터를 대상으로 검색을 수행해야 할 경우 warm up을 필수로 수행하는 것이 좋다.
+
+
+
+- Lucene segment 파일의 구조
+
+  - `.vec`
+    - 양자화되지 않은 vector 값들이 저장되는 파일이다.
+    - Float은 4byte이기에 파일의 크기는 `dimension * 4 * num_vector`가 된다.
+    - Quantization을 할 경우 memory에 load되지 않으며, 요청에 따라 brute-force를 실행하거나, segment merge가 실행될 때 re-quantization을 위해 사용된다.
+
+  | dim * float | dim * float | ...  | dim * float |
+  | ----------- | ----------- | ---- | ----------- |
+
+  - `.veq`
+    - `int4` 또는 `int8`로 양자화된 vector 값들을 저장한다.
+    - 파일의 크기는 `(dimension + 4) * num_vector`가 된다.
+    - +4 bytes는 정확도와 재현율을 높이기 위해 점수를 조정하는 데 사용되는 보정용 곱셈 계수(float)을 반영하기 위한것이다.
+
+  | dim * byte | float | dim * byte | float | ...  | dim * byte | float |
+  | ---------- | ----- | ---------- | ----- | ---- | ---------- | ----- |
+
+  - `.vemq`
+    - Segment에 저장된 vector 관련 설정과 quantization에 대한 metadata를 저장하는 파일이다. 
+
+  | vector metadata information | configured confidence interval | upper quantile | lower quantile | vector ordinal translation |
+  | --------------------------- | ------------------------------ | -------------- | -------------- | -------------------------- |
 
 
 

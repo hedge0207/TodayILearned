@@ -182,6 +182,12 @@
 
 
 
+
+
+### Elasticsearch에서 HNSW
+
+> https://www.elastic.co/search-labs/blog/hnsw-graph
+
 - Elasticsearch에서 HNSW
   - 각 segment는 고유한 HNSW graph를 가지고 있다.
     - 각 segment에 저장된 vector들로 구성된 HNSW graph이다.
@@ -222,7 +228,7 @@
 - Diversity
   - Clique
     - 만약 같은 layer에 여러 node가 서로 근처에 있는 node들이 많다면, 문제가 발생할 수 있다.
-    - 새로 근처에 있는 node들이 자신들끼리만 연결된 클리크(clique)를 형성하게 되고, 다른 node들과 이어지는 연결이 매우 적어질 수 있다.
+    - 근처에 있는 node들이 자신들끼리만 연결된 클리크(clique)를 형성하게 되고, 다른 node들과 이어지는 연결이 매우 적어질 수 있다.
     - Clique란 graph에서 모든 노드가 서로 연결되어 있는 완전 연결 집합을 의미한다.
     - 만약 탐색 과정에서 이러한 clique에 진입하게 되면 이 곳에서 빠져나오기 힘들게 되고, 최적이 아닌(suboptimal) 결과를 얻을 수 있다.
     - 따라서 이미 연결의 최대치에 도달했다 하더라도, 새로운 노드가 추가된다면 기존 연결을 끊어내고 새로운 노드와 연결을 추가해야한다.
