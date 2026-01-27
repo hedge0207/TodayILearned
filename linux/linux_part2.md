@@ -1112,6 +1112,36 @@
 
 
 
+-  Logrotate 실행시 권한 체크
+
+  - Logroate가 실행될 때, 아래와 같은 에러가 발생하는 경우가 있다.
+    - 이는 logrotate가 대상 로그 파일을 rotate 하기 전에, 그 파일이 위치한 디렉터리(및 상위 경로)의 권한이 공격에 취약한지 검사하다가 실패했다는 의미이다.
+    - 아래와 같은 경우에 발생하게 된다.
+    - 디렉터리가 world-writable(`chmod o+w`, e.g. `0777`, `1777` 등)인 경우
+    - 디렉터리가 group-writable (`chmod g+w`)인데, 그 디렉터리의 그룹이 root가 아닌 경우.
+
+  ```
+  parent directory has insecure permissions
+  (It's world writable or writable by group which is not "root")
+  ```
+
+  - Logrotate가 rotation 전에 체크를 하는 이유는 아래와 같다.
+    - 디렉터리가 아무나 쓸 수 있는 형태면(또는 root가 아닌 그룹이 쓸 수 있으면) 악의적인 사용자가 다음 같은 공격을 할 여지가 생긴다.
+    - logrotate가 새 파일을 만들 타이밍에 심볼릭 링크를 끼워 넣어서 `/etc/shadow` 같은 민감 파일로 연결시키고 logrotate가 root 권한으로 create/chown/chmod 등을 수행하게 만들면 권한 상승 또는 파일 변조로 이어질 수 있다.
+    - 즉 root group이 소유한 디렉터리가 아님에도 root 권한으로 조작하는 상황을 막기 위한 것이다.
+
+  - 이 경우 해결 방법은 아래와 같다.
+    - 문제가 되는 디렉터리의 권한을 수정하거나, logrotate가 해당 디렉터리의 소유자 및 소유 그룹으로 실행되도록하면 된다.
+    - 두 번째 방법의 경우 nginx 설정 파일에 아래 설정을 추가하면 된다.
+
+  ```
+  su <user> <group>
+  ```
+
+  
+
+  
+
 
 
 

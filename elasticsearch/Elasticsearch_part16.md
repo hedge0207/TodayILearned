@@ -49,8 +49,6 @@
   \text{Average }Hit@K = \frac{1}{N} \sum_{i=1}^{N} \text{Hit@K}(q_i)
   $$
 
-- 
-
 
 
 - R@K(Recall at K)

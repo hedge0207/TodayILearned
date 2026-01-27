@@ -44,7 +44,7 @@
   [0.45678901234, 0.34567890123, 0.76543210987, ...]
   ```
   
-  - Node와 relationship으 추출하기 위해 데이터를 LLM에 전달.
+  - Node와 relationship을 추출하기 위해 데이터를 LLM에 전달.
     - Text 데이터를 LLM에 전달하여 node와 relationship을 추출한다.
     - 이 때, LLM에게 적절한 prompt를 제공하는 것이 중요하다.
   
