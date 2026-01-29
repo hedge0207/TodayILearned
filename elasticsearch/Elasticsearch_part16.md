@@ -160,6 +160,595 @@
 
 
 
+# Elasticsearch as GraphDB
+
+- Elasticsearch를 GraphDB로 사용하기
+
+  > https://www.elastic.co/search-labs/blog/rag-graph-traversal#iii)-storing-graphs-with-elastic:-how-to?
+
+  - Elasticsearch를 제한적이지만 GraphDB로 사용할 수 있다.
+    - 이는 아래와 같은 관찰에 근거한다.
+    - 첫째, 사용자는 전체 그래프에 관심이 있는 것이 아니라, 자신의 질문과 관련된 작은 서브 그래프에만 관심이 있다.
+    - 둘째, 헝가리 과학자 Frigyes Karinthy의 Six Degrees Principle에 따르면 모든 사람은 다른 사람과 최대 6개의 관계로 이어져 있는데, 제한된 환경에서는 훨씬 적은 수의 관계로도 모든 사람들이 연결될 수 있다.
+    - 이와 같은 관찰에 따르면, 사용자의 질문과 관련된 서브 그래프로 탐색 범위를 줄일 수 있다.
+
+  - KG를 LLM에 전달하는 4 단계
+    - 사용자의 query에서 node 추출.
+    - Elasticsearch를 사용하여 사용자의 질문과 관련된 subgraph 탐색.
+    - Graph pruning
+    - Graph를 텍스트 형식으로 선형화.
+
+
+
+
+- Elasticsearch로 GraphDB 구성하기
+
+  - Index구성
+    - Node index: 각각의 node를 하나의 문서로 저장하기 위한 index.
+    - Relationship index: node 사이의 관계를 하나의 문서로 저장하기 위한 index.
+  - Node index 생성
+
+  ```json
+  // PUT kg_node
+  {
+      "mappings": {
+          "properties":{
+              "label": {
+                  "type": "keyword"
+              },
+              "name": {
+                  "type": "keyword"
+              }
+          }
+      }
+  }
+  ```
+
+  - Relationship index 생성
+
+  ```json
+  // PUT kg_relationship
+  {
+      "mappings":{
+          "properties":{
+              "source": {
+                  "type": "keyword"
+              },
+              "destination": {
+                  "type": "keyword"
+              },
+              "relationship": {
+                  "type": "keyword"
+              }
+          }
+      }
+  }
+  ```
+
+  - 데이터 삽입
+    - 테스트 데이터는 [MetaQA](https://github.com/yuyuz/MetaQA) 데이터셋을 사용한다.
+    - 중복 node가 생성되지 않도록 node의 value를 _id 값으로 사용한다.
+    - `relationship.source`에는 영화가 고정적으로 들어간다.
+
+  ```python
+  from enum import Enum
+  
+  from elasticsearch import Elasticsearch
+  from elasticsearch.helpers import bulk
+  
+  
+  class NodeLabel(Enum):
+      YEAR = "Year"
+      GENRE = "Genre"
+      RATING = "Rating"
+      WRITER = "Writer"
+      TAG = "Tag"
+      LANGUAGE = "Language"
+      VOTE = "Vote"
+      ACTOR = "Actor"
+      DIRECTOR = "Director"
+  
+  
+  class Relationship(Enum):
+      RELEASE_YEAR = "RELEASE_YEAR"
+      HAS_GENRE = "HAS_GENRE"
+      HAS_IMDB_RATING = "HAS_IMDB_RATING"
+      WRITTEN_BY = "WRITTEN_BY"
+      HAS_TAGS = "HAS_TAGS"
+      IN_LANGUAGE = "IN_LANGUAGE"
+      HAS_IMDB_VOTES = "HAS_IMDB_VOTES"
+      STARRED_ACTORS = "STARRED_ACTORS"
+      DIRECTED_BY = "DIRECTED_BY"
+  
+      @property
+      def target_label(self) -> NodeLabel:
+          mapping = {
+              Relationship.RELEASE_YEAR: NodeLabel.YEAR,
+              Relationship.HAS_GENRE: NodeLabel.GENRE,
+              Relationship.HAS_IMDB_RATING: NodeLabel.RATING,
+              Relationship.WRITTEN_BY: NodeLabel.WRITER,
+              Relationship.HAS_TAGS: NodeLabel.TAG,
+              Relationship.IN_LANGUAGE: NodeLabel.LANGUAGE,
+              Relationship.HAS_IMDB_VOTES: NodeLabel.VOTE,
+              Relationship.STARRED_ACTORS: NodeLabel.ACTOR,
+              Relationship.DIRECTED_BY: NodeLabel.DIRECTOR,
+          }
+          return mapping[self]
+  
+  
+  es_client = Elasticsearch("http://localhost:9200")
+  relation_index_name = "kg_relationship"
+  node_index_name = "kg_node"
+  
+  def set_up():
+      relation_index_mapping = {
+          "properties":{
+              "source": {
+                  "type": "keyword"
+              },
+              "destination": {
+                  "type": "keyword"
+              },
+              "relationship": {
+                  "type": "keyword"
+              }
+          }
+      }
+  
+      node_index_mapping = {
+          "properties":{
+              "label": {
+                  "type": "keyword"
+              },
+              "name": {
+                  "type": "keyword"
+              }
+          }
+      }
+  
+      if not es_client.indices.exists(index=relation_index_name):
+          es_client.indices.create(index=relation_index_name, mappings=relation_index_mapping)
+      
+      if not es_client.indices.exists(index=node_index_name):
+          es_client.indices.create(index=node_index_name, mappings=node_index_mapping)
+  
+  def index():
+      node_bulk = []
+      relationship_bulk = []
+      with open("./metaqa/kb.txt", "r") as f:
+          for line in f.readlines():
+              movie, rel, entity = line.rstrip().split("|")
+              try:
+                  rel_enum = Relationship(rel.upper())
+                  target_label = rel_enum.target_label.value
+              except ValueError:
+                  target_label = "Entity"
+              node_bulk += [
+                  {
+                      "_index": node_index_name,
+                      "_id": movie.replace(" ", "_"),
+                      "_source":{
+                          "label": "Movie",
+                          "name": movie
+                      }
+                      
+                  },
+                  {
+                      "_index": node_index_name,
+                      "_id": entity.replace(" ", "_"),
+                      "_source":{
+                          "label": target_label,
+                          "name": entity
+                      }
+                  }
+              ]
+              relationship_bulk.append({
+                  "_index": relation_index_name,
+                  "_source":{
+                      "source": movie,
+                      "destination": entity,
+                      "relationship": rel_enum.value
+                  }
+              })
+      bulk(es_client, node_bulk)
+      bulk(es_client, relationship_bulk)
+  
+  
+  if __name__ == "__main__":
+      set_up()
+      index()
+  ```
+
+
+
+- 검색 테스트
+
+  - 두 엔티티 사이의 관계를 묻는 질문은 아래 과정을 통해 처리가 가능하다.
+    - 만약 query에 두 개의 entity가 있고, 두 entity 사이에 직접적인 relationship이 있으면, 탐색을 종료한다.
+    - 만약 직접적인 relationship이 없으면 두 entity 각각을 탐색하면서 서로 공유하는 node가 있는지 찾는다.
+    - 공유하는 node가 없을 경우 두 node와 연결된 node들의 모든 이웃을 대상으로 같은 과정을 반복한다.
+    - 공유하는 node를 발견하면 탐색을 종료한다.
+    - 두 개체가 6hop을 초과해 연결될 경우에는 관련성이 약하다고 보기에 반복 횟수는 3번으로 제한한다.
+    - 다만, 이 과정은 두 entity 사이의 관계를 찾는 질문일 경우에만 유효한 것 처럼 보인다(?).
+  - 몇 번의 검색을 반복하다보면 탐색 대상 노드의 수가 폭발적으로 증가할 것 같지만 KG의 topology로 인해, 그런 상황은 거의 발생하지 않는다.
+    - KG는 일반적으로 다수의 노드와 연결된 소수의 허브 노드가 존재하고, 대부분의 노드는 소수의 이웃 노드만을 가진다.
+    - 탐색 과정에서 많은 이웃 노드와 연결된 노드가 일부 탐색되더라도, 탐색의 크기(size)를 줄여 탐색하면 된다.
+    - 또한 허브 노드들은 일반적으로 다른 허브 노드들과 연결되어 있기 때문에 허브와 연결된 개체들 사이의 경로를 찾는 경우 경로가 매우 짧아(즉, 홉 수가 적어) 이웃 수의 지수적 증가가 거의 발생하지 않는다.
+    - 반대로 멀리 떨어져 있는(홉 수가 큰) 노드들끼리 연결해야 하는 경우에는 대부분의 경로에 cardinality가 적은 노드들이 위치하게 되어 마찬가지로 이웃 수가 지수적으로 증가하지는 않는다.
+  - 질문1:  "Who directed the movie The Terminal?"
+    - source에 해당하는 영화 이름과, relatiohsip이 주어진 경우.
+
+  ```json
+  // GET kg_relationship/_search
+  {
+    "query": {
+      "bool": {
+        "filter": [
+          {
+            "term": {
+              "source": "The Terminal"
+            }
+          },
+          {
+            "term": {
+              "relationship": "DIRECTED_BY"
+            }
+          }
+        ]
+      }
+    }
+  }
+  ```
+
+  - 질문2: "Was The Terminal directed by Steven Spielberg?"
+    - source에 해당하는 영화 이름과 destination에 해당하는 감독 이름, relatiohsip이 주어진 경우.
+    - 질문1에서 사용한 query를 그대로 사용해도 찾을 수 있다.
+
+  ```json
+  // GET kg_relationship/_search
+  {
+    "query": {
+      "bool": {
+        "filter": [
+          {
+            "term": {
+              "source": "The Terminal"
+            }
+          },
+          {
+            "term": {
+              "destination": "Steven Spielberg"
+            }
+          }
+        ]
+      }
+    }
+  }
+  ```
+
+  - 질문3. "Are there any films directed by Steven Spielberg that Tom Hanks has appeared in?"
+    - 두 개의 destination, relationship이 주어지고, destination사이의 연결을 찾아야 하는 경우.
+
+  ```json
+  // GET kg_relationship/_search
+  {
+    "query": {
+      "bool": {
+        "filter": [
+          {
+            "term":{
+              "destination": "Steven Spielberg"
+            }
+          },
+          {
+            "term": {
+              "relationship": "DIRECTED_BY"
+            }
+          }
+        ]
+      }
+    }
+  }
+  
+  // response
+  {
+    // ...
+      "hits": [
+        {
+          "_index": "kg_relationship",
+          "_id": "3xxx-ZsBDUSVc-wAvMOq",
+          "_score": 0,
+          "_source": {
+            "source": "1941",
+            "destination": "Steven Spielberg",
+            "relationship": "DIRECTED_BY"
+          }
+        },
+        {
+          "_index": "kg_relationship",
+          "_id": "8Bxx-ZsBDUSVc-wAvc64",
+          "_score": 0,
+          "_source": {
+            "source": "Catch Me If You Can",
+            "destination": "Steven Spielberg",
+            "relationship": "DIRECTED_BY"
+          }
+        },
+        {
+          "_index": "kg_relationship",
+          "_id": "jhxx-ZsBDUSVc-wAvtqi",
+          "_score": 0,
+          "_source": {
+            "source": "The Terminal",
+            "destination": "Steven Spielberg",
+            "relationship": "DIRECTED_BY"
+          }
+        },
+        // ...
+      ]
+    }
+  }
+  
+  
+  // 위 응답에서 나온 결과를 source로 다시 검색을 실행한다.
+  // GET kg_relationship/_search
+  {
+    "size": 100,
+    "query": {
+      "bool": {
+        "filter": [
+          {
+            "terms": {
+              "source": [
+                "1941",
+                "Catch Me If You Can",
+                "The Terminal"
+              ]
+            }
+          },
+          {
+            "term": {
+              "destination": "Tom Hanks"
+            }
+          }
+        ]
+      }
+    }
+  }
+  ```
+
+
+
+- 3-hop: The films that share actors with the [The Harvey Girls] film were in what genres.
+
+  - movie-actor
+
+  ```json
+  // POST kg_relationship/_search
+  {
+    "query": {
+      "bool": {
+        "filter": [
+          {
+            "term": {
+              "relationship": "STARRED_ACTORS"
+            }
+          },
+          {
+            "term": {
+              "source": "The Harvey Girls"
+            }
+          }
+        ]
+      }
+    }
+  }
+  
+  
+  // response
+  {
+    // ...
+    "hits": {
+      "total": {
+        "value": 4,
+        "relation": "eq"
+      },
+      "max_score": 0,
+      "hits": [
+        {
+          "_index": "kg_relationship",
+          "_id": "qR1x-ZsBDUSVc-wA4ObS",
+          "_score": 0,
+          "_source": {
+            "source": "The Harvey Girls",
+            "destination": "Judy Garland",
+            "relationship": "STARRED_ACTORS"
+          }
+        },
+        {
+          "_index": "kg_relationship",
+          "_id": "qh1x-ZsBDUSVc-wA4ObS",
+          "_score": 0,
+          "_source": {
+            "source": "The Harvey Girls",
+            "destination": "Ray Bolger",
+            "relationship": "STARRED_ACTORS"
+          }
+        },
+        {
+          "_index": "kg_relationship",
+          "_id": "qx1x-ZsBDUSVc-wA4ObS",
+          "_score": 0,
+          "_source": {
+            "source": "The Harvey Girls",
+            "destination": "Angela Lansbury",
+            "relationship": "STARRED_ACTORS"
+          }
+        },
+        {
+          "_index": "kg_relationship",
+          "_id": "rB1x-ZsBDUSVc-wA4ObS",
+          "_score": 0,
+          "_source": {
+            "source": "The Harvey Girls",
+            "destination": "John Hodiak",
+            "relationship": "STARRED_ACTORS"
+          }
+        }
+      ]
+    }
+  }
+  ```
+
+  - actor-movie
+
+  ```json
+  // POST kg_relationship/_search
+  {
+    "size": 100,
+    "query": {
+      "bool": {
+        "filter": [
+          {
+            "term": {
+              "relationship": "STARRED_ACTORS"
+            }
+          },
+          {
+            "terms": {
+              "destination": [
+                "Judy Garland",
+                "Ray Bolger",
+                "Angela Lansbury",
+                "John Hodiak"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+  
+  // response
+  {
+    // ...
+    "hits": {
+      "total": {
+        "value": 40,
+        "relation": "eq"
+      },
+      "max_score": 0,
+      "hits": [
+        {
+          "_index": "kg_relationship",
+          "_id": "rxxx-ZsBDUSVc-wAwfRO",
+          "_score": 0,
+          "_source": {
+            "source": "Thoroughbreds Don't Cry",
+            "destination": "Judy Garland",
+            "relationship": "STARRED_ACTORS"
+          }
+        },
+        {
+          "_index": "kg_relationship",
+          "_id": "zxxx-ZsBDUSVc-wAwfd9",
+          "_score": 0,
+          "_source": {
+            "source": "Babes in Toyland",
+            "destination": "Ray Bolger",
+            "relationship": "STARRED_ACTORS"
+          }
+        },
+        // ...
+        {
+          "_index": "kg_relationship",
+          "_id": "7h5x-ZsBDUSVc-wA87h_",
+          "_score": 0,
+          "_source": {
+            "source": "The Mirror Crack'd",
+            "destination": "Angela Lansbury",
+            "relationship": "STARRED_ACTORS"
+          }
+        },
+        {
+          "_index": "kg_relationship",
+          "_id": "bR5x-ZsBDUSVc-wA9ccm",
+          "_score": 0,
+          "_source": {
+            "source": "The Court Jester",
+            "destination": "Angela Lansbury",
+            "relationship": "STARRED_ACTORS"
+          }
+        }
+      ]
+    }
+  }
+  ```
+
+  - movie-genre
+
+  ```json
+  // POST kg_relationship/_search
+  {
+    "size": 0,
+    "query": {
+      "bool": {
+        "filter": [
+          {
+            "term": {
+              "relationship": "HAS_GENRE"
+            }
+          },
+          {
+            "terms": {
+              "source": [
+                "Thoroughbreds Don't Cry",
+                "Babes in Toyland",
+                "Kind Lady",
+                "Easter Parade",
+                // ...
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "aggs":{
+      "genre_aggs":{
+        "terms":{
+          "field":"destination"
+        }
+      }
+    }
+  }
+  
+  // response
+  {
+    // ...
+    "aggregations": {
+      "genre_aggs": {
+        "doc_count_error_upper_bound": 0,
+        "sum_other_doc_count": 0,
+        "buckets": [
+          {
+            "key": "Drama",
+            "doc_count": 2
+          },
+          {
+            "key": "Musical",
+            "doc_count": 2
+          },
+          // ...
+        ]
+      }
+    }
+  }
+  ```
+
+
+
+
+
 
 
 
