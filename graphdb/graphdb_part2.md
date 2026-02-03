@@ -443,3 +443,99 @@
     - 따라서 이 경우에는 결정론적이라 할 수 없다.
     - 그러나, 이 경우에도 절대 탐색되지 않을 문서를 탐색하지 않는다는 것은 보장된다.
 
+
+
+
+
+
+
+# Hierarchical Lexical Graph for Enhanced Multi-Hop Retrieval
+
+> https://arxiv.org/html/2506.08074v1
+
+- 개요
+  - RAG는 multi-hop 추론을 처리하는 문제에 직면해있다.
+    - 이러한 문제에 대한 답변을 생성하기 위해서는 의미론적으로 분할되어 있는 여러 개의 문서 혹은 세그먼트들을 합해서 생성해야한다.
+    - 예를 들어 "FTC 소송이 e-commerce 업체들의 주가에 어떤 영향을 미쳤어?"라는 질문에 대한 답변을 생성하기 위해서는 소송 관련 자료, Amazon의 재무재표, 시장의 반응 등 여러 문서에 관련 없이 흩어져 있는 사실들을 수집해야한다.
+  - 이러한 문제의 원인은 RAG가 주로 vector similarity search(VSS)에 의존하기 때문이다.
+    - VSS는 query의 표면적 의미와 가까운 문장들을 찾아줄 수는 있다.
+    - 그러나 서로 관련은 있으나 맥락적으로 거리가 있는 정보들을 찾아내는 데는 한계가 있다.
+  - 검색 단위의 세분성(retrieval-unit granularity)
+    - 기존의 RAG는 주로 large text chunk를 사용했다.
+    - 여러 문장으로 구성된 text chunk는 질의와 무관한 정보들을 수집하는 부작용이 있다.
+    - 이를 해결하기 위해 Chen 등은 정보 검색의 정밀도를 높이기 위해 원자적 명제(atomic propositions)와 같은 더 작은 검색 단위를 사용할 것을 제안한다.
+    - 원자적 명제란 더 이상 의미적으로 분해할 수 없는, 하나의 사실이나 주장을 담은 최소 단위의 문장을 의미하는 것으로 "그리고/또는/그러므로" 등을 포함하지 않고, 참/거짓을 독립적으로 판단할 수 있는 문장을 의미한다.
+    - 예를 들어 "스티븐 스필버그는 《터미널》을 감독했고, 톰 행크스가 주연을 맡았다."는 명제는 둘 이상의 명제가 혼합되어 있으므로 원자적 명제가 아니다.
+    - "스티븐 스필버그는 《터미널》을 감독했다.", "《터미널》은 톰 행크스가 주연으로 출연했다."는 원자적 명제이다.
+  - 본 연구에서는 Hierarchical Lexical Graph(HLG) framework을 제한한다.
+    - 이는 표면적 유사성과 structured multi-hop evidence 사이의 간극을 해소하기 위한 framework이다.
+    - 기존의 연구가 검색 단위를 세분화하는 것의 이점에 대해 강조했다면, HLG는 이를 확장하여 계보(Lineage), 요약(Summarization), 엔터티–관계(Entity-Relationship)라는 세 가지 상호 연결된 계층(tier)을 통합한다. 
+  - HLG는 아래와 같은 것들을 가능하게 한다.
+    - 각 statement들의 계보를 보존하여 정확한 출처 추적을 가능하게 한다.
+    - Statement들을 주제 중심으로 clustering하여 유연한 검색을 지원한다.
+    - Entity-Relationship을 연결하여 하향식이 아닌 상향식 탐색을 가능하게 한다.
+    - 이러한 다층(multi-tier) 구조는 아주 작은 의미적 중첩 만으로도 다양한 사실들을 보다 정밀하게 검색할 수 있도록 한다.
+  - 이 프레임워크를 바탕으로, 서로 다른 검색 요구에 맞춰 설계된 두 가지 상호보완적인 RAG 방법을 제안한다.
+    - StatementGraphRAG는 요약 계층(Summarization Tier)에 포함된 개별 명제(statement)에 초점을 맞춘다. 
+    - 이 방법은 엔터티–관계 계층(Entity-Relationship Tier)을 통해 문서 간 명제들을 연결하고, 계보 계층(Lineage Tier)을 통해 출처 정보를 보존한다. 
+    - 이는 높은 정밀도의 근거가 필요한 세밀한 질의에 적합하다.
+    - TopicGraphRAG는 요약 계층에서 명제들의 군집, 즉 주제별 그룹을 검색한다. 
+    - 이때 엔터티 관계를 활용해 서로 연관된 주제를 공유하는 군집들을 연결하며, 계보 계층을 통해 출처를 추적한다.
+    - 이는 보다 넓은 범위의 개방형 질의나 상위 수준의 질문에 효율적이다.
+    - 질의 유형에 따라 어떤  RAG를 선택할지가 달라지며, 구체적이고 단일한 답을 요구하는 질문에는 StatementGraphRAG**, **탐색적이거나 다면적인 질문에는 TopicGraphRAG가 적합하다.
+
+
+
+- Hierarchical Lexical Graph
+
+  - 설계
+
+    - 워크로드의 질의응답 요구사항을 출발점으로 하여, 그 요구를 충족하기 위한 최적의 검색 및 생성 전략과 이에 적합한 인덱싱·저장 시스템을 도출하는 체계적인 역방향(working backward) 설계 기법을 사용한다.
+    - 이 설계에서는 워크플로우가 지원하려는 최종 사용자 또는 애플리케이션별로 필요한 데이터 유형, 이러한 요구를 충족하기 위해 필요한 데이터, 그리고 효율적인 검색에 가장 적합한 인덱싱 구조를 함께 고려한다.
+
+  - 본 연구에서는 명제(proposition)를 주요 검색 단위로 사용할 것이다.
+
+    - 전체 검색 절차에서 최적 크기의 검색 단위(retrieval unit)를 결정하는 것은 매우 중요하다.
+    - 전통적인 RAG에서는 일반적으로 문서보다는 작고 문장보다는 큰 chunk를 단위로 사용했다.
+    - 그러나 이 단위는 서로 관련 없는 문장들을 엮어 정확도를 떨어뜨리기도 했다.
+
+    - 작은 검색 단위는 LLM에 보다 정확하고 관련 있는 입력값을 제공할 수 있다.
+
+  - 구조
+
+    - HLG는 대상 도메인에 대한 관련도를 최적화하기 위해 초기 인덱싱 단계에서 데이터셋당 한 번 구축된다. 
+    - 다만 HLG는 계층별 모듈식 업데이트를 통해 전체 재색인 없이도 새로운 문서의 점진적 수집과 엔터티 전파를 지원한다.
+
+  ![Refer to caption](graphdb_part2.assets/lexical_graph.png)
+
+  - Lineage Tier
+
+    - Graph의 기반이 되는 계층이며, 추적성과 맥락성 무결성을 제공한다.
+    - Source Nodes: 문서의 출처나 날짜와 같은 기원에 관한 메타데이터를 저장한다.
+    - Chunk Nodes: 순차적으로 연결된 text gegments들을 저장하며, 이후의 분석을 위해 맥락을 보존하고 계보를 유지한다.
+    - 이 계층은 검색 결과의 해석에 원본의 맥락과 검색된 정보의 출처가 중요한 규범 중심(compliance-driven) 시나리오에 유용하다.
+
+  - Summarization Tier
+
+    - 세분화된 fact와 statement를 더 넓은 topic과 연결하여, 계층적인 의미 단위를 형성한다.
+    - Facts: 주어–서술어–객체(subject–predicate–object, S-P-O, e.g. [Company X, acquired, Company Y]) 삼중항으로 구성된 독립적인 의미 단위로, 세부 정보와 전역적 통찰을 연결한다.
+    - Statements: 원문 문서에서 추출된 명제들로 원자적 명제(e.g. Company X acquired Company Y)이며, 검색 과정의 핵심이다.
+    - Topics: 서로 연관된 statement들을 묶은 주제적 요약으로, 문서 내부의 연결성을 강화한다.
+    - Statement를 상위 Topic과 연결함으로써, 이 계층은 국소적 추론과 전역적 추론을 모두 지원하며, multi-hop QA 작업을 위한 효율적인 검색을 가능하게 한다.
+
+  - Entity-Relationship Tier
+
+    - Entity들 사이의 relationship을 묘사하며, 검색의 entrypoint가 되는 계층이다.
+    - Entity Nodes: Category로 분류된 key entity들이다.
+    - Relationship Edges: Entity들 사이의 관계이며, 검색 작업에 사용된다.
+
+  - Graph의 연결
+
+    - HGL은 semantic similarity와 그래프 탐색을 결합한 hybrid 접근법을 통해 검색을 최적화한다.
+    - Local/Global connectivity: Topic은 동일한 소스 문서 내의 statement들을 연결함으로써 문서 내부 연결성을 제공한다. 반면, fact는 문서 간 연결을 가능하게 하여, 복잡한 질의에 대해서도 포괄적인 검색을 보장한다.
+    - Vector Based Entry Points: Topic과 statement는 vector 검색을 위해 embedding된다. Topic은 연관된  statement들과 함께 embedding하여 query alignment를 높인다.
+
+    - Keyword Base Entry Points: keyword query는 Entity-Relationship Tier에서 entity와 매치될 수 있으며, 이는 상향식 탐색을 가능하게 한다.
+
+
+
