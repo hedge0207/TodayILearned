@@ -539,3 +539,334 @@
 
 
 
+
+
+## Retrieval Model
+
+- StatementGraphRAG
+
+  - 검색 결과는 아래 4단계를 거치면서 점차 정교해진다.
+
+    - Keyword-based retrieval: query term을 추출하여 해당 term들을 포함하고 있는 statement들을 검색한다.
+    - Vector similarity search: query와 의미적으로 유사한 statement들을 검색한다.
+    - Graph beam search: 공유하는 entity들을 탐색하는 방식으로 multi-hop 이웃들을 탐색하고, 결과 경로들에 점수를 매긴다.
+    - Reranking: 최종 top-k 결과를 확정하기 위해 모든 후보들을 reranking한다.
+
+  - Notation
+
+    - 사용자 질의 Q와 질의 집합 D가 있을 때, $Q \in D$와 같이 표현한다.
+    - $e_Q$를 사용자 질의 Q를 d 차원으로 임베딩한 값이라고 한다면 d 차원의 벡터공간 ℝᵈ에 속할 것이므로 $e_Q := Embed(Q) \in ℝᵈ$로 표현한다.
+    - V를 노드 집합, 를 edge 집합이라 할 때, $g=(V,E)$를 lexical graph라고 정의한다.
+    - $S_g\subseteq V$는 그래프의 노드들 중  statement 노드의 집합이라고 정의한다.
+    - 추출된 keyword들(과 synonym들)은 $K = \{k_i | k_\ \ extracted\ \  from\ \  Q\},\ \ k=1,...,N_k$로 정의한다.
+
+  - 1단계. Keyword Retrieval
+
+    - $s\in S_g$인 s에 대해 $K_s\subseteq K$가 statement $s$ 안에 실제로 등장하는 키워드 집합이라고 하면, 아래와 같이 statement에 포함된 keyword의 개수로 statement에 점수를 부여할 수 있다.
+    - $Score_{kw}$에서 $_{kw}$는 keyword 기반 점수라는 걸 의미한다.
+
+    $$
+    Score_{kw}(s) = |K_s|
+    $$
+
+    - 만약 동점일 경우 $e_Q$와 $e_s$의 유사도로 순위를 결정한다.
+    - 즉 전체 statement 노드 집합 $S_g$에서 $Score_{kw}$로 점수를 매겼을 때 top-k개의 statement node들인 $S_{kw}$는 아래와 같이 표현할 수 있다.
+
+    $$
+    S_{kw} = Top_k(S_g, Score_{kw})
+    $$
+
+  - 2단계. Vector similarity search
+
+    - 1단계와 병행하여 아래와 같이 전체 statement 노드 집합 $S_g$에서 similarity를 기준으로 top-k개의 statement node들인 $S_{VSS}$도 아래와 같이 구한다.
+
+    $$
+    S_{VSS} = Top_k\{s\in S_g|{sim(e_Q,e_s)}\}
+    $$
+
+    - 시작 시점의 후보 statements들인 $S_{init}$은 아래와 같이 정의할 수 있다.
+
+    $$
+    S_{init}=S_{kw}\cup S_{VSS}
+    $$
+
+  - 3단계. Graph beam search
+
+    - Statement $s$에 대해 같은 entity를 공유하는 이웃들은 아래와 같이 정의한다.
+
+    $$
+    Nbr(s) = \{s'\in S_g|Ent(s)\cap Ent(s')≠\varnothing\}
+    $$
+
+    - 경로 $P=<s_1,...,s_n>$이 주어졌을 때, attention-weighted path embedding을 계산한다.
+    - 즉, 전체 경로 P를 대표하는 단일 벡터를 생성한다.
+    - $e_{s_i}$는 경로 상의 i번째 statement의 임베딩 벡터를 의미한다.
+
+    $$
+    \mathbf{e}_{\text{path}}(P) = \sum_{i=1}^{n} \alpha_i \mathbf{e}_{s_i}, \ \ \ \ \alpha_i = \frac{\exp(\text{sim}(\mathbf{e}_Q, \mathbf{e}_{s_i}))}{\sum_{j=1}^{n} \exp(\text{sim}(\mathbf{e}_Q, \mathbf{e}_{s_j}))}
+    $$
+
+    - $\alpha_i$는 i번째 statement가 질의 Q와 얼마나 관련 있는지를 나타내는 가중치로, 소프트맥스 함수를 사용한다
+    - 결국 경로(path)를 구성하는 각 statement 임베딩에 서로 다른 가중치($\alpha_i$)를 곱해 합산함으로써, 하나의 경로 임베딩 벡터를 만든다.
+    - 각 경로의 점수는 아래와 같이 계산한다.
+
+    $$
+    Score_{beam}(P)=sim(e_Q, e_{path}(P))
+    $$
+
+    - 각 최초 statement s에서 시작($s\in S_{init}$)하여 beam search는 더 이상의 자식노드가 점수를 향상시키지 않거나, 최대 깊이 $D_{max}$에 도달할 때 까지 그래프 G에서 탐색 반경을 확장하는데, 모든 깊이에서 상위 B개 경로(beam width)만 유지한다.
+
+    $$
+    S_{\text{beam}} = \bigcup_{s \in S_{\text{init}}} \text{BeamSearch}(s, G, B, D_{\max})
+    $$
+
+    - 이 과정을 거친 후 최종 후보 statement들은 아래와 같다.
+
+    $$
+    S_{final}=S_{init}\cup S_{beam}
+    $$
+
+  - 4단계. Reranking
+
+    - 최종 후보 statement 집합에 속한 각 s($s\in S_{final}$)에 대해서 cross-encoder reranker를 통해 reranking을 수행한다.
+
+    $$
+    Score_{rank}(s) = sim(Rerank(Q), Rerank(s))
+    $$
+
+    - 최종적으로  k개의 결과를 반환한다.
+
+    $$
+    S_{top} = Top_k(S_{final}, Score_{rank})
+    $$
+
+  - pseudocode
+
+  ```pseudocode
+  Algorithm: StatementGraphRAG
+  
+  Input:
+    - Query Q
+    - Lexical graph 𝒢 = (V, E)
+    - Statement node set 𝒮𝒢 ⊆ V
+    - Embedding function Embed(·)
+    - Reranker Rerank(·, ·)
+    - top-k (k), beam width B, max depth D_max
+  
+  Output:
+    - 𝒮_top: top-k statements relevant to Q
+  
+  
+  # ---------- Helpers ----------
+  function Nbr(s, 𝒢):
+    return { s' ∈ 𝒮𝒢 | Ent(s) ∩ Ent(s') ≠ ∅ }
+  
+  function AttentionWeightedPathEmbedding(P, e_Q):
+    sims = [ sim(e_Q, e_{s_i}) for s_i in P ]
+    α = Softmax(sims)
+    return Σ_i ( α_i * e_{s_i} )
+  
+  function BeamScore(P, e_Q):
+    e_path = AttentionWeightedPathEmbedding(P, e_Q)
+    return sim(e_Q, e_path)
+  
+  function TopKByScore(items, score_fn, k):
+    return k items with highest score_fn(item)
+  
+  function TopBPathsByScore(path_score_pairs, B):
+    return B pairs with highest score
+  
+  
+  # ---------- Main ----------
+  e_Q = Embed(Q)
+  
+  K = ExtractKeywordsAndSynonyms(Q)
+  
+  # Step 1: Keyword Retrieval (Eq. 2)
+  for s in 𝒮𝒢:
+    K_s = { k ∈ K | entity(k) appears in s }
+    Score_kw(s) = |K_s|
+  𝒮_kw = TopKByScore(𝒮𝒢, Score_kw, k)
+  # tie-break: prefer larger sim(e_Q, e_s)
+  
+  # Step 2: Vector Similarity Search (Eq. 4)
+  Score_vss(s) = sim(e_Q, e_s)
+  𝒮_vss = TopKByScore(𝒮𝒢, Score_vss, k)
+  
+  𝒮_init = 𝒮_kw ∪ 𝒮_vss
+  
+  # Step 3: Graph Beam Search (Eq. 5~8)
+  𝒮_beam = ∅
+  for start in 𝒮_init:
+    Frontier = { ⟨start⟩ }
+    best_score = BeamScore(⟨start⟩, e_Q)
+  
+    for depth in 1..D_max:
+      Candidates = ∅
+      for P in Frontier:
+        last = LastNode(P)
+        for child in Nbr(last, 𝒢):
+          P2 = Append(P, child)
+          Candidates = Candidates ∪ {(P2, BeamScore(P2, e_Q))}
+      if Candidates is empty:
+        break
+  
+      FrontierPairs = TopBPathsByScore(Candidates, B)
+      Frontier = { P for (P, score) in FrontierPairs }
+      new_best = max{ score for (P, score) in FrontierPairs }
+  
+      if new_best ≤ best_score:
+        break
+      best_score = new_best
+  
+    for P in Frontier:
+      𝒮_beam = 𝒮_beam ∪ Nodes(P)
+  
+  𝒮_final = 𝒮_init ∪ 𝒮_beam
+  
+  # Step 4: Reranking (Eq. 9~10)
+  Score_rank(s) = Rerank(Q, s)
+  𝒮_top = TopKByScore(𝒮_final, Score_rank, k)
+  
+  return 𝒮_top
+  ```
+
+
+
+- TopicGraphRAG
+  - Multi-hop 추론을 통해 관련된 주제를 가진 정보들을 식별하고 확장하기 위해 top-down(Topic 중심) 검색과 bottom-up(entity 중심) 검색을 결합한 방식이다.
+    - Topic은 일반적으로 적은 수의 chunk와 mapping 되며(1:n, n이 작음), 대부분 동일한 문서에서 파생된다.
+    - 이러한 특성으로 인해, 보통 chunk 대비 statement 비율이 10:1에 이르는 개별 statement를 직접 검색하는 방식에 비해, 본 접근법은 저장 효율성이 더 높다. 
+    - 전체 파이프라인은 넓은 주제적 범위와 정밀한 세부 정보 사이의 균형을 맞추는 네 단계로 구성된다.
+  - 1단계. Top-Down: Topic Discovery
+    - 질의를 임베딩하여 사용자의 의도에 맞는 topic을 찾는다.
+    - 그 후 해당 topic에 연결된 statement들을 탐색한다.
+  - 2단계. Bottom-Up: Entity Exploration
+    - Query와 관련된 keyword들을 추출한 후 lexical graph에서 관련된 entity node들과 매칭시킨다.
+    - 그 후 해당 entity에 연결된 statement들을 탐색한다.
+  - 3단계. Graph beam search
+    - Topic, entity와 관련된 statement들을 병합한다.
+    - 각 단계마다 reranker의 안내를 받으면서 beam search는 여러 multi-hop을 탐색하며 context를 추가한다.
+  - 4단계. Final Rerank & Truncation
+    - Reranker를 사용하여 모든 후보 statement들을 rescore한 후, top-k개의 결과를 선택한다.
+  - Rationale
+    - TopicGraphRAG는 topic 기반(top-down)과 entity 기반(bottom-up) 접근을 함께 활용함으로써, 정밀도를 유지하면서도 검색 범위를 확장한다. 
+    - Multi-hop 탐색은 문서 간 연결 관계를 탐색할 수 있게 하며, 최종 재정렬 단계는 사용자 질의와 높은 정합성을 갖는 진술 집합을 생성한다.
+
+
+
+- 검색 후처리
+
+  - StatementGraphRAG 또는 TopicGraphRAG로 검색을 한 후 후처리를 통해 다양성과 명확성을 향상시킬 수 있다.
+
+  - Statement Diversity: Reducing Redundancy
+
+    - 실제 사례에서는 다양한 source들이 중복된 정보를 포함하고 있을 것이고, 이는 context window를 제약하는 결과를 초래한다.
+    - 이를 해결하기 위해서 diversity filtering 절차를 통해 유사한 statements들을 식별하고, 가장 점수가 높은 대표 statement만 남겨야 한다.
+    - 우선 전처리를 통해 숫자 토큰 standardization, stop words 제거, 텍스트 표제어 추출(lemmatization)을 수행하여 숫자 데이터와 텍스트 데이터가 일관된 형태로 표현되도록 한다.
+    - 그 후 TF-IDF를 사용해 statement를 벡터화하고, 코사인 유사도를 계산하여 중복 여부를 탐지한다.
+    - $\text{TF-IDF}_{S_i, k}$는 statement $S_i$에 등장하는 k번째 term을 의미하며, n은 전체 term의 개수이다.
+
+    $$
+    \text{Sim}(S_i, S_j) = \frac{\sum_{k=1}^{n} \text{TF-IDF}_{S_i, k} \cdot \text{TF-IDF}_{S_j, k}}{\sqrt{\sum_{k=1}^{n} (\text{TF-IDF}_{S_i, k})^2} \cdot \sqrt{\sum_{k=1}^{n} (\text{TF-IDF}_{S_j, k})^2}}
+    $$
+
+    - 마지막으로 filtering과정을 위해, diversity threshold $r$을 정의하는데, 이는 1−(similarity threshold)에 해당한다.
+
+    $$
+    \text{Retain } S_i \iff \forall S_j : \text{Sim}(S_i, S_j) > (1 - \tau) \Rightarrow \text{Score}(S_i) > \text{Score}(S_j)
+    $$
+
+    - 유사도가 높은 진술 쌍에 대해서는 점수가 더 낮은 진술을 제거하고, 점수가 더 높은 진술을 유지한다.
+
+  - Statement Enhancement: Tabular Data Processing
+
+    - 테이블이 있는 문서의 경우, 이 단계를 통해 statement가 속한 텍스트 청크의 문맥을 결합하여 statement를 보강한다. 
+    - 이는 수치적 명제가 추가적인 설명 없이는 의미가 불분명할 수 있는 자료에서 특히 중요하다.
+    - Column header와 row label과 같은 관련 문맥 정보를 함께 덧붙여 데이터의 의미를 명확히 함으로써, 수치적 명제의 가독성과 해석 가능성을 향상시킨다. 
+    - 이 과정을 통해 단위나 기간과 같은 모호성을 줄이고, 정보의 완전성을 보장하며, statement의 정확성을 높일 수 있다.
+
+
+
+
+
+
+
+## Experiment
+
+- 준비
+
+  - 데이터셋
+    - 5개의 데이터셋을 사용하여 테스트했으며, multi-hop 추론, 특정 도메인에 관한 데이터, 표와 맥락이 통합된 데이터들을 선정했다.
+    - Mutihop-RAG(기사), SEC-10Q(경제), ConcurrentQA(email), NTSB(항공), WikiHowQA(일반)
+  - Tools
+    - Graph 저장소로는 AWS Neptune Analytics를 사용했다.
+    - Vector 저장소로는 OpenSearch를 사용했다.
+    - 그외에도 PostgreSQL with pgVector, FalkorDB, and MosaicML를 사용했다.
+  - 색인 과정
+    - 모든 데이터셋은 네 단계의 과정을 거치는데, 이 중 2-3 단계에서는 도메인 관련 entity와 topic을 세부 명제(fine-grained propositions)와 연결하기 위해 LLM을 활용한다.
+    - Chunking: 각 문서는 문맥을 보존하기 위해 20%의 중첩(overlap)을 두고 300 토큰 단위의 청크로 분할한다.
+    - Domain-Adaptive Refinement: 각 데이터셋에서 다섯 개의 청크를 샘플링하여 도메인에 특화된 entity의 유형과 topic들(e.g. SEC-10Q의 경우 재무 용어)을 추론한다.
+    - Proposition & Graph Construction: 각 청크에서 세분화된 명제를 추출한 뒤 이를 HLG 내의 topic, entity와 연결한다.
+    - Embedding Generation: 검색 방식에 따라 topic, statement, 또는 둘 모두에 대해 임베딩을 생성한다.
+  - 검색 방식
+    - 3개의 baseline RAG 방식과 4개의 새로운 방식으로 모두 테스트를 진행하여 결과를 비교한다.
+    - SGRAG, TGRAG의 경우 (width=50, depth=3)로 설정한다.
+
+  | **분류**           | **모델명**                   | **약어** | **주요 특징 및 검색 방식**                                   | **확장/최적화 기법**                  |
+  | ------------------ | ---------------------------- | -------- | ------------------------------------------------------------ | ------------------------------------- |
+  | **Baselines**      | **Naive RAG**                | B0       | 쿼리-청크 간 유사도(VSS) 기반 검색                           | 단순 kNN 기반 10개 청크 추출          |
+  |                    | **Naive RAG (w/ Reranking)** | B1       | 50개 청크 선검색 후 재순위화                                 | 모델을 통한 상위 10개 선별            |
+  |                    | **Entity-Linking Expansion** | E1       | 청크 검색 후 엔티티 연결로 확장<br />VSS를 통해 5개 청크 검색 후, 해당 청크에서 entity를 추출해서 one-hop 확장 이후 reranking | 1-hop 확장 + reranking                |
+  | **Our Approaches** | **StatementRAG**             | SRAG     | 청크 단위가 아닌 statement 단위 검색                         | 100개 statement 추출 후 reranking     |
+  |                    | **StatementGraphRAG**        | SGRAG    | Statement 검색 + 그래프 탐색(Beam Search)                    | statement 간 관계를 통한 3-hop 확장   |
+  |                    | **TopicRAG**                 | TRAG     | Topic 단위 검색                                              | 토픽 관련 문장 일괄 수집 후 reranking |
+  |                    | **TopicGraphRAG**            | TGRAG    | Topic 검색 + topic 레벨 그래프 확장                          | 토픽 간 관계를 통한 빔 서치 확장      |
+
+  - Retrieval unit으로는 state를 사용하되, LLM에 전달하는 generation unit으로는 chunk를 사용한다.
+    - 일부 domain의 경우 LLM이 생성한 답변이 아닌 원본 문서를 그대로 보여줘야 한다.
+    - 이를 위해 HLG 방식(SGRAG, TGRAG)를 평가할 때 chunk를 기반으로 평가할 것이다.
+    - 즉, 그래프 확장 과정에서는 개별 statement들 간의 세밀한 연결 관계를 활용하되, 생성 단계의 프롬프트는 오직 원본 텍스트 chunk으로만 구성되도록한다. 
+    - 최종 단계에서는 상위 랭킹된 진술들을 다시 해당 출처 청크로 역추적하여 이후 최대 10개의 고유한 청크를 선택하고, 근접 중복을 제거하기 위한 다양성 필터를 적용함으로써, 최종 출력에서 청크 수준의 다양성을 추가로 확보한다.
+
+
+
+- 결과
+
+  - 결과표
+
+  ![image-20260128175839630](graphdb_part2.assets/image-20260128175839630.png)
+
+  - 결과 분석
+
+    - 베이스라인 가운데 B1은 세 개의 단일 정답 데이터셋에 대해 평균 66.1%의 정답률(correctness)을 기록하며, B0 대비 절대값 기준 4.1%p향상된 성능을 보였다. 
+    - 반면, 모든 HLG 기반 방법(SRAG, SGRAG, TRAG, TGRAG 및 그 변형들)은 정답률 또는 재현율 중 최소 한 가지 지표에서 B1을 상회하는 성능을 보였다. 이 중 SGRAG-0.5%는 평균 정답률 73.6%로 가장 높은 성능을 기록했으며, 이는 B1 대비 7.5%p 향상된 결과다. 
+    - 또한 이 방법은 평균 답변 재현율(answer recall) 역시 52.4%로 개선하여, B1의 50.8%보다 높은 수치를 달성했다.
+    - 특히 statement 기반인 SRAG나 SGRAG는 단일 정답을 찾아내는 데 높은 평균 정답률을 보였다.
+
+    - TGRAG가 53.8%로 가장 높은 평균 recall을 보였다.
+
+  - 시사점
+
+    - 단순한 엔터티 연결을 수행하는 E1은 평균적으로 B1 대비 거의 개선을 보이지 않았으며(정답률 65.6%), 특히 SEC-10Q 데이터셋에서는 성능이 더 낮게 나타나 단순한 엔터티 확장만으로는 일관된 성능 향상을 기대하기 어렵다는 것을 보여준다.
+    - 위와 같은 결과는 statement-level retrieval이 정확한 단일 근거를 찾아내는 데 적합할 수 있으며, topic-based retrieval은 보다 넓은 범위의 연관된 사실들을 검색하는 데 더 적합할 수 있다는 점을 시사한다.
+    - Multi-answer task의 경우 SGRAG/TGRAG를 사용할 경우 다중 홉 그래프 확장이 노이즈나 관련성이 낮은 홉을 포함하게 되어, 해당 데이터셋에서 가장 우수한 성능을 보이는 B1과 같은 단순한 방법에 비해 오히려 성능을 저하시킬 수 있다.
+    - HLG 기반 방법들은 WikiHowQA에서는 다소 낮은 성능을 보이지만, 진정한 다중 홉 데이터셋(MultiHop-RAG, ConcurrentQA)에서는 모든 베이스라인을 일관되게 상회한다. 
+    - 이러한 데이터셋별 성능 차이는 HLG가 다중 홉 검색에 최적화되어 있음을 보여주며, 단일 홉 질의의 경우에는 모델 복잡도를 낮추거나 조기 종료(early-stopping) 휴리스틱을 적용하는 것이 더 유리할 수 있음을 시사한다.
+
+
+
+- HLG Chunk-Based Variants
+
+  - 일부 애플리케이션들은 원본 텍스트를 chunk 상태로 보존해야 하기 때문에, chunk를 기반으로한 SRAG와 TRAG도 평가했다.
+    - 이 방법들은 내부적으로는 그래프 탐색을 통해 statement를 검색하지만, 최종 출력 단계에서는 선택된 상위 진술들을 다시 해당 부모 청크로 매핑한다. 
+
+  ![image-20260130151717297](graphdb_part2.assets/image-20260130151717297.png)
+
+  - 단순한 chunk 기반 검색(B0 또는 B1)과 비교했을 때, hybrid chunk 기반 변형들은 일관되게 더 높은 정답률을 달성한다. 
+    - 예를 들어 ConcurrentQA 데이터셋에서 Chunk-SGRAG-0.5%는 67.0%의 정답률을 기록하여, B0 대비 23.7%p, B1 대비 16.0%p 향상된 성능을 보였다. 
+    - 비록 초기 검색은 더 세밀한 진술 단위에서 이루어지지만, 최종 출력은 여전히 청크 형태로 유지된다. 
+    - 이는 생성 단계의 context window가 text segment(chunk)로 제한되더라도, 그래프 기반 확장이 여전히 유의미한 효과를 가진다는 점을 시사한다. 
+
+
+
