@@ -592,7 +592,7 @@
 
   - 3단계. Graph beam search
 
-    - Statement $s$에 대해 같은 entity를 공유하는 이웃들은 아래와 같이 정의한다.
+    - Statement $s$에 대해 s의 이웃은 아래와 같이 entity를 공유하는 statement들로 정의한다.
 
     $$
     Nbr(s) = \{s'\in S_g|Ent(s)\cap Ent(s')≠\varnothing\}
@@ -705,7 +705,7 @@
       Candidates = ∅
       for P in Frontier:
         last = LastNode(P)
-        for child in Nbr(last, 𝒢):
+        for child in Nbr(last, 𝒢):	# 전체 그래프 𝒢에서 last 노드의 이웃(entity를 공유 하는) 노드들을 찾는다.
           P2 = Append(P, child)
           Candidates = Candidates ∪ {(P2, BeamScore(P2, e_Q))}
       if Candidates is empty:
@@ -730,6 +730,123 @@
   
   return 𝒮_top
   ```
+  
+  - 위 pseudocode에서 beam searh 부분만 구현하면 아래와 같다.
+  
+  ```python
+  from __future__ import annotations
+  
+  from typing import Any, Hashable, Iterable, List, Set, Tuple
+  import heapq
+  
+  
+  Node = Hashable
+  Path = List[Node]
+  Score = float
+  
+  
+  def beam_score(path: Path, e_Q: Any) -> float:
+      """
+      이 예시에서는 beam_score를 계산하기 위해 target에 가까워질수록(경로 끝이 target이면) 점수 높게 주는 방식을 사용했지만, 
+      실제로 사용할 때는 경로의 점수를 계산하는 방식을 사용해야한다.
+      """
+      target = e_Q["target"]
+      last = path[-1]
+      if last == target:
+          return 10.0 - 0.1 * (len(path) - 1)  # 조금 길면 패널티
+      # 그 외에는 경로 길이에 약간 음수, 그리고 알파벳 유사도 흉내
+      return -0.5 * (len(path) - 1) + (1.0 if last in ("E", "F") else 0.0)
+  
+  def nbr(G:dict, u: str) -> Iterable[str]:
+      """
+      이 예시에서는 단순히 인접한 노드들을 찾는 방식으로 구현했지만,
+      실제로 사용할 때는 entity를 공유하는 node들을 찾아야 한다.
+      """
+      return G.get(u, [])
+  
+  def nodes_in_path(path: Path) -> Set[Node]:
+      return set(path)
+  
+  def top_b_paths_by_score(candidates: List[Tuple[Path, Score]], B: int) -> List[Tuple[Path, Score]]:
+      if B <= 0:
+          return []
+      return heapq.nlargest(B, candidates, key=lambda x: x[1])
+  
+  def beam_expand_nodes(
+      G: dict,
+      S_init: list[Node],
+      e_Q: Any,
+      B: int,                         # beam width
+      D_max: int,                     # max depth
+  ) -> Set[Node]:
+      
+      S_beam: Set[Node] = set()
+  
+      for start in S_init:
+          frontier: List[Path] = [[start,]]
+          best_score: Score = beam_score(frontier[0], e_Q)
+  
+          for _ in range(D_max):
+              candidates: List[List[Path, Score]] = []
+  
+              for P in frontier:
+                  last = P[-1]    # 경로의 마지막 노드에서 탐색한다.
+                  for child in nbr(G, last):
+                      P2 = P + [child]
+                      candidates.append([P2, beam_score(P2, e_Q)])
+  
+              if not candidates:
+                  break
+              
+              # 모든 깊이에서 상위 B개의 경로만 유지한다.
+              frontier_pairs = top_b_paths_by_score(candidates, B)
+              if not frontier_pairs:
+                  break
+  
+              frontier = [P for (P, _) in frontier_pairs]
+              new_best = max(score for (_, score) in frontier_pairs)
+  
+              if new_best <= best_score:
+                  break
+              best_score = new_best
+  
+          for P in frontier:
+              S_beam |= nodes_in_path(P)
+  
+      S_final = set(S_init) | S_beam
+      return S_final
+  
+  
+  if __name__ == "__main__":
+      # 그래프
+      G = {
+          "A": ["B", "C"],
+          "B": ["D", "E"],
+          "C": ["F"],
+          "D": [],
+          "E": ["G"],
+          "F": ["G"],
+          "G": [],
+      }
+  
+      # 실제로는 embedding query가 들어가지만, 편의를 위해 특정 노드를 넣는다.
+      e_Q = {"target": "G"}
+  
+      # 아래에서는 탐색을 시작할 노드를 임의로 지정했지만, 실제 구현시에는 keyword 검색과 semantic 검색의 점수로 시작 노드를 정해야 한다. 
+      S_init = ["A", "C"]
+  
+      S_final = beam_expand_nodes(
+          G = G,
+          S_init=S_init,
+          e_Q=e_Q,
+          B=2,
+          D_max=5,
+      )
+  
+      print("S_final =", S_final)
+  ```
+  
+  
 
 
 
