@@ -606,8 +606,8 @@
     \mathbf{e}_{\text{path}}(P) = \sum_{i=1}^{n} \alpha_i \mathbf{e}_{s_i}, \ \ \ \ \alpha_i = \frac{\exp(\text{sim}(\mathbf{e}_Q, \mathbf{e}_{s_i}))}{\sum_{j=1}^{n} \exp(\text{sim}(\mathbf{e}_Q, \mathbf{e}_{s_j}))}
     $$
 
-    - $\alpha_i$는 i번째 statement가 질의 Q와 얼마나 관련 있는지를 나타내는 가중치로, 소프트맥스 함수를 사용한다
-    - 결국 경로(path)를 구성하는 각 statement 임베딩에 서로 다른 가중치($\alpha_i$)를 곱해 합산함으로써, 하나의 경로 임베딩 벡터를 만든다.
+    - $\alpha_i$는 i번째 statement가 질의 Q와 얼마나 관련 있는지를 나타내는 가중치로, 소프트맥스 함수를 사용한다.
+    - 결국 경로(path)를 구성하는 각 statement 임베딩에 서로 다른 가중치($\alpha_i$)를 곱해 가중치가 곱해진 모든 임베딩 값을 합산함으로써, 하나의 경로 임베딩 벡터를 만든다.
     - 각 경로의 점수는 아래와 같이 계산한다.
 
     $$

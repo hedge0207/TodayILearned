@@ -1,4 +1,173 @@
-# Microsoft GraphRAG
+# GraphRAG
+
+> https://graphrag.com/
+
+## Graph의 형태
+
+- Domain Graph
+
+  - 구조
+
+  ![Domain Graph](graphdb_part3.assets/domain-graph.DOzUcy6K_YkdvU.svg)
+
+  - 특징
+    - Domain graph는 Business Domain Knowledge를 기반으로 생성된다.
+    - 실제 세계의 entity들과 relationship들로 구성된다.
+    - Domain graph는 기반이 되는 domain에 따라 다르게 생성되므로, 정형화된 청사진을 제시하는 것은 불가능하다.
+    - 자연어 질의가 결정론적인 데이터 검색으로 이어져야 하는 상황에서 유용하게 사용할 수 있다.
+
+
+
+- Lexical Graph
+
+  - 구조
+
+  ![Graph](graphdb_part3.assets/knowledge-graph-lexical-graph.De_a3uWZ_Z2h45bE.svg)
+
+  - 특징
+    - 하나의 문서를 여러 청크로 쪼개고 원본 문서와 청크 사이에 relationship을 생성하여 그래프를 구성하는 방식이다.
+    - 일반적으로 chunk들을 embedding한 값을 chunk entity에 함께 저장하여 semantic 검색에 활용한다.
+
+
+
+- Lexical Graph with Extracted Entities
+
+  - 구조
+
+  ![Graph](graphdb_part3.assets/knowledge-graph-lexical-graph-extracted-entities.BsKeTZFb_ZxxPUk.svg)
+
+  - 특징
+    - Chunk에서 entity들을 추출하여 이들 사이의 relationship을 형성하는 방식으로 그래프를 구성한다.
+    - Chunk 기반의 semantic 검색에서는 찾지 못했던 새로운 맥락들을 연결된 entity들을 통해 찾을 수 있게 된다.
+    - Entity에는 해당 entity에 대한 설명과 설명을 embedding한 값을 추가해서 사용할 수도 있다.
+
+
+
+- Lexical Graph with Extracted Entities and Community Summary
+
+  - 구조
+
+  ![Graph](graphdb_part3.assets/knowledge-graph-lexical-graph-extracted-entities-community-summaries.CBUo7m6H_Z2jRSb3-20260305134048411.svg)
+
+  - 특징
+    - Community node를 추가해 공통적인 주제를 가진 chunk 및 entity들을 community node와 연결하여 그래프를 구성한다.
+    - Community node에는 해당 community에 속한 모든 데이터에 대한 요약된 정보와 전체 맥락이 포함된다.
+    - 또한 community에 가중치를 주어 특정 검색시에 특정 community가 더 상위에 노출되도록 설정할 수도 있다.
+    - 특정 chunk가 아니라 전체 데이터셋을 대상으로한 질문들을 처리하기 위해 사용한다.
+
+
+
+- Lexical Graph with Hierarchical Structure
+
+  - 구조
+
+  ![Graph](graphdb_part3.assets/knowledge-graph-lexical-graph-hierarchical-structure.9SFxqb4Q_ZNvQ6r.svg)
+
+  - 특징
+    - 검색 대상 데이터의 위계 구조를 그대로 유지하여 그래프를 구성하는 방식이다.
+    - 검색 대상 데이터에 이미 위계 구조가 존재할 경우에 유용하게 사용할 수 있다.
+
+
+
+- Lexical Graph with Hypothetical Questions
+
+  - 구조
+
+  ![Graph](graphdb_part3.assets/knowledge-graph-lexical-graph-hypothetical-questions.D3hHKCmD_Z215NUf.svg)
+
+  - 특징
+    - Chunk 노드에 question 노드를 연결하여 그래프를 구성하는 방식이다.
+    - Chunk에 해당하는 question들을 가지고 있는 상황이라면 question들을 chunk와 연결하고, query를 embedding한 값을 chunk가 아닌 question node에 검색을 실행하여 연결된 chunk를 찾는다.
+    - Query를 embedding한 값과 답변에 해당하는 text를 embedding한 값의 벡터 유사도가 빈번하게 다른 경우 유용하게 사용할 수 있다.
+    - Question node에는 질문 내용과 이를 embedding한 값을 저장한다.
+    - Question들을 LLM을 사용하여 생성하는 것도 방법이 될 수 있다.
+
+
+
+- Parent-Child Lexical Graph
+
+  - 구조
+
+  ![Graph](graphdb_part3.assets/knowledge-graph-lexical-graph-parent-child.BU743WMk_175fxy.svg)
+
+  - 특징
+    - Chunk들을 더 작은 chunk로 나누고 나뉜 chunk와 나뉘기 전 chunk를 연결하는 방식이다.
+    - Embedding 대상 text가 너무 길거나 text에 다양한 주제가 포함되어 있는 경우 embedding 품질이 나빠지게 되므로, chunk를 더 잘게 쪼개서 embedding하여 embedding 품질을 향상시키는 방법이다.
+    - Parent chunk가 아닌 child chunk만 embedding하여 사용한다.
+
+
+
+
+
+
+
+## Graph 탐색
+
+- Cypher Template(Dynamic Cypher Generation)
+  - Cypher를 미리 구성해두고 query에 따라 필요한 값만 추가하면서 그래프를 탐색하는 방식이다.
+    - 주로 Domain Graph에 사용한다.
+    - Cypher를 작성하기 위해서는 사용자의 예상 질문을 생성하고 예상 질문에 따른 Cypher template을 미리 작성할 수 있는 도메인 전문가가 필요하다.
+    - LLM은 query를 입력으로 받아 query에 답변하기 위핸 cypher template을 선택하고, query에서 parameter들을 추출하여 template에 추가한다.
+    - 사용자가 어떤 유형의 질문을 할지 미리 알고 있어야 템플릿을 만들 수 있으며, 템플릿에 존재하지 않는 질의가 들어올 경우 답변을 못 한다는 한계가 있다.
+  - 이 방식을 사용하기 위해서는 아래와 같은 작업이 필요하다.
+    - Template을 생성하기 위한 domain-specific한 질문들과 해당 질문들로 생성한 template 및 template에 추가할 parameter 목록.
+    - Template과 질문 사이의 관계를 LLM이 이해할 수 있게 하기 위한 prompt.
+  - 만약 template을 전혀 사용하지 않고 LLM이 모든 cypher를 생성할 경우 text2cypher라 부른다.
+
+
+
+- Global Community Summary Retriever
+  - Lexical Graph with Extracted Entities and Community Summary를 대상으로 검색하는 방식이다.
+    - Microsoft에서 고안하여 Microsoft GraphRAG라고도 부른다.
+    - 전체 데이터셋을 대상으로 답변을 생성해야 하는 경우에 유용하게 사용할 수 있다.
+  - Entity와 relationship의 추출, community 탐지, community 요약 등에 모두 LLM이 필요하므로 많은 비용이 든다는 문제가 있다.
+
+
+
+- Graph-Enhanced Vector Search
+
+  - Chunk node에 embedding한 값을 추가하고, chunk를 대상으로 semantic search를 수행해 entry node들을 찾는 방식이다.
+    - Entry node를 찾은 후에는 해당 node에서부터 탐색을 시작하여 부족한 맥락들을 보다 풍부하게 만든다.
+    - LLM이 처리할 수 있을 만큼만 추가적인 맥락들을 탐색해야 한다.
+  - 엔티티 모호성 해소(Entity disambiguation)
+    - Entity들을 단순하게 추출할 경우 텍스트에서 발견되는 모든 엔티티를 그대로 추출한다. 
+    - 그러나 실제로는 서로 다른 방식으로 표현된 entity들이 같은 개념을 가리키고 있을 수도 있다(e.g. synonym).
+    - 따라서 그래프를 깔끔하게 유지하기 위해 이러한 entity들을 하나로 병합하는 엔티티 모호성 해소 단계를 수행할 수도 있다.
+  - Question-guided / Schema-defined extraction
+    - LLM이 모든 종류의 entity와 relationship들을 추출하도록 하는 게 아닌, 일련의 질문이나 고정된 스키마를 제공하여 도메인과 관련된 entity, relationship만 추출하게 하는 방식이다.
+    - 이를 통해 추출되는 정보의 양과 범위를 제한할 수 있다.
+  - 온톨로지 기반 탐색(Ontology-driven traversal)
+    - 애플리케이션 코드에 탐색 경로를 하드코딩하는 대신, 탐색을 위한 온톨로지(ontology)를 제공하는 방식이다.
+
+  ```
+  # 예를 들어 entity들이 아래와 같이 연결되어 있을때
+  Band → Musician
+  Musician → Album
+  Musician → Birthplace
+  Birthplace → Country
+  Album → Genre
+  Album → Label
+  
+  # 탐색 가능한 경로는 아래와 같이 매우 다양하다.
+  Band → Musician → Birthplace → Country
+  Band → Musician → Album → Genre
+  Band → Musician → Album → Label
+  
+  # 하지만 질문이 "Metallica 멤버가 만든 앨범"와 같이 들어온다면, 온톨로지가 알려주는 유효한 관계는 아래와 같다.
+  Musician → member_of → Band
+  Musician → created → Album
+  
+  # 따라서 탐색 경로는 자연스럽게 아래와 같이 제한된다.
+  Band ← member_of ← Musician → created → Album
+  ```
+
+  
+
+
+
+
+
+## Microsoft GraphRAG
 
 > https://microsoft.github.io/graphrag/
 
