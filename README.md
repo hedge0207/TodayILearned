@@ -432,10 +432,30 @@
 ## NLP_part1
 - 텍스트 전처리
 
+- 언어 모델
+
+- 카운트 기반의 단어 표현(Count Based word Representation)
+
 <br/>
 <br/>
 
 ## NLP_part2
+<br/>
+<br/>
+
+## NLP_part3
+- 소프트맥스 회귀
+
+- 딥 러닝 개요
+
+- 테스트
+
+<br/>
+<br/>
+
+## NLP_part4
+- 다층 퍼셉트론으로 텍스트 분류하기
+
 <br/>
 <br/>
 
@@ -702,15 +722,11 @@
 <br/>
 
 ## algorithm_part1
-- 목차
-
 - 선형 탐색과 이진 탐색
 
 - 정렬
 
 - 시간복잡도
-
-- 재귀함수
 
 - 알고리즘 패러다임
 
@@ -780,7 +796,7 @@
 
 - Heap
 
-- 에라스토테네스의 체
+- 에라토스테네스의 체
 
 - 연결리스트
 
@@ -824,6 +840,14 @@
 - 사용자 이벤트 처리하기
 
 - 리소스 활용하기
+
+<br/>
+<br/>
+
+## android_part3
+- 퍼미션
+
+- 다양한 다이얼로그
 
 <br/>
 <br/>
@@ -1296,6 +1320,22 @@
 <br/>
 <br/>
 
+## Elasticsearch_part15
+- Elasticsearch Vector DB
+
+- kNN search
+
+<br/>
+<br/>
+
+## Elasticsearch_part16
+- 검색 시스템 평가
+
+- Elasticsearch as GraphDB
+
+<br/>
+<br/>
+
 ## Elasticsearch_part2
 - 클러스터 구축하기
 
@@ -1340,8 +1380,6 @@
 - minimum_should_match
 
 - Profile API
-
-- kNN search
 
 - Highlight
 
@@ -1516,6 +1554,12 @@
 <br/>
 <br/>
 
+## vectordb
+- VectorDB 비교
+
+<br/>
+<br/>
+
 <br/>
 <br/>
 
@@ -1603,6 +1647,12 @@
 
 <br/>
 <br/>
+
+<br/>
+<br/>
+
+## milvus
+- Milvus
 
 <br/>
 <br/>
@@ -2095,6 +2145,33 @@
 <br/>
 <br/>
 
+# graphdb
+<br/>
+<br/>
+
+## graphdb_part1
+- Graph Database
+
+- Neo4j
+
+<br/>
+<br/>
+
+## graphdb_part2
+- Hierarchical Lexical Graph for Enhanced Multi-Hop Retrieval
+
+<br/>
+<br/>
+
+## graphdb_part3
+- Microsoft GraphRAG
+
+<br/>
+<br/>
+
+<br/>
+<br/>
+
 # java
 ## java_part1
 - JAVA 기초
@@ -2152,6 +2229,9 @@
 <br/>
 
 # kafka
+<br/>
+<br/>
+
 ## kafka_part1
 - Kafka란
 
@@ -2377,9 +2457,13 @@
 <br/>
 <br/>
 
-## SQLAlchemy
-- 개요
+## SQLAlchemy_part1
+- SQLAlchemy
 
+<br/>
+<br/>
+
+## SQLAlchemy_part2
 - CRUD 실행하기
 
 <br/>
@@ -2454,7 +2538,15 @@
 
 - fcntl, filelock
 
+- cryptography
+
 - Shorts
+
+<br/>
+<br/>
+
+## packages_part5
+- Keras
 
 <br/>
 <br/>
@@ -2578,6 +2670,14 @@
 
 - Multi processing
 
+<br/>
+<br/>
+
+<br/>
+<br/>
+
+# rag
+## RAG
 <br/>
 <br/>
 
