@@ -73,91 +73,92 @@
     - 또한 기존 SQL문 하나를 수정할 때도 클래스를 수정해야 한다.
     - 이처럼 변경해야 할 이유가 두 가지이므로 아래 클래스는 SRP를 위반한다.
       - 또한 구조적인 관점에서도 아래 클래스는 SRP를 위반하는데, `_select_with_criteria`와 같이 클래스 내의 다른 일부 메서드에서만 사용되는 비공개 메서드는 코드를 개선할 잠재적인 여지를 시사한다.
-
-
+  
   ```python
-class Sql:
-    def create(self): ...
-    def insert(self, fields): ...
-    def selectAll(self): ...
-    def find_by_key(self, key_column, key_value): ...
-    def select(self, column, pattern): ...
-    def _select_with_criteria(self, criteria): ...
+  class Sql:
+      def create(self): ...
+      def insert(self, fields): ...
+      def selectAll(self): ...
+      def find_by_key(self, key_column, key_value): ...
+      def select(self, column, pattern): ...
+      def _select_with_criteria(self, criteria): ...
+  ```
+  
+    - 아래와 같이 `Sql` 클래스를 추상 클래스로 선언하고, 각 SQL문을 별도의 구상 클래스로 선언한다.
+      - 모든 파생 클래스가 공통으로 사용하는 비공개 메서드는 `Where`, `ColumnList`라는 두 유틸리티 클래스에 선언한다.
+      - 아래와 같이 클래스를 분리하면 메서드 하나를 수정했다고 다른 메서드가 망가질 위험도 사라진다.
+      - 테스트 관점에서도 모든 논리를 증명하기도 쉬워진다.
+      - 또한 update문을 추가할 때 기존 클래스를 변경할 필요 없이 `Sql`을 상속 받는 새로운 클래스를 추가하기만 하면 된다.
+  
+  ```python
+  from abc import abstractmethod
+  
+  class Sql:
+      @abstractmethod
+      def generate(self): ...
+          
+          
+  class CreateSql(Sql):
+      def generate(self): ...
+      
+      
+  class SelectSql(Sql):
+      def __init__(self, table, columns):...
+      def generate(self): ...
+  
+      
+  class InsertSql(Sql):
+      def __init__(self, table, columns, fields): ...
+      def generate(self): ...
+  
+      
+  class SelectWithCriteriaSql(Sql):
+      def __init__(self, table, columns, criteria): ...
+      def generate(self): ...
+      
+      
+  class Where:
+      def __init__(self, creteria): ...
+      def generate(self): ...
+      
+  
+  class ColumnList:
+      def __init__(self, columns): ...
+      def generate(self): ...
+  ```
+  
+    - 변경으로부터의 격리
+      - 상세한 구현에 의존하는 클라이언트 클래스느는 구현이 바뀌면 위험에 빠진다.
+      - 인터페이스와 추상 클래스를 사용하면 구현의 변경이 미치는 영향을 격리한다.
+      - 또한 상세한 구현에 의존하는 코드는 테스트가 어렵다.
+      - 예를 들어 아래와 같이 `TokyoStockExchange`라는 구체적인 구현에 의존하는 클래스가 있다고 가정해보자.
+      - `PortPolio`는 `TokyoStockExchange`로부터 5분에 한 번씩 변경된 주가 정보를 받아온다.
+      - 이 때, `PortPolio` 클래스는 5분에 한 번씩 변하는 정보를 받아오므로, 이에 대한 테스트를 작성하는 것은 쉬운 일이 아니다.
+      - 따라서, `TokyoStockExchange`라는 구체적인 구현에 의존하게 하지 말고, `StockExchange`라는 인터페이스를 의존하게 변경한다.
+      - 변경후에는 테스트를 위해 `TokyoStockExchange`를 흉내내는 `StockExchange`구현한 테스트용 클래스를 만들 수 있다.
+      - 이처럼 테스트가 가능하다는 것은 시스템의 결합도가 낮다는 의미이며 자연스럽게 유연성과 재사용성도 더욱 높아진다.
+  
+  ```python
+  # 변경 전
+  class PortPolio:
+      def __init__(self, tokyo_stock_exchange: TokyoStockExchange):
+          self._tokyo_stock_exchange = tokyo_stock_exchange
+          
+          
+  # 변경 후
+  class StackExchange:
+      @abstractmethod
+      def current_price(self): ...
+      
+  class TokyoStockExchange(StackExchange):
+      def current_price(self): ...
+      
+  class PortPolio:
+      def __init__(self, stock_exchange: StockExchange):
+          self._stock_exchange = stock_exchange
   ```
 
-  - 아래와 같이 `Sql` 클래스를 추상 클래스로 선언하고, 각 SQL문을 별도의 구상 클래스로 선언한다.
-    - 모든 파생 클래스가 공통으로 사용하는 비공개 메서드는 `Where`, `ColumnList`라는 두 유틸리티 클래스에 선언한다.
-    - 아래와 같이 클래스를 분리하면 메서드 하나를 수정했다고 다른 메서드가 망가질 위험도 사라진다.
-    - 테스트 관점에서도 모든 논리를 증명하기도 쉬워진다.
-    - 또한 update문을 추가할 때 기존 클래스를 변경할 필요 없이 `Sql`을 상속 받는 새로운 클래스를 추가하기만 하면 된다.
 
-  ```python
-from abc import abstractmethod
-
-class Sql:
-    @abstractmethod
-    def generate(self): ...
-        
-        
-class CreateSql(Sql):
-    def generate(self): ...
-    
-    
-class SelectSql(Sql):
-    def __init__(self, table, columns):...
-    def generate(self): ...
-
-    
-class InsertSql(Sql):
-    def __init__(self, table, columns, fields): ...
-    def generate(self): ...
-
-    
-class SelectWithCriteriaSql(Sql):
-    def __init__(self, table, columns, criteria): ...
-    def generate(self): ...
-    
-    
-class Where:
-    def __init__(self, creteria): ...
-    def generate(self): ...
-    
-
-class ColumnList:
-    def __init__(self, columns): ...
-    def generate(self): ...
-  ```
-
-  - 변경으로부터의 격리
-    - 상세한 구현에 의존하는 클라이언트 클래스느는 구현이 바뀌면 위험에 빠진다.
-    - 인터페이스와 추상 클래스를 사용하면 구현의 변경이 미치는 영향을 격리한다.
-    - 또한 상세한 구현에 의존하는 코드는 테스트가 어렵다.
-    - 예를 들어 아래와 같이 `TokyoStockExchange`라는 구체적인 구현에 의존하는 클래스가 있다고 가정해보자.
-    - `PortPolio`는 `TokyoStockExchange`로부터 5분에 한 번씩 변경된 주가 정보를 받아온다.
-    - 이 때, `PortPolio` 클래스는 5분에 한 번씩 변하는 정보를 받아오므로, 이에 대한 테스트를 작성하는 것은 쉬운 일이 아니다.
-    - 따라서, `TokyoStockExchange`라는 구체적인 구현에 의존하게 하지 말고, `StockExchange`라는 인터페이스를 의존하게 변경한다.
-    - 변경후에는 테스트를 위해 `TokyoStockExchange`를 흉내내는 `StockExchange`구현한 테스트용 클래스를 만들 수 있다.
-    - 이처럼 테스트가 가능하다는 것은 시스템의 결합도가 낮다는 의미이며 자연스럽게 유연성과 재사용성도 더욱 높아진다.
-
-  ```python
-# 변경 전
-class PortPolio:
-    def __init__(self, tokyo_stock_exchange: TokyoStockExchange):
-        self._tokyo_stock_exchange = tokyo_stock_exchange
-        
-        
-# 변경 후
-class StackExchange:
-    @abstractmethod
-    def current_price(self): ...
-    
-class TokyoStockExchange(StackExchange):
-    def current_price(self): ...
-    
-class PortPolio:
-    def __init__(self, stock_exchange: StockExchange):
-        self._stock_exchange = stock_exchange
-  ```
 
  
 
@@ -254,6 +255,8 @@ class PortPolio:
     - 도메인 전문가가 사용하는 언어로 도메인 논리를 구현하면 도메인을 잘못 구현할 가능성이 줄어든다.
   - 효과적으로 사용된 DSL은 추상화 수준을 코드 관용구나 디자인 패턴 이상으로 끌어올린다.
     - 이를 통해 개발자가 적절한 추상화 수준에서 코드 의도를 표현할 수 있다.
+
+
 
 
 
