@@ -575,6 +575,92 @@
 
 
 
+# Data Back Up and Restore
+
+- MongoDB의 데이터 백업과 복원
+  - MongoDB는 데이터 백업과 복원을 위해 각각 `mongodumpo`와 `mongorestroe`라는 tool을 제공한다.
+  - 이 두 tool은 실행중인 mongod와 상호작용 하면서 동작하기 때문에, DB 성능에 영향을 줄 수 있다.
+    - 단순히 traffic만 증가시킬뿐 아니라 모든 데이터를 메모리를 통해 읽어야한다.
+    - 따라서 평소에 잘 접근하지 않던 데이터가 메모리에 올라가면서 자주 사용하는 데이터를 메모리에서 밀어낼 경우 성능이 저하될 수 있다.
+    - 따라서 성능의 저하가 있으면 안 되는 상황일 경우 Filesystem Snapshots과 같은 다른 방법을 고려해야 한다.
+
+
+
+- Back up시 고려사항
+  - Replica set의 일관된(consistency) 백업을 보장하기 위해서는, 백업 작업 중에 발생하는 쓰기(write) 작업을 기록하기 위해 `--oplog` 옵션을 사용하거나, 백업이 진행되는 동안 replica set에 대한 모든 쓰기 작업을 중지해야 한다.
+    - 백업 중에 발생한 쓰기 작업들은 기본적으로 백업 파일에 포함되지 않느
+  - 샤딩된 클러스터의 replica set에 대해서는 [Back Up a Self-Managed Sharded Cluster with a Database Dump](https://www.mongodb.com/docs/manual/tutorial/backup-sharded-cluster-with-database-dumps/#std-label-backup-sharded-dumps) 문서를 참고하면 된다.
+    - 모두 cluster에 제약을 가해야 한다는 내용으로, 성능 저하에 민감하거나, 쓰기 작업을 정지할 수 없는 상황이라면 다른 방식을 고려해야한다.
+  - 백업이 실제로 사용 가능한지 확인하려면, 테스트용 MongoDB 배포 환경에 복원(restore)하여 검증해야 한다.
+  - 샤딩된 클러스터 백업에서 데이터 불일치 가능성을 줄이기 위해, 백업이 진행되는 동안 아래 작업을 수행해야 한다.
+    - balancer 중지
+    - 모든 쓰기(write) 작업 중지
+    - 스키마 변경 작업(schema transformations) 중지
+  - DB 서버 혹은 cluster에 대한 정보가 저장된 `local` 데이터베이스는 백업되지 않는다.
+    - 이를 그대로 새로운 DB 서버에 복원할 경우 충돌이 발생할 수 있기 때문이다.
+
+
+
+- Backup
+
+  - 기본적으로 서버 전체, 특정 DB 또는 collection에 대한 백업을 지원하며, query를 사용하여 collection 내의 특정 데이터만 백업하는 것도 가능하다.
+  - 기본적인 옵션들은 아래와 같다.
+    - 만약 아무 옵션도 주지 않고 `mongodump`만 실행할 경우 모두 기본값으로 실행된다.
+    - 원격에 있는 DB 서버의 데이터도 덤프가 가능하다.
+
+  ```bash
+  $ mongodump \
+    --host <source-host> \
+    --port <source-port> \
+    -u <user> \
+    -p <password> \
+    --authenticationDatabase admin \
+    --out <backup_file_path>
+  ```
+
+  - `--db`, `--collection`
+    - 아래와 같이 특정 DB나 collection을 지정하는 것도 가능하다.
+
+  ```bash
+  $ mongodump --collection=myCollection --db=test
+  ```
+
+  - `--oplog`
+    - 이 옵션을 함께 주면, 백업 작업이 실행되는 중에 발생하는 모든 oplog를 복사한다.
+    - 이후 `mongorestore --oplogReplay`를 통해 복원하면 `mongodump`가 덤프 파일 생성을 완료한 특정 시점의 상태를 반영하는 백업을 복원할 수 있다.
+
+
+
+- Restore
+
+  - `mongorestore`는 `mongodump`가 생성한 바이너리 백업 파일을 복원하게 해주는 툴이다.
+  - 기본적인 옵션들은 아래와 같다.
+    - `mongodump`와 마찬가지로 원격 DB 서버에 restore하는 것도 가능하다.
+
+  ```bash
+  $ mongorestore \
+    --host <target-host> \
+    --port <target-port> \
+    -u <user> \
+    -p <password> \
+    --authenticationDatabase admin \
+    <backup_file_path>
+  ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # MongoDB Connection Pool
 
 - Connection Pool이란
