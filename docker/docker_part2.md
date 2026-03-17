@@ -515,6 +515,32 @@
 
 
 
+- `platforms`
+
+  - `platforms`는 container를 실행할 대상 platform(CPU아키텍처와 운영체제 환경)을 설정하는 옵션이다.
+    - 설정하지 않을 경우 host machine을 기준으로 설정된다.
+    - Mac의 M1/M2/M3 칩(ARM64)과 일반 Windows/Linux PC(x86_64/AMD64)가 혼용되면서 아키텍처 불일치 문제가 자주 발생하는데, 이를 해결하게 해주는 옵션이다.
+    - 자신의 PC 아키텍처와 다른 플랫폼을 설정하면 Docker가 `qemu`라는 도구를 통해 에뮬레이션을 돌린다.
+    - 다만 이 과정에서 속도가 눈에 띄게 느려질 수 있으므로, 꼭 필요한 경우(라이브러리 미지원 등)가 아니라면 가급적 호스트 사양에 맞추는 것이 좋다.
+  - Platform에 따라 image가 달라진다.
+    - `platform` 옵션을 명시하지 않으면 Docker는 기본적으로 내 컴퓨터(호스트)의 사양에 맞는 이미지를 찾는다.
+    - 그러나 `platform: linux/amd64`처럼 특정 플랫폼을 지정하면 과정이 달라진다.
+    - 즉 내 로컬 컴퓨터에 이미 `mysql:8.0`이 있더라도, 그게 만약 `arm64` 버전이라면 하드웨어 명령 체계가 달라 실행이 불가능하다.
+    - 따라서 Docker는 "이름은 같지만, 칩셋에 맞는 코드가 들어있는 다른 덩어리(Layer)"를 새로 받아야 한다고 판단하고 다시 pull을 실행한다.
+    - 그렇다고 같은 태그를 가진 이미지가 두 개 생성되는 것은 아니다.
+  - 예시
+
+  ```yaml
+  services:
+    database:
+      image: mysql:8.0
+      platform: linux/amd64 
+      ports:
+        - "3306:3306"
+  ```
+
+
+
 - deploy
 
   - Service의 배포와 lifecycle을 설정한다.
@@ -1260,15 +1286,25 @@
 
 
 
-
-
 ## 명령어
 
 - `docker-compose` 명령
   - `docker-compose` 명령은  docker-compose.yml을 저장한 디렉토리에서 실행된다.
   - 만일 현재 디렉토리 이외의 장소에 docker-compose.yml을 놓아 둔 경우 `-f` 옵션으로 파일 경로를 지정해야 한다.
     - 그 외에도 Docker Compose 파일을 docker-compose.yml 이외의 이름으로 설정한 경우에도 `-f` 옵션으로 Docker Compose  파일을 지정해 줘야 한다.
-  - 서브 명령 다음에 컨테이너명을 지정하면 해당 컨테이너만 조작이 가능하다.
+  - 서브 명령 다음에 서비스 명을 지정하면 해당 컨테이너만 조작이 가능하다.
+    - 컨네이너 명이 아닌 서비스 명이라는 것에 주의해야한다.
+    - 아래와 같은 docker-compose.yml파일 이 있을 때, `docker-compose up test_kibana`와 같이 서비스명을 지정해야지 `docker-compose up test_kibana_foo`와 같이 컨테이너 명을 입력하면 안 된다.
+  
+  ```yaml
+  services:
+    test_kibana:
+      container_name: test_kibana_foo
+      image: docker.elastic.co/kibana/kibana:8.11.0
+  ```
+  
+  - Docker Compose V2부터 `docker-compose` 명령어가 `docker compose`로 변경되었다.
+    - 단, 이는 Docker CLI 방식으로 설치했을 경우이며, binary로 설치할 경우 여전히 `docker-compose` 명령어를 사용해야한다.
 
 
 
@@ -1284,12 +1320,15 @@
 
 - docker-compose에 정의된 컨테이너 생성 후 시작하기
 
-  - `-d`: 백그라운드에서 실행한다.
-  - `--no-deps`: 링크 서비스를 시작하지 않는다.
-  - `--build`: 도커 컨테이너 시작시에 Dockerfile을 빌드한다.
-  - `--no-build`: 이미지를 빌드하지 않는다.
-  - `-t(--timeout)`: 컨테이너의 타임아웃을 초로 지정(기본 10초)한다.
-
+  - 옵션들
+    - `-d`: 백그라운드에서 실행한다.
+    - `--no-deps`: 링크 서비스를 시작하지 않는다.
+    - `--build`: 도커 컨테이너 시작시에 Dockerfile을 빌드한다.
+    - `--no-build`: 이미지를 빌드하지 않는다.
+    - `-t(--timeout)`: 컨테이너의 타임아웃을 초로 지정(기본 10초)한다.
+  
+  - 뒤에 서비스명을 입력하면 해당 서비스만 생성 및 실행이 가능하다.
+  
   ```bash
   $ docker-compose up [옵션] [서비스명 .] 
   
@@ -1319,9 +1358,11 @@
 - 특정 컨테이너에서 명령 실행
 
   - 실행 중인 컨테이너에서 임의의 명령 실행
-
+    - 서비스명을 입력하면 된다.
+  
+  
   ```bash
-  $ docker-compose run <컨테이너 명> <명령>
+  $ docker-compose run <서비스명 명> <명령>
   # docker-compose run es1 /bin/bash
   ```
 
@@ -1329,7 +1370,7 @@
 
 - 여러 컨테이너 시작/정지/재시작
 
-  - 특정 컨테이너만 조작하고 싶을 경우 뒤에 컨테이너명을 지정하면 된다.
+  - 특정 컨테이너만 조작하고 싶을 경우 뒤에 서비스 명을 지정하면 된다.
 
   ```bash
   # 시작

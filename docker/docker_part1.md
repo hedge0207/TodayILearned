@@ -861,6 +861,14 @@
   # Docker daemon을 실행한다.
   $ sudo dockerd &
   ```
+  
+  - 만약 OS image(ubuntu, centos 등)로 container를 띄우고 그 안에서 docker daemon을 실행하는 테스트를 진행한다면 iptable 문제로 dockerd가 실행되지 않을 것이다.
+    - 이 경우 아래와 같이 `iptables=False` 옵션을 추가해 iptable을 사용하지 않는 상태로 실행하면 된다.
+    - 단, 이 경우 네트워크 기능에 제약이 생긴다.
+  
+  ```bash
+  $ dockerd --iptables=False &
+  ```
 
 
 
@@ -1266,6 +1274,14 @@
     - 정확히는 위와 같이 복수의 컨테이너가 하나의 서비스를 구성하고 있을 경우 "restart 옵션을 설정해주는 것이 좋다"기 보다 하나의 서비스를 구성하고 있는 컨테이너들은 restart 설정을 맞춰주는 것이 좋다.
   - `publish` 옵션
     - `-p(--publish)[호스트의 포트 번호]:[컨테이너의 포트 번호]`는 컨테이너 외부의 `host:port`를 컨테이너 내부의 `host:port`와 연결하겠다는 의미이다.
+    
+  - `--platform`
+    
+    - Conatiner를 실행할 platform(CPU 아키텍처 및 OS 환경)을 지정한다.
+  
+  ```bash
+  $ docker run --platform <platform> <image>
+  ```
 
 
 
