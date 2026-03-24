@@ -936,6 +936,14 @@
   ```bash
   $ su <사용자 id>
   ```
+  
+  - 간혹 docker.sock의 권한 문제로 sudo 없이 실행이 되지 않을 수 있다.
+    - 이럴 경우 아래와 같이 소켓 파일의 그룹 소유권을 변경하면 된다.
+    - 소유자는 그대로 두고, 소유 그룹만 docker로 변경한다.
+  
+  ```bash
+  $ sudo chown root:docker /var/run/docker.sock
+  ```
 
 
 
