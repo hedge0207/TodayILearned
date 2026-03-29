@@ -1212,6 +1212,17 @@
 
 
 
+# alpine image
+
+- alpine image의 경우 일반 image에 비해 size가 작긴 하지만, 경우에 따라 성능에 상당한 차이가 있을 수 있다.
+
+  > https://superuser.com/questions/1219609/why-is-the-alpine-docker-image-over-50-slower-than-the-ubuntu-image
+
+  - 예를 들어 `python:3.8.0` image와 `python:3.8.0-alpine` image의 경우 size는 `python:3.8.0-alpine`이 훨씬 작지만, 성능은 `python:3.8.0`이 보다 뛰어나다.
+  - 이러한 차이가 나는 이유는 두 image가 서로 다른 방식으로 구현되었기 때문이다.
+
+
+
 ## Error
 
 - `network sandbox join failed: ... error creating vxlan interface: file exists`
@@ -1275,11 +1286,53 @@
 
 
 
-# alpine image
+### Docker의 버전이 낮을 경우 발생할 수 있는 문제
 
-- alpine image의 경우 일반 image에 비해 size가 작긴 하지만, 경우에 따라 성능에 상당한 차이가 있을 수 있다.
+- 문제 상황	
+  - Docker engine 20.10.1 버전에서 mongo:8.0.16 이미지를 사용하여 컨테이너 실행시 Aborted 에러가 발생하며 MongoDB가 실행되지 않는 문제가 발생했다.
+  - 추후에 확인한 결과 25년 11월에 빌드된 redis:6.2.20 이미지에서도 동일한 문제가 발생했다.
 
-  > https://superuser.com/questions/1219609/why-is-the-alpine-docker-image-over-50-slower-than-the-ubuntu-image
 
-  - 예를 들어 `python:3.8.0` image와 `python:3.8.0-alpine` image의 경우 size는 `python:3.8.0-alpine`이 훨씬 작지만, 성능은 `python:3.8.0`이 보다 뛰어나다.
-  - 이러한 차이가 나는 이유는 두 image가 서로 다른 방식으로 구현되었기 때문이다.
+
+- 문제의 원인
+  - 신규 이미지들에서 사용하는 system call 중  Docker engine이 이해할 수 없는 system call이 포함되어 있어 발생한 문제였다.
+    - Docker는 컨테이너 내에서 실행할 수 있는 system call을 정의하고 있는데, 정의되어 있지 않은 system call은 기본적으로 호출할 수 없다.
+    - 새롭게 빌드된 이미지들은 오래된 버전의 Docker engine이 알지 못하는 system call들이 포함되어 있어 프로그램을 실행하는 데 필요한 system call을 실행하지 못해 실행에 실패한 것이다.
+  - 이 문제와 관련된 요소들은 아래와 같다.
+    - OS 버전: 문제와 직접적인 연관이 있다고 할 수는 없지만, 아래 seccomp와 관련이 있다.
+    - seccomp: Linux 계열 OS에 내장되어 특정 system call을 허용하거나 차단하는 보안 기능이다.
+    - libseccomp: seccomp를 보다 간편하게 다룰 수 있게 해주는 패키지.
+    - Docker engine: 컨테이너 관리의 주체로 seccomp 관련 설정을 가지고 있다.
+    - runc: 실제 컨테이너를 실행하는 가장 낮은 단계의 런타임으로 Docker에 포함되어 있다.
+  - Docker의 실행 과정
+    - Docker는 container의 system call은 아래 과정을 거쳐 호출된다.
+    - Docker - containerd - runc - libseccomp - seccomp(Linux kernel)
+    - 이 중, containerd와  runc는 Docker에 포함되어 함께 설치되고,  libseccomp는 runc의 핵심 의존성이지만 Docker에 포함되어 있지는 않다.
+    - 즉, Docker를 binary로 설치할 경우 runc를 위해 자동으로 설치되거나 업데이트 되지 않는다(단, apt, dnf등의 패키지 매니저로 설치할 경우, runc의 의존성이므로 자동으로 설치 혹은 업데이트 된다.)
+    - libseccomp는 OS 업그레이드 과정에서 `apt upgrade` 등을 통해 자동으로 업데이트될 확률이 높다.
+  - 위 실행 과정에서 가장 큰 영향을 미치는 두 요소는  Docker와 runc이다.
+    - 상기했듯 Docker는 어떤 system call을 허용하고 차단할지를 정의한  seccomp profile을 가지고 있다.
+    - 컨테이너 내에서 system call이 호출되면 Docker는 seccomp profile과 system call을 runc에게 보내고 runc가 이를 실행하게 한다.
+    - runc는 이를 받아 실제 커널에 로드할 수 있는 seccomp BPF 필터로 만드는 역할을 한다.
+    - runc는 자신이 모르는 system call이 들어오면 `ENOSYS`를 반환하는 휴리스틱을 가지고 있지만, 항상 잘 동작하는 것은 아니어서, 때에 따라 `EPERM`을 반환하기도 한다.
+    - 위에서 설명한 문제도 바로 runc가 모르는 systemcall에 대해 `EPERM`을 반환했기 때문에 발생한 것이다.
+
+
+
+- 해결
+
+  - 가장 근본적인 해결은 Docker engine을 업그레이드 하는 것이지만, Docker engine을 업그레이드 할 수 없는 상황이라면, 아래 세 가지 방법으로 해결이 가능하다.
+  - runc 업그레이드 및 Docker 컨테이너 실행시 seccomp profile 재정의
+    - 첫 번째 방법은 runc만 업그레이드하여 runc가 기존에 몰랐던 system call을 알게 하고, Docker 컨테이너를 실행할 때 seccomp profile을 수정하는 것이다.
+    - runc는 Docker 설치 파일에 포함되어 있기에 신규 버전의 Docker 설치 파일에서 runc만 빼서 업그레이드하면 되고, seccomp는 컨테이너별로 다르게 설정하는 것이 가능하다.
+    - 둘 중 하나만 해서는 해결되지 않는데, runc를 업그레이드하여 신규 system call을 이해할 수 있게 되면 더 이상 `ENOSYS`는 반환하지 않겠지만, 문제는 Docker가 runc로 보내는 seccomp profile에 신규 system call을 허용하겠다는 내용이 없으면 runc는 eccomp BPF 필터를 만들 때 이를 반영하여 system call이 차단되기 때문이다.
+    - 반대로 runc를 업그레이드 하지 않고 seccomp profile만 수정할 경우 Docker는 runc에 새로운 system call을 허용하라는 seccomp profile을 전달하겠지만, runc는 새로운 system call을 알지 못하므로 여전히 `EPERM`을 반환할 것이다.
+
+  - `--privileged` 옵션을 추가하여 컨테이너 실행하기(위험)
+    - `--privileged` 옵션은 컨테이너가 호스트 머신의 모든 커널 기능에 거의 제한 없이 접근 수 있게 해주는 설정이다.
+    - 이 옵션을 추가할 경우 seccomp필터를 완전히 비활성화하므로, system call을 검사하지 않아 정상 실행이 가능해진다.
+    - 그러나 컨테이너의 제약을 대부분 해제하는 옵션이므로 사용을 지양해야한다.
+  - `--security-opt seccomp=unconfined` 옵션을 추가하야 컨테이너 실행하기(위험)
+    - 컨테이너가 seccomp의 제약을 받지 않도록 설정하는 것이다.
+    - 더 이상 seccomp의 제약을 받지 않으므로 system call을 검사하지 않아 정상 실행이 가능해진다.
+    - seccomp 자체를 비활성화 하는 것이므로 역시 사용을 지양해야 한다.
