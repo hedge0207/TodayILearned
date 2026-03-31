@@ -747,6 +747,62 @@
 
 
 
+# Seccomp security profiles
+
+> seccomp profile에 대한 작성 방법은 아래 링크 참조
+>
+> https://github.com/docker-archive-public/docker.labs/blob/master/security/seccomp/README.md
+
+- seccomp
+
+  - Secure computing mode (seccomp)는 Linux 커널 기능으로 이를 사용하면 컨테이너 내부에서 가능한 동작을 제한할 수 있다.
+  - 이 기능은 Docker가 seccomp를 포함하여 빌드되었고, 커널이 `CONFIG_SECCOMP` 활성화 상태로 설정된 경우에만 사용할 수 있다.
+    - 커널이 seccomp를 지원하는지 확인하려면 아래 명령어를 실행하면 된다.
+
+  ```bash
+  $ grep CONFIG_SECCOMP= /boot/config-$(uname -r)
+  ```
+
+  - 기본 seccomp profile은 [Docker github repository](https://github.com/moby/profiles/blob/main/seccomp/default.json)에서 확인할 수 있다.
+    - 이전 버전에 대한 정보는 [링크](https://raw.githubusercontent.com/moby/moby/v20.10.1/profiles/seccomp/default.json)에서 확인할 수 있다.
+    - 만약 위 링크에서 다른 버전에 대한 seccomp profile을 보고 싶다면 URL 중간에 있는 버전만 원하는 Docker engine 버전으로 변경하면 된다.
+    - 기본 seccomp 프로파일을 변경하는 것은 권장되지 않는다.
+
+
+
+- 기본적으로 Docker의 seccomp profile은 아래와 같이 동작한다.
+
+  - 허용 목록(allowlist) 방식으로 동작합니다(즉, 기본적으로 시스템 호출을 차단하고, 특정 시스템 호출만 허용한다).
+    - 기본 동작(`defaultAction`)은 `SCMP_ACT_ERRNO`로 설정되어 있으며, 이는 시스템 호출을 거부한다.
+    - 특정 시스템 호출에 대해서만 이 동작을 `SCMP_ACT_ALLOW`로 재정의하여 허용한다.
+    - `SCMP_ACT_ERRNO`의 효과는 "Permission Denied(권한 거부)" 오류를 발생시키는 것이다.
+    - 이후, 완전히 허용된 시스템 호출 목록이 정의된다.
+    - 또한 `personality`와 같은 일부 시스템 호출에 대해서는 특정 인자를 가진 경우에만 허용하는 개별 규칙이 추가로 정의된다.
+
+  - 컨테이너를 실행할 때, 별도로 지정하지 않으면 기본 프로파일이 사용된다.
+    -  `--security-opt` 옵션을 사용하면 이를 덮어쓸 수 있다.
+
+  ```bash
+  $ docker run --rm \
+             -it \
+             --security-opt seccomp=/path/to/seccomp/profile.json \
+             hello-world
+  ```
+
+  - 아래와 같이 실행할 경우 seccomp profile 없이 컨테이너를 실행한다.
+    - `--security-opt seccomp=unconfined` 옵션을 주고 실행한다.
+
+  ```bash
+  $  docker run --rm -it --security-opt seccomp=unconfined debian:latest \
+      unshare --map-root-user --user sh -c whoami
+  ```
+
+
+
+
+
+
+
 # etc
 
 - Docker compose options
