@@ -1141,6 +1141,82 @@
 
 
 
+- MinHash
+
+  - Token stream에 대한 signature를 생성하는 token filter이다.
+    - 이를 사용하여 두 문서 사이의 유사도를 평가하는 데 사용할 수 있다.
+  - 아래 순서로 동작한다.
+    - Token stream 내의 각 token들을 hash한다.
+    - Hash들을 여러 개의 버킷에 할당하는데, 각 버킷에는 가장 작은 hash 값만 남긴다.
+    - 각 bucket에 남은 가장 작은 hash 값들로 새로운 생성한 token stream이 최종 출력이 된다.
+  - 아래와 같은 값들을 설정할 수 있다.
+    - `bucket_count`: hash들을 할당할 bucket의 개수(default: 512).
+    - `hash_count`: 각 토큰을 hash할 때 사용할 hash 함수의 개수(default: 1).
+    - `hash_set_size`: 각 버킷에 남길 hash의 개수(default: 1).
+    - `with_rotation`: hash를 할당받지 못 하고 빈 버킷이 있을 경우 이를 채울지 여부를 설정한다.
+    - `with_rotation`이 True로 설정될 경우 `hash_set_size`가 1이면 비어있지 않은 버킷 중 오른쪽에서 가장 가까운 버킷에 할당된 hash로 채워지며, `bucket_count`가 1보다 클 경우 기본값은 True이고, 아닐 경우 False이다.
+
+  ```json
+  // PUT /my-index-000001
+  {
+    "settings": {
+      "analysis": {
+        "filter": {
+          "my_shingle_filter": {
+            "type": "shingle",
+            "min_shingle_size": 5,
+            "max_shingle_size": 5,
+            "output_unigrams": false
+          },
+          "my_minhash_filter": {
+            "type": "min_hash",
+            "hash_count": 1,
+            "bucket_count": 512,
+            "hash_set_size": 1,
+            "with_rotation": true
+          }
+        },
+        "analyzer": {
+          "my_analyzer": {
+            "tokenizer": "standard",
+            "filter": [
+              "my_shingle_filter",
+              "my_minhash_filter"
+            ]
+          }
+        }
+      }
+    },
+    "mappings": {
+      "properties": {
+        "fingerprint": {
+          "type": "text",
+          "analyzer": "my_analyzer"
+        }
+      }
+    }
+  }
+  ```
+
+  - 각 설정값들은 아래 내용을 고려하여 설정하면 된다.
+    - `min_hash` token filter의 입력(즉 token stream)은 `shingle` token filter에서 생성된 k-word shingles를 사용하는 것이 좋다.
+    - k 값은 특정 shingle이 문서에 등장할 확률이 낮아지도록 충분히 크게 설정해야 한다.
+    - 다만 내부적으로 각 shingle은 128비트 해시로 변환되므로, 가능한 모든 서로 다른 k-word shingle들이 충돌을 최소화하면서 128비트 해시로 표현될 수 있도록 k를 너무 크게 설정하지 않아야 합니다.
+    - 정밀도를 높이려면 `bucket_count` 또는 `hash_set_size` 값을 증가시켜 서로 다른 토큰들이 서로 다른 버킷에 할당될 가능성을 높이면 된다.
+    - 재현율을 높이려면 `hash_count` 값을 증가시켜, 각 토큰이 여러 방식으로 해싱되어 검색 시 후보가 될 수 있는 경우의 수를 증가시키면 된다.
+    - 기본적으로 min_hash 필터는 문서마다 512개의 토큰을 생성하는데, 각 토큰은 16바이트이므로, 문서 하나당 약 8KB 정도의 크기 증가가 발생한다.
+    - min_hash 필터는 Jaccard similarity를 기반으로 동작하므로, 어떤 토큰이 문서에 몇 번 등장하는지는 고려하지 않고, 해당 토큰이 존재하는지 여부만 고려한다.
+  - MinHash가 문서의 서명(signature)을 만드는 기본 아이디어는 아래와 같다.
+    - 전체 어휘 집합(vocabulary)에 대해 무작위 순열(랜덤 순서)을 적용한다.
+    - 그리고 해당 문서에 등장하는 단어들 중에서 그 순열에서 가장 작은 값을 기록한다.
+    - 즉 문서에 등장하는 단어들 중 가장 앞에 오는 단어를 선택하는 것과 같은데, 이 과정을 여러 번 반복하고, 각 반복에서 얻은 최소값들을 모으면 그 문서의 signature가 된다.
+    - 다만 실제 구현에서는 무작위 순열 대신 여러 개의 해시 함수가 사용된다.
+    - 각 해시 함수는 문서의 모든 토큰에 대해 해시값을 계산하고 그 중 최소 해시값을 선택한다.
+
+  - 유사도 검색에 `min_hash` token filter 사용하기
+    - 비슷한 문서들은 같은 해시 코드를 가질 가능성이 높으므로 같은 해시 버킷에 들어갈 가능성이 높은 반면, 서로 다른 문서들은 서로 다른 버킷으로 들어갈 가능성이 높다.
+    - 이러한 방식의 해싱을 Locality Sensitive Hashing(LSH)라 하며, 무엇을 유사도의 기준으로 삼느냐에 따라 다양한 LSH 함수를 사용하는데, Jaccard similarity의 경우 MinHash를 LSH 함수로 사용한다.
+
 
 
 ### Synonym
