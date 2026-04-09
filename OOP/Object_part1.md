@@ -13,7 +13,7 @@
   ```python
   class Invitation:
       def __init__(self):
-          self.when: date = None
+          self._when: date = None
   ```
 
   - 표 구현하기
@@ -21,10 +21,10 @@
   ```python
   class Ticket:
       def __init__(self):
-          self.fee: int = None
+          self._fee: int = None
           
       def get_fee(self) -> int:
-          return self.fee
+          return self._fee
   ```
 
   - 관람객의 소지품을 표현할 `Bag` class를 구현한다.
@@ -35,13 +35,13 @@
 
   ```python
   class Bag:
-      def __init__(self, amount=None, invitation: Invitation=None):
+      def __init__(self, amount: int=None, invitation: Invitation=None):
           if amount is None and invitation is None:
               raise Exception()
           
-          self.amount = amount
-          self.invitation = invitation
-          self.ticket: Ticket = None
+          self._amount = amount
+          self._invitation = invitation
+          self._ticket: Ticket = None
           
       def has_invitation(self):
           return self.invitation is not None
@@ -61,25 +61,25 @@
   ```python
   class Audience:
       def __init__(self, bag: Bag=None):
-          self.bag = bag
+          self._bag = bag
       
       def get_Bag(self) -> Bag:
-          return self.bag
+          return self._bag
   ```
   
   - 매표소를 구현한다.
   
   ```python
   class TicketOffice:
-      def __init__(self, amount, tickets:list[Ticket]):
-          self.amount = amount
-          self.tickets = tickets
+      def __init__(self, amount: int, tickets: list[Ticket]):
+          self._amount = amount
+          self._tickets = tickets
       
       def get_ticket(self) -> Ticket:
-          return self.tickets.pop()
+          return self._tickets.pop()
       
-      def plus_amount(self, amount):
-          self.amount += amount
+      def plus_amount(self, amount: int):
+          self._amount += amount
   ```
   
   - 판매원을 구현한다.
@@ -87,10 +87,10 @@
   ```python
   class TicketSeller:
       def __init__(self, ticket_office:TicketOffice):
-          self.ticket_office = ticket_office
+          self._ticket_office = ticket_office
       
       def get_ticket_office(self) -> TicketOffice:
-          return self.ticket_office
+          return self._ticket_office
   ```
   
   - 극장을 구현한다.
@@ -98,16 +98,16 @@
   ```python
   class Theater:
       def __init__(self, ticket_seller: TicketSeller):
-          self.ticket_seller = ticket_seller
+          self._ticket_seller = ticket_seller
       
       def enter(self, audience: Audience):
           if audience.get_bag().has_invitation():
-              ticket = self.ticket_seller.get_ticket_office().get_ticket()
+              ticket = self._ticket_seller.get_ticket_office().get_ticket()
               audience.get_bag().set_ticket(ticket)
           else:
-              ticket = self.ticket_seller.get_ticket_office().get_ticket()
+              ticket = self._ticket_seller.get_ticket_office().get_ticket()
               audience.get_bag().minus_amount(ticket.get_fee())
-              self.ticket_seller.get_ticket_office().plus_amount(ticket.get_fee())
+              self._ticket_seller.get_ticket_office().plus_amount(ticket.get_fee())
               audience.get_bag().set_ticket(ticket)
   ```
   
@@ -197,10 +197,10 @@
               
   class Theater:
       def __init__(self, ticket_seller: TicketSeller):
-          self.ticket_seller = ticket_seller
+          self._ticket_seller = ticket_seller
       
       def enter(self, audience: Audience):
-          self.ticket_seller.sell_to(audience)
+          self._ticket_seller.sell_to(audience)
   ```
   
   - `Audience` 캡슐화
@@ -284,7 +284,7 @@
   
   ```python
   class Bag:
-      def __init__(self, amount=None, invitation: Invitation=None):
+      def __init__(self, amount: int=None, invitation: Invitation=None):
           if not amount and not invitation:
               raise Exception()
           
@@ -295,13 +295,13 @@
       def _has_invitation(self):
           return self._invitation is not None
       
-      def _set_ticket(self, ticket:Ticket):
+      def _set_ticket(self, ticket: Ticket):
           self._ticket = ticket
           
       def _minus_amount(self, amount: int):
           self._amount -= amount
       
-      def hold(self, ticket:Ticket):
+      def hold(self, ticket: Ticket):
           if self._has_invitation():
               self._set_ticket(ticket)
               return 0
@@ -328,15 +328,15 @@
   
   ```python
   class TicketOffice:
-      def __init__(self, amount, tickets:list[Ticket]):
-          self.amount = amount
-          self.tickets = tickets
+      def __init__(self, amount: int, tickets: list[Ticket]):
+          self._amount = amount
+          self._tickets = tickets
       
       def _get_ticket(self) -> Ticket:
-          return self.tickets.pop()
+          return self._tickets.pop()
       
-      def _plus_amount(self, amount):
-          self.amount += amount
+      def _plus_amount(self, amount: int):
+          self._amount += amount
       
       def sell_ticket_to(self, audience: Audience):
           self._plus_amount(audience.buy(self._get_ticket()))
@@ -348,7 +348,7 @@
   
   ```py
   class TicketSeller:
-      def __init__(self, ticket_office:TicketOffice):
+      def __init__(self, ticket_office: TicketOffice):
           self._ticket_office = ticket_office
       
       def sell_to(self, audience: Audience):
@@ -358,6 +358,7 @@
 
 - 훌륭한 설계는 적절한 트레이드오프의 결과물이다.
   - 추가 개선의 결과 `TicketOffice`와 `Audience` 사이에 새로운 의존성이 생겨났다.
+    - 기존에 `TicektOffice`는 `Audience`와 전혀 관련이 없었지만, 변경 후에는 `sell_ticket_to` 메서드에서 `Audience`의 인스턴스를 인자로 전달 받게 됐다.
     - 변경 전에는 없던 새로운 의존성이 추가되었으므로, `TicketOffice`와 `Audience`의 결합도가 높아지게 됐다.
     - `TicketOffice`의 자율성은 높아졌지만, 전체 설계의 관점에서는 결합도가 상승했다.
   - 설계는 트레이드오프의 산물이다.
@@ -406,9 +407,9 @@
     - 할인 조건은 다수의 조건을 지정하거나 혼합하는 것이 가능하지만, 할인 정책은 하나의 정책만 할당할 수 있다.
     - 할인 정책은 1인을 기준으로 책정된다.
   - 할인 조건은 가격의 할인 여부를 결정하며 순서 조건과 기간 조건의 두 종류로 나눌 수 있다.
-    - 순서 조건은 상영 순번을 기준으로 할인 여부를 결정하는 규칙이다(e.g. 순번이 3번일 경우 매일 3번째로 사양되는 영화를 예매한 사용자들에게 할인 혜택 제공).
+    - 순서 조건은 상영 순번을 기준으로 할인 여부를 결정하는 규칙이다(e.g. 순번이 3번일 경우 매일 3번째로 상영되는 영화를 예매한 사용자들에게 할인 혜택 제공).
     - 기간 조건은 영화 상영 시작 시간을 기준으로 할인 여부를 결정하며, 요일, 시작 시간, 종료 시간의 세 부분으로 구성된다.
-  - 할인 정책은 할인 요금을 결정하며, 할인 정책에는 금액 할인 정책과 비율할인 정책이 있다.
+  - 할인 정책은 할인 요금을 결정하며, 할인 정책에는 금액 할인 정책과 비율 할인 정책이 있다.
     - 금액 할인 정책은 예매 요금에서 일정 금액을 할인해주는 방식이다.
     - 비율 할인 정책은 정가에서 일정 비율의 요금을 할인해 주는 방식이다.
 
@@ -543,7 +544,7 @@
   - 협력(Collaboration)
     - 영화를 예매하기 위해 각 인스턴스들은 서로의 메서드를 호출하며 상호작용한다.
     - 이처럼 시스템의 어떤 기능을 구현하기 위해 객체들 사이에 이뤄지는 상호작용을 협력이라고 부른다.
-    - 객체지향 프로그램을 작성할 때는 먼저 협력의 관점에서 어떤 객체가 필요한지를 결정하고, 객체들의 공통 상태와 행위를 구현하기 위해 클래스를 작성한다.
+    - <span style="color:red">**객체지향 프로그램을 작성할 때는 먼저 협력의 관점에서 어떤 객체가 필요한지를 결정하고, 객체들의 공통 상태와 행위를 구현하기 위해 클래스를 작성한다.**</span>
   - 협력의 방식
     - 객체는 다른 객체의 인터페이스에 공개된 행동을 수행하도록 요청 할 수 있다.
     - 요청을 받은 객체는 자율적인 방법에 따라 요청을 처리한 후 응답한다.
@@ -552,7 +553,7 @@
     - 메시지를 수신한 객체는 스스로의 결정에 따라 자율적으로 메시지를 처리할 방법을 결정한다.
   - 메서드와 메시지
     - 수신된 메시지를 처리하기 위한 자신만의 방법을 메서드라 부른다.
-    - **메시지와 메서드를 구분하는 것은 매우 중요하며, 이를 구분하는 것에서 다형성의 개념이 출발한다.**
+    - <span style="color:red">**메시지와 메서드를 구분하는 것은 매우 중요하며, 이를 구분하는 것에서 다형성의 개념이 출발한다.**</span>
     - 위에서 `Screening`이 `Movie`의 `calculate_movie_fee` '메서드를 호출한다'는 표현 보다는 '메시지를 전송한다'는 표현이 더 적절한 표현이다.
     - 사실 `Screening`은 `Movie`의 내부에 `caclulate_movie_fee` 메서드가 있는지조차 알지 못한다.
     - 단지 `Movie`가 `calculate_movie_fee`라는 메시지에 응답할 수 있다고 믿고 메시지를 전송할 뿐이다.
@@ -711,7 +712,7 @@
   - **상속과 다형성**
     - 다형적인 협력에 참여하는 객체들은 모두 같은 메시지를 이해할 수 있어야한다.
     - 즉 인터페이스가 동일해야한다.
-    - 그리고 **두 클래스의 인터페이스를 통일하기 위해 사용하는 구현 방법이 바로 상속인 것이다.**
+    - 그리고 <span style="color:red">**두 클래스의 인터페이스를 통일하기 위해 사용하는 구현 방법이 바로 상속인 것이다.**</span>
     - 그러나 상속이 다형성을 구현할 수 있는 유일한 방법인 것은 아니다.
   - 동작 바인딩과 정적 바인딩
     - 다형성을 구현하는 방법은 다양하지만, 메시지에 응답하기 위해 실행될 메서드를 컴파일 시점이 아닌 실행 시점에 결정한다는 공통점이 있다.
@@ -742,7 +743,7 @@
   class Movie:
       def calculate_movie_fee(self, screening: Screening):
           if self._discount_policy is None:
-              return
+              return self._fee.minus(Money(0))
           
           return self._fee.minus(self._discount_policy.calculate_discount_amount(screening))
   ```
@@ -776,17 +777,19 @@
 
 - 추상 클래스와 인터페이스 트레이드오프
 
-  - 새로 추가된 `NoneDiscountPolicy`는  `DiscountPolicy`와 개념적으로 연결되어 있다.
-    - 할인 조건이 없을 경우 `get_discount_amount` 메서드는 호출되지 않는다. 
-    - `NoneDiscountPolicy`는 초기화 될 때 할인 조건을 설정하지 않는다.
+  - 새로 추가된 `NoneDiscountPolicy`는 `DiscountPolicy`와 개념적으로 연결되어 있다.
+    - 이는 단순히 둘의 상속 관계에 대한 이야기가 아니다.
+    - `DiscountPolicy.calculate_discount_amount` 메서드는 할인 조건이 없을 경우 `get_discount_amount` 메서드는 호출되지 않는다. 
+    - 그리고 `NoneDiscountPolicy`는 초기화 될 때 할인 조건을 설정하지 않는다.
     - 따라서 `self.conditions`에는 빈 배열이 할당되고, `get_discount_amount()` 메서드는 호출되지 않는다.
     - `NoneDiscountPolicy`는 `get_discoumt_amount`가 호출되지 않는다는 것을 알고 있으므로 아무 값이나 반환해도 상관이 없다.
     - 이는 `NoneDiscountPolicy`를  `DiscountPolicy`와 개념적으로 결합시킨다.
+    
   - 둘 사이의 개념적 연결을 끊기 위해 아래와 같이 변경한다.
     - `DiscountPolicy`를 interface로 변경하며, `get_discount_amount` 메서드가 아닌 `calculate_discount_amount` 메서드를 오버라이딩하도록 변경한다.
     - 본래 `DiscountPolicy`의 내용을 `DefaultDiscountPolicy`라는 새로운 클래스 내부로 옮긴다.
     - `NoneDiscountPolicy`가 `DiscountPolicy` interface를 구현하도록 변경한다.
-
+  
   ```python
   from abc import ABC, abstractmethod
   
@@ -818,7 +821,7 @@
       def calculate_discount_amount(self, screening: Screening) -> Money:
           return Money.wons(0)
   ```
-
+  
   - 어떤 설계가 더 나은가?
     - 이상적으로는 인터페이스를 사용하도록 변경한 설계가 더 좋을 것이다.
     - 현실적으로는 `NoneDiscountPolicy`만을 위해 인터페이스를 추가하는 것이 과하다는 생각이 들 수도 있다.
@@ -837,6 +840,7 @@
   ```python
   class Movie:
       def calculate_movie_fee(self):
+          # get_discount_amount 호출
           ...
       
       @abstractmethod
@@ -855,10 +859,16 @@
   ```
   
   - 상속은 캡슐화를 위반한다.
+    
+    > 단, 위 코드의 경우 전형적인 템플릿 메서드 패턴으로, 안티 패턴이라고 보기는 어렵다.
+    >
+    > 다만, 부모 클래스의 구현이 자식 클래스에게 노출된다는 점에서 캡슐화가 약화되는 것은 사실이다.
+    
     - 상속을 이용하기 위해서는 부모 클래스의 내부 구조를 잘 알고 있어야 한다.
     - 위 예시에서 `AmountDiscountMovie`와 `PercentDiscountMovie`를 구현하는 개발자는 `Movie`의 `calculate_movie_fee` 메서드 안에서 추상 메서드인 `get_discount_amount` 메서드를 호출한다는 사실을 알고 있어야한다.
     - 결과적으로 부모 클래스의 구현이 자식 클래스에게 노출되기 때문에 캡슐화가 약화된다.
     - 캡슐화의 약화는 자식 클래스가 부모 클래스에 강하게 결합되도록 만들기 때문에 부모 클래스를 변경할 때 자식 클래스도 함께 변경될 확률을 높인다.
+    
   - 상속은 유연하지 않은 설계를 만든다.
     - 상속은 부모 클래스와 자식 클래스의 관계를 컴파일 시점에 결정한다.
     - 따라서 실행 시점에 객체의 종류를 변경하는 것이 불가능하다.
@@ -952,7 +962,19 @@
 
 
 
+- 객체지향 프로그램을 작성할 때는 먼저 협력의 관점에서 어떤 객체가 필요한지를 결정하고, 객체들의 공통 상태와 행위를 구현하기 위해 클래스를 작성한다.
+
+
+
 - 메시지와 메서드를 구분하는 것은 매우 중요하며, 이를 구분하는 것에서 다형성의 개념이 출발한다.
+
+
+
+- 동일한 메시지를 전송하지만 실제로 어떤 메서드가 실행될 것인지는 메시지를 수신하는 객체의 클래스가 무엇이냐에 따라 달라지는 것을 다형성이라 부른다.
+
+
+
+- 두 클래스의 인터페이스를 통일하기 위해 사용하는 구현 방법이 바로 상속인 것이다.
 
 
 
