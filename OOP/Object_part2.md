@@ -33,7 +33,7 @@
     - 이것은 객체가 자신의 일을 스스로 처리할 수 있는 자율적인 존재라는 것을 의미한다.
   - 자신이 할 수 없는 일을 다른 객체에게 위임하면 협력에 참여하는 객체들의 전체적인 자율성을 향상시킬 수 있다.
   
-    - 위 예시에서 `Screening`은 `Movie`에게 `calculate_movie_fee`라는 메시지를 전송하여 요금 계산을 요청한다.
+    - 앞의 예시에서 `Screening`은 `Movie`에게 `calculate_movie_fee`라는 메시지를 전송하여 요금 계산을 요청한다.
     - `Screening`이 직접 처리하지 않고 `Movie`에게 위임하는 이유는 `Movie`가 요금을 계산하는 데 필요한 기본 요금과 할인 정책을 가장 잘 알고 있는 객체이기 때문이다.
     - 요금을 계산하는 일을 `Screening`이 직접 수행한다면 `Movie`의 인스턴스 변수인 `fee`와 `discount_policy`에 접근해야만 하며, 이 경우 `Screening`은 `Movie`의 내부 구현에 결합된다.
     - 따라서 `Movie`의 자율성이 훼손된다.
@@ -181,7 +181,7 @@
     - 따라서 역할을 사용하면 불필요한 중복 코드를 제거할 수 있으며, 보다 유연한 협력을 설계할 수 있게 된다.
   - 역할은 구체적인 객체들의 타입을 캡슐화하는 추상화이다.
     - 구체적인 객체의 타입을 역할로 추상화함으로써 구체적인 객체들의 타입들은 역할 뒤로 감춰진다.
-    - 역할과 협력하는 객체는 역할과 협력한다는 사실만 알 뿐이고 구체적으로 어떤 객체와 협력하는지는 알 지 못한다.
+    - 역할과 협력하는 객체는 역할과 협력한다는 사실만 알 뿐이고 구체적으로 어떤 객체와 협력하는지는 알지 못한다.
   - 역할의 구현
     - 역할을 구현하는 대표적인 방법은 추상 클래스와 인터페이스를 사용하는 것이다.
     - 협력의 관점에서 추상 클래스와 인터페이스는 구체 클래스들이 따라야하는 책임의 집합을 서술한 것이다.
@@ -216,7 +216,7 @@
     - 따라서 추상화가 가지는 두 가지 장점은 협력의 관점에서 역할에도 동일하게 적용될 수 있다.
   - 역할이 중요한 이유는 동일한 협력을 수행하는 객체를 추상화 할 수 있기 때문이다.
     - 추상화를 사용하면 세부 사항에 억눌리지 않고도 상위 수준의 정책을 쉽고 간단하게 표현할 수 있다.
-    - `DiscountPolicy`, `DiscountCondition`와 같은 역할을 사용하면, 상위 수준의 정책을 쉽고 간단하게 표현할 수 있다.
+    - `DiscountPolicy`, `DiscountCondition`과 같은 역할을 사용하면, 상위 수준의 정책을 쉽고 간단하게 표현할 수 있다.
     - 예를 들어 "가격 할인 정책과 함께 2개의 순번 규칙과 1개의 비율 규칙을 적용"한다고 표현하거나 "비율 할인 정책과 함께 3개의 순번 규칙을 적용"한다고 표현할 필요 없이 단순히 "할인 정책과 여러 개의 할인 조건을 적용한다"고 간단하게 표현할 수 있다
   - 역할은 다양한 종류의 객체를 끼워넣을 수 있는 일종의 슬롯이므로, 유연한 설계를 가능하게 한다.
     - 협력 안에서 동일한 책임을 수행하는 객체들은 동일한 역할을 수행하기 때문에 서로 대체가 가능하다.
@@ -262,7 +262,7 @@
     - 객체의 상태가 아니라 객체의 행동에 초점을 맞춰야한다.
     - 객체를 단순한 데이터의 집합으로 보는 시각은 객체의 내부 구현을 퍼블릭 인터페이스에 노출시키는 결과를 낳기에 결과적으로 설계가 변경에 취약해진다.
     - 이런 문제를 피할 수 있는 가장 좋은 방법은 객체의 책임에 초점을 맞추는 것이다.
-  - 객체 지향 설계에서는 두 가지 방법을 이용해 시스템을 객체로 분할할 수 있다.
+  - 객체지향 설계에서는 두 가지 방법을 이용해 시스템을 객체로 분할할 수 있다.
     - 첫 번째 방법은 상태를 분할의 중심축으로 삼는 방법이다.
     - 두 번째 방법은 책임을 분할의 중심축으로 삼는 방법이다.
     - 데이터 중심의 관점은 객체의 상태에 초점을 맞추고, 책임 중심의 관점은 객체의 행동에 초점을 맞춘다.
@@ -435,16 +435,16 @@
 
   ``` python
   class Customer:
-      def __init__(self, name, id):
+      def __init__(self, name: str, id_: str):
           self._name = name
-          self._id = id
+          self._id = id_
   
       @property
       def name(self):
           return self._name
       
       @name.setter
-      def name(self, name):
+      def name(self, name: str):
           self._name = name
   
       @property
@@ -452,7 +452,7 @@
           return self._id
       
       @id_.setter
-      def id_(self, id_):
+      def id_(self, id_: str):
           self._id = id_
   ```
 
@@ -464,7 +464,8 @@
   class ReservationAgency:
       def reserve(self, screening: Screening, customer: Customer, audience_count: int):
           movie = screening.movie
-  
+  		
+          # 할인 가능 여부 확인
           discountable = False
           for condition in movie.discount_conditions:
               if condition.type_ == DiscountConditionType.PERIOD:
@@ -476,7 +477,8 @@
   
               if discountable:
                   break
-  
+  		
+          # 할인 요금 계산
           if discountable:
               discount_amount = Money.wons(0)
   
