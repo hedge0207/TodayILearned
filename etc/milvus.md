@@ -101,7 +101,15 @@
 
 
 - Index Building
-  - Index building은 data node가 수행하며, data가 update될 때마다 index building이 발생하는 것을 피하기 위해 collection은 segment 단위로 분할된다.
+
+  - Vector를 빠르게 검색할 수 있는 자료구조로 변환하는 과정이다.
+    - Index type에 따라 수행 여부가 결정되는데 flat의 경우 수행하지 않는다.
+    - 또한 index type에 따라 동작 방식도 달라진다.
+
+  - Index building은 index node가 수행하며, data가 update될 때마다 index building이 발생하는 것을 피하기 위해 collection은 segment 단위로 분할된다.
+    - Data node에서 sealed segment로 전환된 semgent들을 감지하여 원본 벡터 + 인덱스 구조를 메모리에 올려서 빌드한다.
+    - 빌드가 완료되면 디스크에 저장하고 메모리에서 해제한다.
+
   - Milvus는 각 vector field, scalar field, primary field에 대한 index building을 지원한다. 
     - Index building의 입력과 출력은 모두 object storage를 사용한다. 
     - Data node는 object storage에 저장된 segment부터 인덱싱할 log snapshot을 memory로 load하고, 해당 데이터와 메타데이터를 역직렬화해 index를 생성한다. 
@@ -111,6 +119,53 @@
     - Index 유형과 관계없이, 대규모 vector에 대한 index building은 K-means나 그래프 탐색과 같은 대규모 반복 계산을 포함한다.
     - 스칼라 데이터 인덱싱과 달리, 벡터 인덱스 생성은 SIMD(single instruction, multiple data) 가속을 최대한 활용해야 한다.
     - Milvus는 SSE, AVX2, AVX512 등의 SIMD 명령어 세트를 기본적으로 지원한다. 
+  - Index building 중 검색 요청이 들어오는 경우
+    - Index building이 안 된 segment들을 대상으로는 brute-force를 수행하고, 완료된 segment들은 인덱스를 사용하여 검색을 수행한다.
+    - 따라서 HNSW로 설정했더라도 index building이 하나도 안 된 상황이라면 Flat과 동일하게 동작한다.
+
+
+  - Python의 경우 아래와 같이 index building 현황을 확인할 수 있다.
+    - `total_rows`: 컬렉션의 전체 엔티티 수
+    - `indexed_rows`: 인덱스 빌드가 완료된 엔티티 수
+    - `pending_index_rows`: 인덱스 빌드 대기 중인 엔티티 수
+    - `state`: 인덱스 빌드 진행 상태
+
+  ```python
+  from pymysql import connections, utility
+  
+  connections.connect(uri="http://localhost:19530")
+  print(utility.index_building_progress(collection_name="my_collection", index_name="my_index"))
+  # {'total_rows': 100000, 'indexed_rows': 60000, 'pending_index_rows': 40000, 'state': 'Inprogress'}
+  ```
+
+
+
+- 색인 중 Milvus는 아래와 같이 memory를 사용한다.
+  - Data node는 삽입 대상 데이터가 일정 크기가 되기 전까지는  growing segment 상태로 memory에 저장한다.
+    - 일정 크기에 도달하면 sealed segement로 전환된다.
+    - 이후 flush가 실행되면 disk에 저장하고 memory에서 해제한다.
+    - 즉 data node가 삽입 대상 데이터를 받아 해당 데이터가 flush 되기 전까지는 메모리에 저장된다.
+  - Index node는 disk에 저장된 flushed segment들을 읽어 메모리에 올린다.
+    - Sealed segment에 저장된 원본 벡터 + 원본 벡터로 빌드 중인 인덱스 구조를 메모리에 올린다.
+    - 인덱스 빌딩이 완료되면 디스크에 저장하고 메모리에서 해제한다.
+  - Data node는 작은 세그먼트들을 병합하는 작업을 위하 작은 세그먼트들을 memory에 올려 병합 작업(segment compaction)을 진행한다.
+    - "작은 세그먼트"의 기준은 설정(`dataCoord.segment.maxSize × dataCoord.segment.smallProportion`)에 따라 달라진다.
+    - 세그먼트 flush 시, 또는 오랫동안 compaction이 실행되지 않아 전체 compaction이 요청될 때 실행된다.
+    - 작은 세그먼트들의 합이 `dataCoord.segment.maxSize × dataCoord.segment.compactableProportion`과 크거나 같으면 compation이 실행된다.
+    - 병합 작업이 완료되면 병합된 segment를 disk에 작성하고 메모리에서 해제한다.
+  - Segment compaction이 실행되면  index building 역시 재실행된다.
+    - 기존에 이미  index building이 실행됐던 segment라 하더라도 병합된 후에는 index building을 재실행해야한다.
+    - 따라서 이 때도 memory가 사용된다.
+  - 따라서 index는 가급적 초기 대량의 데이터를 모두 삽입하고 난 후 생성하는 것이 좋다.
+    - 실제 테스트를 해보면 index를 미리 생성할 경우 그렇지 않을 경우에 비해 훨씬 많은 memory, cpu 사용량을 보인다.
+    - 데이터의 개수에 따라, index의 type에 따라 차이가 있고, 삽입이 지속되는 시간에 따라서도 차이가 있겠지만, 8.8M건의 1024 dims 벡터를 HNSW에 약 2시간 동안 지속적으로 삽입할 경우 cpu와 memory 사용량 모두에서 최대 4배 가량 차이가 발생하는 것을 확인했다. 
+  - 메모리 추이(Index를 생성한 상태에서 데이터를 삽입할 경우)
+    - 일반적으로 삽입이 진행되는 동안 RSS는 완만하게 증가하다 클라이언트로부터 삽입 요청이 더 이상 들어오지 않으면 완만하게 감소한다.
+    - RSS가 감소하는 만큼 page cache가 증가하기 시작하는데, 이는 compation과 index builing은 지속적으로 실행되기 때문이다.
+    - 삽입 요청이 많이 들어올 때는 page cache에 할당할 메모리가 없었지만, 삽입 요청이 중단되고 RSS가 감소하여 메모리에 여유가 생기면서  compaction과 index building이 수행될 때 읽는 파일들이 page cache에 적재된다. 
+  - 메모리 추이(Index를 생성하지 않은 상태에서 데이터를 삽입할 경우)
+    - 이 경우 RSS는 증감을 반복하며 일정 수준 이상으로 증가하지 않으며,  page cache는 증가하지 않는다.
+    - 이는 index building이 수행되지 않기 때문으로 memory 사용량 뿐 아니라  CPU 사용량 역시 차이가 난다.
 
 
 
