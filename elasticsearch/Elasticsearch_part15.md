@@ -270,12 +270,28 @@
 
 
 
-- dense_vector 타입을 색인할 때 `_source.exclude`를 통해 색인은 되게 하되 저장은 되지 않게 하면 크기를 줄일 수 있다.
+- dense_vector 타입을 색인할 때 `_source.exclude`를 통해 색인은 되게 하되 저장은 되지 않게 하면 index 크기를 줄일 수 있다.
 
-  - 경우에 따라 다르겠지만 색인시에 `_source.excludes`를 통해 vector 값을 저장하지 않으면 인덱스 크기가 상당히 감소한다.
+  - 경우에 따라 다르겠지만 색인시에 `_source.excludes`를 통해 vector 값을 저장하지 않으면 index 크기가 상당히 감소한다.
 
+    - 이는 원본 벡터를 아예 저장하지 않는다는 의미는 아니다.
+    - Elasticsearch는 원본 벡터를 rescoring 등에 사용하기 위해 원본 벡터 파일(`.vec`)에 저장한다.
+    - `_source.exclude`는 stored fields에 저장하지 않겠다는 것이다.
+  
   - flat일 경우와  hnsw일 경우의 감소 폭이 다르다.
     - hnsw일 경우 상당히 감소하지만, flat일 경우 거의 차이가 없다.
+  
+  - 다만, 이 경우 reindex시에 vector 값을 reindex할 수는 없다.
+  
+    - 따라서 reindex를 빈번히 수행해야 할 경우 `_source`에 저장해야 한다.
+  
+  - 그러나 9.2버전부터 vector type(dense_vector, sparse_vector, rank_vector)들을 `_source`에서 exclude하는 것이 기본 값이 될 예정이다.
+  
+    > https://www.elastic.co/search-labs/blog/elasticsearch-exclude-vectors-from-source
+  
+    - 이에 따라 `_source`에서 exclude 되었더라도 재색인 등이 수행될 경우 원본 벡터를 복원하여 재색인이 가능해질 예정이다.
+
+
 
 
 
@@ -498,12 +514,15 @@
   - `num_candidates` parameter
     - 가까운 이웃을 찾을 가능성을 조정하는 parameter이다.
     - 큰 값을 줄 수록 검색 속도는 감소하지만 정말로 가까운 이웃을 찾을 가능성이 증가한다.
-    - 각 샤드(shard)에서는 num_candidates 개수만큼의 벡터가 고려되며, 그중 상위 k개의 벡터가 coordinator node로 전달된다.
+    - knn query가 요청으로 들어오면 coordinator node는 해당 요청을 각 shard로 전송한다.
+    - 각 shard의 segment들은 각자 자신의 HNSW graph에서 num_candidates만큼의 노드들을 찾는다.
+    - 이후 shard에서 이를 취합하여 top-k개를 coordinator node에 반환한다.
+    - Coordinator는 모든 shard의 결과를 병합하여 최종 top-k를 선정한다.
     - 코디네이터 노드는 각 샤드에서 전달된 로컬 결과들을 병합한 뒤 그 중에서 다시 전역(global) 결과 기준으로 상위 k개의 벡터를 선택하여 반환한다.
   - 여러 개의 field를 대상으로  knn 검색을 수행하는 것도 가능하다.
     - 아래와 같이 `knn`의 값을 배열 형태로 설정하면 된다.
     - 최종 점수는 각 점수의 평균으로 계산된다.
-
+  
   ```json
   // POST my-index/_search
   {
@@ -527,12 +546,12 @@
     ]
   }
   ```
-
+  
   - Filter 설정하기
     - Script score를 사용하는 방식과 마찬가지로 knn 검색 역시 탐색해야 하는 vector의 범위를 줄이기 위해 filter를 주는 것이 가능하다.
     - `knn.filter`는 pre-filter로 적용되고, 그 외에 `query`에 작성한 내용들은 모두 post-filter로 적용된다.
     - `knn.filter`가 지나치게 엄격할 경우(조건이 많을 경우) knn 검색이 지나치게 희소한 벡터 공간에서 실행되어 정확한 결과를 얻기 어렵다.
-
+  
   ```json
   // POST my-index/_search
   {
@@ -553,7 +572,7 @@
     }
   }
   ```
-
+  
   - `similarity` parameter
     - 앞서 살펴본 것 처럼 filter를 적용할 경우 검색 속도를 증가시킬 수 있지만, 희소한 vector 차원에서 검색해야 한다는 문제가 있다.
     - 따라서 관련성이 없는 문서들이 검색되는 문제가 발생할 수 있는데, 이는  `similarity` parameter를 통해 해결할 수 있다.
@@ -562,7 +581,7 @@
     - 만약 filter로 너무 많이 걸러지거나  `similarity`가 너무 높게 설정되어 k개의 이웃을 찾을 수 없는 경우 brute-force search를 실행한다.
     - 어떤 값을 설정해야 하는지는 vector field mapping에 어떤 유사도 지표를 사용했는지에 달려있다.
     - `l2_norm`을 사용할 경우 최대 거리를, `dot_product`, `cosine`을 사용할 경우 최소 유사도를 설정하면 된다. 
-
+  
   ```json
   // POST my-index/_search
   {
@@ -584,7 +603,7 @@
     }
   }
   ```
-
+  
   -  k-NN의 제약 사항
      - 8.11 버전까지는 nested documents 내부에 위치한 vector field에 k-NN 검색을 실행할 수 없으나, 8.12 버전부터는 이 제한이 해제되었다. 다만, 이러한 중첩 k-NN 쿼리는 필터 조건을 지정하는 기능을 지원하지 않는다.
      - search_type은 항상 dfs_query_then_fetch로 설정되며, 이를 동적으로 변경하는 것은 불가능하다.
@@ -1227,6 +1246,25 @@
     - Flushing 전에 보다 많은 document들을 받기 위해서 indexing buffer를 충분히 활용하는 것도 방법이 될 수 있다.
     - `indices.memory.index_buffer_size`의 기본 값은 heap size의 10%인데, 32GB와 같이 충분한 heap size가 확보되었을 경우, 이 설정을 변경할 필요는 거의 없다.
     - 다만, `index.translog.flush_threshold_size`를 늘려 indexing buffer를 최대한 활용하도록 조정할 수 있다.
+  - HNSW는 데이터가 많을수록 그래프의 연결성이 좋아지는 특성이 있다.
+    - Segment의 개수가 많을수록 더 많은 후보를 탐색하게 되므로 recall이 높아질 수도 있다.
+    - 그러나 HNSW의 특성상 오히려 품질이 떨어질 가능성이 높다.
+    - 특히 정답군이 한 segment에 집중된 경우 예컨대 어떤 쿼리의 진짜 top-10이 우연히 segment A에 8개 모여있고, segment A의 HNSW가 성기게 연결되어 있다면 정답을 못 찾는 경우가 발생할 수 있다.
+    - 따라서 segment 수가 늘수록 동일한 num_candidates로 얻는 recall이 점점 감소하므로 이를 보정하기 위해 num_candidates를 늘려야 할 수 있다.
 
 
+
+- Semantic search와 heap size
+  - Vector를 색인하고 검색하는 성능에는 heap size보다 off-heap에 해당하는 page cache가 더 큰 영향을 미친다.
+    - 따라서 semantic search가 주가 되는 Elasticsearch를 운영할 때는 heap size를 일반적인 권장(memory의 50%)량 보다 적게 설정하는 것이 좋다.
+  - 색인
+    - 색인의 경우에는 둘 다 비슷한 영향을 미친다.
+    - HNSW graph를 생성하는 작업 및 quantization은 heap memory에서 이루어진다.
+    - 다만 graph를 생성하는 중에 새로운 노드를 추가하기 위해 기존 graph를 읽는 작업을 빈번히 수행해야 하는데, 이 때 page cache를 많이 확보할수록 읽는 속도가 빨라져 색인 속도도 증가하게 된다.
+  - 검색
+    - Lexical search를 수행할 때, page cache에는 역색인이 로드되고, heap에서는 정렬, 집계, 쿼리 분석, 점수 계산등 다양한 작업이 수행되어 heap도 매우 중요하다.
+    - 그러나 vector 검색시에는 heap에 비해 page cache가 훨씬 중요해진다.
+    - Vector 검색을 수행할 때 `.vex` 파일(HNSW 그래프)을 page cache에서 읽으며 노드들을 탐색하는데, 그래프 탐색 특성상 랜덤 액세스가 매우 많이 발생한다.
+    - page cache miss 시 디스크 I/O가 발생하며 latency 급증하게 되는데, page cache의 비중이 클수록 page cache miss가 감소하게 된다.
+    - 물론 vector 검색시에 heap에서도 query context를 생성하고, 쿼리와 노드 사이의 유사도를 계산하는 등의 작업이 수행된다.
 

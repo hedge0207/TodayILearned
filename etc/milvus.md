@@ -119,17 +119,19 @@
     - Index 유형과 관계없이, 대규모 vector에 대한 index building은 K-means나 그래프 탐색과 같은 대규모 반복 계산을 포함한다.
     - 스칼라 데이터 인덱싱과 달리, 벡터 인덱스 생성은 SIMD(single instruction, multiple data) 가속을 최대한 활용해야 한다.
     - Milvus는 SSE, AVX2, AVX512 등의 SIMD 명령어 세트를 기본적으로 지원한다. 
+    - 데이터 삽입 자체는 CPU를 많이 사용하지 않지만 index building이 cpu를 많이 사용한다.
+    - 예를 들어 16 core를 할당한 Milvus에 8.8m개의 1024 차원 벡터를 index 없이 데이터를 삽입할 경우 1~2 core만을 사용하지만, 삽입 이후에 index building에는 12개의 core가 사용된다.
   - Index building 중 검색 요청이 들어오는 경우
     - Index building이 안 된 segment들을 대상으로는 brute-force를 수행하고, 완료된 segment들은 인덱스를 사용하여 검색을 수행한다.
     - 따라서 HNSW로 설정했더라도 index building이 하나도 안 된 상황이라면 Flat과 동일하게 동작한다.
-
-
-  - Python의 경우 아래와 같이 index building 현황을 확인할 수 있다.
-    - `total_rows`: 컬렉션의 전체 엔티티 수
-    - `indexed_rows`: 인덱스 빌드가 완료된 엔티티 수
-    - `pending_index_rows`: 인덱스 빌드 대기 중인 엔티티 수
-    - `state`: 인덱스 빌드 진행 상태
-
+  
+  
+    - Python의 경우 아래와 같이 index building 현황을 확인할 수 있다.
+      - `total_rows`: 컬렉션의 전체 엔티티 수
+      - `indexed_rows`: 인덱스 빌드가 완료된 엔티티 수
+      - `pending_index_rows`: 인덱스 빌드 대기 중인 엔티티 수
+      - `state`: 인덱스 빌드 진행 상태
+  
   ```python
   from pymysql import connections, utility
   
