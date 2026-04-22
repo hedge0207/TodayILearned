@@ -816,3 +816,129 @@
 
 
 
+- mmap
+
+  - 전체 데이터를 메모리에 올리는 대신 mmap을 사용하여 page cache를 활용하도록 변경이 가능하다.
+    - 기본값은 mmap을 설정하지 않는 것이다.
+    - 메모리보다 큰 데이터를 다루기 위해 사용한다.
+    - Milvus는 검색을 위해 데이터 전체를 메모리에 로드해야한다.
+    - 따라서 전체 메모리가 8GB인데, 전체 데이터는 10GB일 경우 검색이 불가능하다.
+    - 이 때 mmap을 사용하면 성능의 저하는 발생할 수 있지만 검색은 가능해진다.
+    - 또한 메모리가 충분한 경우 메모리만 사용하는 것과 유사한 성능을 기대할 수 있으나, 메모리가 충분할 경우 굳이 사용할 필요는 없다.
+
+  ![Mmap Illustrated](milvus.assets/mmap-illustrated.png)
+
+  - Milvus는 계층적 mmap 설정을 지원한다.
+    - `milvus.yml`에 설정하는 전역 설정.
+    - Collection level 설정
+    - Field, index level 설정
+    - Field, index level 설정이  collection level 설정에 우선하고,  collection level 설정이 전역 설정에 우선한다.
+  - 전역 설정
+    - 기본값은 아래와 같이 모두 비활성화 되어 있다.
+    - `mmapDirPath`에는 고성능 disk의 경로를 설정하는 것이 권장된다.
+
+  ```yaml
+  queryNode:
+    mmap:
+      scalarField: false
+      scalarIndex: false
+      vectorField: false
+      vectorIndex: false
+      mmapDirPath: {localStorage.path}/mmap
+  ```
+
+  - 필드 단위로 설정하기
+
+  ```python
+  from pymilvus import MilvusClient, DataType
+  
+  CLUSTER_ENDPOINT="http://localhost:19530"
+  TOKEN="root:Milvus"
+  
+  client = MilvusClient(
+      uri=CLUSTER_ENDPOINT,
+      token=TOKEN
+  )
+  
+  schema = MilvusClient.create_schema()
+  schema.add_field("id", DataType.INT64, is_primary=True, auto_id=False)
+  schema.add_field("vector", DataType.FLOAT_VECTOR, dim=5)
+  
+  schema = MilvusClient.create_schema()
+  
+  schema.add_field(
+      field_name="doc_chunk",
+      datatype=DataType.INT64,
+      is_primary=True,
+      mmap_enabled=True,
+  )
+  
+  client.alter_collection_field(
+      collection_name="my_collection",
+      field_name="doc_chunk",
+      field_params={"mmap.enabled": True}
+  )
+  ```
+
+  - index 단위로 설정하기
+    - Index 생성시에도 설정할 수 있고, 생성한 후에도 변경이 가능하다.
+    - 단, 변경 전에는 반드시 collection을 release 해야한다. 
+
+  ```python
+  schema.add_field(
+      field_name="title",
+      datatype=DataType.VARCHAR,
+      max_length=512   
+  )
+  
+  index_params = MilvusClient.prepare_index_params()
+  
+  index_params.add_index(
+      field_name="title",
+      index_type="AUTOINDEX",
+      # highlight-next-line
+      params={ "mmap.enabled": "false" }
+  )
+  
+  # 반드시 위와 같이 params에 설정해야 하며, 아래와 같이 add_index의 일반 parameter로 넘겨서는 안 된다.
+  index_params.add_index(
+      field_name="title",
+      mmap_enabled="false",
+  )
+  
+  client.alter_index_properties(
+      collection_name="my_collection",
+      index_name="title",
+      properties={"mmap.enabled": True}
+  )
+  ```
+
+  - Collection 단위로 설정하기
+
+  ```py
+  client.create_collection(
+      collection_name="my_collection",
+      schema=schema,
+      properties={ "mmap.enabled": "true" }
+  )
+  
+  # 아래와 같이 변경도 가능하다.
+  client.release_collection("my_collection")
+  
+  # Ensure that the collection has already been released 
+  # and run the following
+  client.alter_collection_properties(
+      collection_name="my_collection",
+      properties={
+          "mmap.enabled": false
+      }
+  )
+  
+  # Load the collection to make the above change take effect
+  client.load_collection("my_collection")
+  ```
+
+  - `load_collection()` 실행시 가용한 메모리에 모두 page cache로 로드한다.
+    - 따라서 memory가 충분하다면 컬렉션을 로드하는 것 만으로 별도의 warm up을 수행하지 않아도 된다.
+    - 그러나 모든 데이터를 page cache로 로드하지 못 할 만큼 데이터가 많다면, 검색을 여러 번 수행하여 자주 접근하는 데이터만 page cache로 로드 하는 warm up이 필요하다.
+
