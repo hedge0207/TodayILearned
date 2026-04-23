@@ -1266,5 +1266,5 @@
     - 그러나 vector 검색시에는 heap에 비해 page cache가 훨씬 중요해진다.
     - Vector 검색을 수행할 때 `.vex` 파일(HNSW 그래프)을 page cache에서 읽으며 노드들을 탐색하는데, 그래프 탐색 특성상 랜덤 액세스가 매우 많이 발생한다.
     - page cache miss 시 디스크 I/O가 발생하며 latency 급증하게 되는데, page cache의 비중이 클수록 page cache miss가 감소하게 된다.
-    - 물론 vector 검색시에 heap에서도 query context를 생성하고, 쿼리와 노드 사이의 유사도를 계산하는 등의 작업이 수행된다.
+    - 물론 vector 검색시에 heap에서도 query context를 생성하는 등의 작업을 하지만 쿼리와 노드 사이의 유사도를 계산하는 작업은 page cache에서 이루어진다.
 

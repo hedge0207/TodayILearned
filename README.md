@@ -290,6 +290,8 @@
 
 - Mongostat
 
+- Data Back Up and Restore
+
 - MongoDB Connection Pool
 
 - PyMongo
@@ -888,10 +890,6 @@
 ## clean_code_part3
 - 클래스
 
-- 변경 전
-
-- 변경 후
-
 - 시스템
 
 - 창발성
@@ -1188,8 +1186,6 @@
 
 - Docker image
 
-- Docker 설치하기
-
 - 도커 명령어
 
 <br/>
@@ -1201,10 +1197,6 @@
 - Docker Compose
 
 - Manage application data
-
-- Docker network
-
-- Docker health check
 
 <br/>
 <br/>
@@ -1231,6 +1223,12 @@
 - Docker Stack
 
 - Docker volume과 권한, 소유자, 소유 그룹
+
+- Docker network
+
+- Docker health check
+
+- Seccomp security profiles
 
 - etc
 
@@ -2164,7 +2162,7 @@
 <br/>
 
 ## graphdb_part3
-- Microsoft GraphRAG
+- GraphRAG
 
 <br/>
 <br/>
