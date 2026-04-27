@@ -1262,7 +1262,7 @@
     - HNSW graph를 생성하는 작업 및 quantization은 heap memory에서 이루어진다.
     - 다만 graph를 생성하는 중에 새로운 노드를 추가하기 위해 기존 graph를 읽는 작업을 빈번히 수행해야 하는데, 이 때 page cache를 많이 확보할수록 읽는 속도가 빨라져 색인 속도도 증가하게 된다.
   - 검색
-    - Lexical search를 수행할 때, page cache에는 역색인이 로드되고, heap에서는 정렬, 집계, 쿼리 분석, 점수 계산등 다양한 작업이 수행되어 heap도 매우 중요하다.
+    - Lexical search를 수행할 때, page cache에는 역색인이 로드되지만, heap에서는 역색인 탐색에 핵심적인 FST가 로드되고 정렬, 집계, 쿼리 분석, 점수 계산등 다양한 작업이 heap에서 수행되므로 heap의 크기가 매우 중요하다.
     - 그러나 vector 검색시에는 heap에 비해 page cache가 훨씬 중요해진다.
     - Vector 검색을 수행할 때 `.vex` 파일(HNSW 그래프)을 page cache에서 읽으며 노드들을 탐색하는데, 그래프 탐색 특성상 랜덤 액세스가 매우 많이 발생한다.
     - page cache miss 시 디스크 I/O가 발생하며 latency 급증하게 되는데, page cache의 비중이 클수록 page cache miss가 감소하게 된다.

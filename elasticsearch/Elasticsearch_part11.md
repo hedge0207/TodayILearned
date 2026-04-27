@@ -1,5 +1,49 @@
 # Elasticsearch 최적화
 
+## Shard
+
+> https://www.elastic.co/search-labs/blog/elasticsearch-node-shard-size-best-practices
+
+- 적절한 shard의 크기와 node 하나 당 적절한 shard의 개수는 Elasticsearch 사용자들 사이에서 꾸준히 논의되던 주제이다.
+
+  - 대부분의 경우 이러한 논의는 "데이터에 따라 다르다"거나 "테스트를 통해 최적의 값을 찾아야한다"는 다소 뻔한 결론으로 마무리 된다.
+    - 다만, 일종의 경험칙(rule of thumb)이 존재하긴 했다.
+    - Heap 1GB당 shard가 20개를 넘기면 안 된다는 것이다.
+    - 이를 넘길 경우 GC의 압박이 심해진다.
+    - 또한 shard의 개수가 많아질수록 클러스터가 관리해야 하는 shard의 개수가 많아져 cluster의 상태 및 node 상태 업데이트가 빠르게 이루어지지 못한다.
+  - 그러나 7 버전과 8버전에서 다양한 최적화가 이루어졌다.
+    - 더 압축된 메타데이터 직렬화, 효율적인 캐싱, off-heap 자료구조, 클러스터 상태 압축 등의 최적화가 이루어졌다.
+    - 그리고 이로 인해 위 경험칙 중 heap 1GB 당 shard가 20개를 넘기면 안 된다는 원칙은 8.3에서 폐기되었다.
+
+  - Shard의 적정 크기
+    - 샤드당 10GB에서 50GB 사이가 권장된다. 
+    - 공식 가이드는 ILM rollover 트리거를 primary 샤드당 50GB로, 권장 하한선을 10GB로 설정하고 있다. 
+    - 각 샤드는 2억 개 도큐먼트 이하로 유지하는 것이 권장된다..
+    - 샤드가 너무 작으면 master 노드에 더 많은 메타데이터, 더 많은 힙 사용, 더 많은 네트워크 트래픽 등응로 인해 불필요한 오버헤드가 생긴다.
+    - 샤드가 너무 크면 쿼리 실행이 느려지고, Elasticsearch는 샤드를 하나씩 순서대로 복구하기 때문에 노드 장애 후 복구도 느려진다.
+  - Shard의 적정 개수
+    - Heap 1GB 당 shard가 20개를 넘기면 안 된다는 원칙은 8.3에서 폐기되었다.
+    - 이제는 단순히 node 하나 당 shard 1000개가 넘지 않으면 된다.
+
+
+
+
+
+## 공통
+
+- Hot data에는 network-attached storage (NAS)를 사용하지 않는 것이 좋다.
+  - NAS는 모든 READ의 latency를 늘린다.
+  - 또한 일부 NAS는 POSIX filesystem semantics을 올바르게 구현하지 않아 data corruption이 발생할 수도 있다.
+
+
+
+- Replica shard의 개수 증가는 메모리 사용량에 영향을 미친다.
+  - Elasticsearch는 기본적으로 검색에 필요한 데이터들을 page cache(mmap)에 저장한다.
+  - 검색이 고유한 shard의 집합을 대상으로 수행된다 하더라도, 각기 다른 노드에 저장된 primary와 replica shard들은 자신들의 데이터를 page cache에 로드해야한다. 
+  - 따라서 replica shard의 개수가 증가하면 각 replica shard가 속한 노드의 page cache도 증가하여 메모리 사용량이 증가할 수 있다.
+
+
+
 ## 색인 성능 최적화
 
 > https://luis-sena.medium.com/the-complete-guide-to-increase-your-elasticsearch-write-throughput-e3da4c1f9e92
