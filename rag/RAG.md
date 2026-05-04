@@ -140,3 +140,114 @@
     - 학습 데이터셋과 아키텍처 관점에서 분류기를 개선할 수 있는 잠재적 여지가 존재한다. 
     - 구체적으로, 쿼리 복잡도 분류기를 학습시키기 위한 데이터셋이 존재하지 않기 때문에, 모델 예측 결과와 데이터셋의 귀납적 편향을 바탕으로 새로운 데이터를 자동으로 생성했으나 레이블링 과정은 쿼리 복잡도를 레이블링하는 하나의 특정 구현 방식이며, 그 효과성에도 불구하고 일부 쿼리를 잘못 레이블링할 가능성이 있다. 
     - smaller Language Model에 기반한 분류기 설계는 쿼리 복잡도를 분류하기 위한 초기의 가장 단순한 구현이며, 이를 토대로 향후 연구에서 분류기 아키텍처와 성능을 개선한다면 전반적인 QA 성능 향상에도 긍정적으로 기여할 것이다.
+
+
+
+
+
+
+
+# CRAG
+
+> https://arxiv.org/html/2401.15884v3
+
+- CRAG(Corrective Retrieval Augmented Generation)
+
+  - 기존 RAG의 문제점
+
+    - RAG는 LLM을 보완하기 위한 방법이지만, 그 효과는 LLM에 전달하는 문서의 관련성과 정확성에 달려있다.
+    - 품질이 낮은 retriever는 대량의 관련 없는 정보를 끌어들이는 경향이 있으며, 이는 모델이 정확한 지식을 습득하는 것을 방해하고 잠재적으로 모델을 오도하여 hallucination과 같은 문제를 일으킬 수 있다.
+    - 전통적인 RAG system에서는 문서가 질문과 실제로 관련이 있던 없던 무차별적으로 LLM에 전달했다.
+    - 또한, 현재의 방법들은 검색과 활용 과정 모두에서 문서 전체를 참조 지식으로 취급하는 경향이 있다.
+    - 그러나 검색된 문서 내 텍스트의 상당 부분은 답변 생성에 불필요한 경우가 많으며, 이러한 내용들이 RAG에서 동등하게 참조되고 활용되어서는 안 된다.
+
+  - CRAG는 이 문제를 해결하기 위해 아래와 같은 방법을 제안한다.
+
+    - 경량화된 retrieval evaluator가 쿼리에 대한 검색 문서의 전반적인 품질을 평가한다.
+    - 이는 retriever의 결과를 자체적으로 교정하고 RAG를 위한 문서 활용도를 향상시킨다. 
+
+  - 수식으로 정의하기
+
+    - Input을 $x$, 대량의 문서 정보를 담고 있는 corpus의 집합을 $C=\{d_1,...d_N\}$라 하고, 답변을 $y$라 한다.
+    - 전체 framework는 retriever $R$과 generator $g$로 나눌 수 있다.
+    - $R$의 목적은 input $x$와 관련된 top-k개의 문서 집합 $D=\{d_{r1},..d_{rk}\}$를 $C$ 내에서 찾는 것이다.
+    - $g$의 목적은 input으로 들어온 $x$와 $R$이 찾은 문서 집합 $D$를 기반으로 답변 $y$를 생성하는 것이다.
+    - 결국 전체 framework는 아래와 같이 표현할 수 있다.
+
+    - $P(x|y)=(D|x)P(y,D|x)$
+    - 이는 retriever와 generator과 밀접하게 연관되어 있어 오류 허용성이 낮음을 보여준다.
+    - 성공적이지 않은 retrieval은 generator의 성능과 무관하게 불만족스러운 답변으로 이어지게 된다.
+
+
+
+- Retrieval Evaluator
+
+  - 전체 framework의 핵심이 되는 요소이다.
+    - Retrieval evaluator의 목적은 검색 결과가 관련이 없을 경우 이를 교정하는 것이다.
+    - Retrieval evaluator의 결과가 이후 모든 절차에 영향을 미친다.
+  - 논문에서는 T5-large를 fine tuning해서 사용했다.
+    - T5-large의 parameter 크기는 현대의 대부분의 LLM들 보다 작다.
+  - CRAG에서 추론 과정은 아래와 같다.
+
+  ```pseudocode
+  // Require : E (Retrieval Evaluator), W (Query Rewriter), G (Generator)
+  // Input : x (Input question), D={d1,d2,…,dk} (Retrieved documents)
+  // Output : y (Generated response)
+  
+  s⁢c⁢o⁢r⁢e_i = E evaluates the relevance of each pair (x, di), di ∈ D
+  Confidence = Calculate and give a final judgment based on {s⁢c⁢o⁢r⁢e_1,s⁢c⁢o⁢r⁢e_2,…⁢s⁢c⁢o⁢r⁢e_k}
+  // Confidence has 3 optional values: [CORRECT], [INCORRECT] or [AMBIGUOUS]
+  if Confidence == [CORRECT] then
+       Internal_Knowledge = Knowledge_Refine(x, D)
+       k = Internal_Knowledge
+       else if Confidence == [INCORRECT] then
+            External_Knowledge = Web_Search(W Rewrites x for searching)
+            k = External_Knowledge
+            else if Confidence == [AMBIGUOUS] then
+                  Internal_Knowledge = Knowledge_Refine(x, D)
+                  External_Knowledge = Web_Search(W Rewrites x for searching)
+                  k = Internal_Knowledge + External_Knowledge
+                  end if
+  
+  
+  // G predicts y given x and k
+  ```
+
+
+
+- Action Trigger
+  - 동작 방식
+    - 관련 없는 문서를 교정하고 필요에 따라 대상 문서를 정제하기 위해, 액션은 상황에 맞게 선택적으로 실행되어야 한다. 
+    - 검색된 각 문서에 대해서 confidence score를 기반으로, 상한값과 하한값을 설정하여 세 가지 유형의 액션 중 하나로 식별되고 액션에 따라 각기 다른 동작이 트리거된다.
+    - Confidence score가 상한값보다 높으면 해당 검색 문서는 Correct로 식별되고, 하한값보다 낮으면 Incorrect로 식별되며 그 외의 경우에는 보다 유연한 중간 액션인 Ambiguous로 식별된다.
+    - 각 검색 문서는 개별적으로 처리된 후 최종적으로 통합된다.
+  - Correct
+    - 검색된 문서들 중 하나라도 confidence score가 상한값보다 크면 Correct로 간주된다.
+    - 이는 검색된 문서들 중 관련 있는 문서가 있다는 의미이며, 검색 결과로부터 얻은 지식이 신뢰할 수 있고 정확할 것으로 간주된다.
+    - 그러나 관련 있는 문서를 찾았다 하더라도, 문서 내에는 필연적으로 관련 없는 내용들(noisy knowledge)이 있을 수 밖에 없다.
+    - 따라서 문서 내에서 가장 핵심적인 knowledge strip을 추출하기 위해, knowledge refinement를 추가로 실행한다.
+  - Incorrect
+    - 검색된 모든 문서들의 confidence score가 하한값보다 낮으면 Incorrect로 간주된다.
+    - 이는 모든 문서가 관련성이 없으며, 답변 생성에 도움이 되지 않을 것이라는 것을 의미한다.
+    - 관련 없는 문서들로 답변을 생성해봐야 부정확한 답변이 생성될 뿐이므로, internet에서 정확한 정보를 찾는 과정이 실행된다.
+  - Ambiguous
+    - 위의 두 상황에 모두 속하지 않을 경우 Ambiguous로 간주된다.
+    - 이는 일반적으로 검색의 정확성을 판단하기 어려워 evaluator가 중간 점수를 부여하여 발생한다.
+    - Correct와 Incorrect 각각에서 처리된 두 가지 유형의 knowledge를 결합하여 서로를 보완한다.
+    - 이러한 중재적이고 유연한 전략을 실행하는 것은 시스템의 견고성과 탄력성을 강화하는 데 크게 기여하며, 최적의 성능을 위한 보다 적응력 있는 프레임워크를 구축하기 위함이다.
+    - 앞서 언급했듯 CRAG의 효과는 retrieval evaluator의 셜과에 크게 의존하는데, Ambiguous 액션의 설계는 retrieval evaluator의 정확도에 대한 의존성을 완화하는 데 도움이 된다.
+
+
+
+- Knowledge Refinement
+
+
+
+
+
+
+
+
+
+
+
