@@ -233,6 +233,58 @@
 
 
 
+- systemd를 사용하여 부팅시 자동으로 실행되도록 설정하기
+
+  - 만약 binary가 apt, yum 등의 패키지 매니저로 설치했다면 `/lib/systemd/system` 경로에 자동으로 `docker.socket`, `docker.service`파일이 생성된다.
+    - 또한 설치 과정에서 `systemctl daemon-reload`까지 자동으로 실행하기 때문에 아래 명령어로 enable이 가능하다.
+
+  ```bash
+  $ sudo systemctl enable docker
+  ```
+
+  - 만약 binary로 설치했다면 `/etc/systemd/system` 경로에 `docker.socket`, `docker.service` 파일을 직접 작성해야한다.
+    - 예시는 [moby repository](https://github.com/moby/moby/tree/master/contrib/init/systemd)에서 확인할 수 있다.
+    - 위 두 파일 작성후 아래 과정을 통해 부팅시 docker가 자동으로 실행되도록 설정할 수 있다.
+
+  ```bash 
+  $ sudo systemctl daemon-reload
+  $ sudo systemctl enable docker
+  ```
+
+
+
+- `docker.sock`과 `docker.socket`
+
+  - `docker.sock`
+    - Docker 데몬(dockerd)과 통신하는 IPC(Inter-Process Communication) 소켓 파일이다.
+    - Docker 데몬이 실행될 때 자동으로 생성되고, 데몬이 종료되면 자동으로 삭제되지만, 아래의 `docker.socket`이 실행중이라면 다르게 동작한다.
+    - Docker CLI, SDK, 컨테이너 등이 이 파일을 통해 Docker API에 접근하며, 파일 시스템에 실제로 존재하는 소켓 파일로 `/var/run/docker.sock` 경로에 존재한다.
+  - `docker.socket`
+    - systemd 유닛 파일로 관례상 `docker.socket`이라는 이름으로 작성하지만 prefix는 `docker`가 아닌 어떤 이름으로든 작성할 수 있다.
+    - docker.sock 파일을 누가 언제 만들고 관리할지를 정의하는 설정이다.
+    - `docker.socket`이 실행중인 경우 docker daemon이 실행 중이 아니라도 docker 명령어가 실행되면 `docker.socket`이 docker daemon을 실행하여 명령을 수행하게 한다.
+    - `docker.socket`이 실행중인 경우 docker daemon이 종료돼도, `docker.sock` 파일이 삭제되지 않는다.
+    - `docker.socket`은 도커 데몬이 종료되더라도 `docker.sock`을 관리하면서 `docker.sock`을 통해 docker 명령어가 들어올 경우 docker 데몬을 실행시켜 이 명령어를 전달한다.
+    - 이를 통해 docker 데몬이 실행중이 아니더라도 docker 명령어 실행을 예약 실행하는 것과 같은 효과를 누릴 수 있다.
+  - 기본적으로 `docker.socket` 없이 `docker.service`만 단독으로 사용 가능하다.
+    - 이 경우 `docker.sock`의 생성 및 삭제를 `docker.service`가 관리하게 된다.
+    - 따라서 `docker.sock`을 관리하기 위한 `docker.socket`은 별도로 필요하지 않다.
+  - 다만 `docker.service`의 `ExecStart`를 아래와 같이 작성한 경우, `docker.socket`을 필수로 사용해야한다.
+    - 이는 소켓을 직접 생성하지 않고, 부모 프로세스(systemd)가 넘겨주는 file descripter를 받아서 쓴다는 의미이다.
+    - 따라서 systemd가 `docker.socket` 유닛으로 소켓 파일 생성해야만 `docker.service`도 실행이 가능해진다.
+
+  ```bash
+  # 부모 프로세스의 파일 디스크립터 사용
+  ExecStart=/user/bin/dockerd -H fd://
+  
+  # 기본값은 아래와 같다(-H 옵션을 설정하지 않아도 동일하다).
+  ExecStart=/user/bin/dockerd -H unix:///var/run/docker.sock
+  ```
+
+  
+
+
+
 - Docker compose 설치하기
 
   - Docker compose v2 이전까지 Docker compose는 Docker engine과 별개의 애플리케이션으로 설치해야 했다.
