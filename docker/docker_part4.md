@@ -772,7 +772,7 @@
 
 - 기본적으로 Docker의 seccomp profile은 아래와 같이 동작한다.
 
-  - 허용 목록(allowlist) 방식으로 동작합니다(즉, 기본적으로 시스템 호출을 차단하고, 특정 시스템 호출만 허용한다).
+  - 허용 목록(allowlist) 방식으로 동작한다(즉, 기본적으로 시스템 호출을 차단하고, 특정 시스템 호출만 허용한다).
     - 기본 동작(`defaultAction`)은 `SCMP_ACT_ERRNO`로 설정되어 있으며, 이는 시스템 호출을 거부한다.
     - 특정 시스템 호출에 대해서만 이 동작을 `SCMP_ACT_ALLOW`로 재정의하여 허용한다.
     - `SCMP_ACT_ERRNO`의 효과는 "Permission Denied(권한 거부)" 오류를 발생시키는 것이다.
@@ -1202,10 +1202,6 @@
 
 
 
-
-
-
-
 ## Docker Container Timezone 설정
 
 - Docker Container Timezone 설정
@@ -1366,12 +1362,14 @@
     - 이 중, containerd와  runc는 Docker에 포함되어 함께 설치되고,  libseccomp는 runc의 핵심 의존성이지만 Docker에 포함되어 있지는 않다.
     - 즉, Docker를 binary로 설치할 경우 runc를 위해 자동으로 설치되거나 업데이트 되지 않는다(단, apt, dnf등의 패키지 매니저로 설치할 경우, runc의 의존성이므로 자동으로 설치 혹은 업데이트 된다.)
     - libseccomp는 OS 업그레이드 과정에서 `apt upgrade` 등을 통해 자동으로 업데이트될 확률이 높다.
-  - 위 실행 과정에서 가장 큰 영향을 미치는 두 요소는  Docker와 runc이다.
+  - 위 실행 과정에서 가장 큰 영향을 미치는 두 요소는 Docker와 runc이다.
     - 상기했듯 Docker는 어떤 system call을 허용하고 차단할지를 정의한  seccomp profile을 가지고 있다.
-    - 컨테이너 내에서 system call이 호출되면 Docker는 seccomp profile과 system call을 runc에게 보내고 runc가 이를 실행하게 한다.
-    - runc는 이를 받아 실제 커널에 로드할 수 있는 seccomp BPF 필터로 만드는 역할을 한다.
-    - runc는 자신이 모르는 system call이 들어오면 `ENOSYS`를 반환하는 휴리스틱을 가지고 있지만, 항상 잘 동작하는 것은 아니어서, 때에 따라 `EPERM`을 반환하기도 한다.
-    - 위에서 설명한 문제도 바로 runc가 모르는 systemcall에 대해 `EPERM`을 반환했기 때문에 발생한 것이다.
+    - 컨테이너가 실행될 때 Docker는 seccomp profile과 system call을 runc에게 보낸다.
+    - runc는 이를 받아 seccomp BPF 필터로 만들고 커널에 로드한다.
+    - 컨테이너 실행 중 시스템 호출이 발생하면 커널이 이 BPF 필터를 보고 판단한다.
+    - runc는 BPF 필터를 만드는 과정에서 이름으로 적힌 systemcall을 번호로 치환하는 작업을 진행하기 위해 libseccomp를 사용한다.
+    - BPF 필터를 만드는 과정에서 seccomp profile에 `clone3` 같은 최신 시스템 호출이 이름으로 적혀 있는데, libseccomp가 그 이름을 모른다면 허용 목록에서 누락된다.
+    - 따라서 문제가 되는 system call을 `SCMP_ACT_ALLOW`에 추가하더라도 해당 system call을 libseccomp가 이해할 수 없다면 허용되지 않는다.
 
 
 
