@@ -1,5 +1,6 @@
-- RAG(Retrieval Augmented Generation)
+# RAG
 
+- RAG(Retrieval Augmented Generation)
   - 프라이빗 또는 독점적 데이터로 텍스트 생성을 보완하는 기술이다.
     - 대규모 데이터셋 또는 지식 기반(knowledge base)을 검색하기 위해 설계된 모델과 해당 모델을 통해 검색된 정보를 받아와 text 응답을 생성하는 대규모 언어 모델(LLM)과 같은 생성 모델을 결합한다.
     - 이를 통해 모델을 다시 훈련할 필요 없이 대규모 언어 모델의 출력을 향상시킬 수 있다. 
@@ -54,33 +55,29 @@
 
 - Adaptive-RAG
 
-  - 개요
+  - 해결하고자 하는 문제
 
     - RAG는 매우 단순한 query부터 복잡한 query까지 다양한 query를 입력으로 받게 된다.
     - 때로는 매우 단순한 쿼리를 불필요할 정도로 과하게 처리하기도 하고, 때로는 복잡한 다단계(multi-step) query를 적절하게 처리하지 못 하기도 한다.
-    - Adaptive-RAG는 상대적으로 작은 LM을 사용하여 query의 복잡도를 예측하고, 복잡도에 따라 검색 및 생성 전략을 동적으로 조정한다.
-
   - Single-Step Approach와 Multi-Step Approach
 
     - Single-step approach는 한 번의 검색으로 관련된 문서들을 찾은 후 이들을 통해 한 번만 답변을 생성하는 방식이다.
-    - 이 방식은 multi-step reasoning을 필요로하는 복잡한 query에 대해 불충분한 답변을 반환할 수 있다는 문제가 있다.
+  - 이 방식은 multi-step reasoning을 필요로하는 복잡한 query에 대해 불충분한 답변을 반환할 수 있다는 문제가 있다.
     - 반면 multi-step approach는 검색한 결과를 통해 중간 답변을 생성하고, 중간 답변을 평가하여 query에 충분한 답변이 될 때까지 검색과 생성을 반복하는 방식이다.
     - 이 방식은 단순한 query에 대해서도 지나치게 복잡한 검색 및 생성 과정을 거치게 된다는 점에서 비효율적이라는 문제가 있다.
-
   - Adaptive-RAG
-
-    - Query의 복잡도에 따라 다른 검색 및 생성 전략이 수행된다.
+    - Adaptive-RAG는 상대적으로 작은 LM을 사용하여 query의 복잡도를 예측하고, 복잡도에 따라 검색 및 생성 전략을 동적으로 조정한다.
+  - Query의 복잡도에 따라 다른 검색 및 생성 전략이 수행된다.
     - 매우 단순한 쿼리에 대해서는 검색을 건너뛰고 바로 답변을 생성하기도 하고, 중간 정도의 복잡도를 가진 쿼리는 single-step approach를 사용하며, 복잡한 쿼리에 대해서는 multi-step approach를 수행한다.
-
-  - Multi-Step QA
-
+- Multi-Step QA
+  
     - 초기의 RAG는 주로 single-hop queries에 대한 답변을 생성하는데 집중했다.
-    - 이런 종류의 쿼리들은 일반적으로 하나의 문서에서 답을 찾는 것이 가능했으며, 따라서 쿼리와 유사한 문서를 찾은 이후에 이들을 QA model에서 응답에 맞는 형식으로 재구성하는 방식으로 검색이 이루어졌다.
-
-    - 그러나 하나의 문서로는 답을 찾을 수 없고, 여러 문서를 연결하거나 집계해서 답변해야 하는 쿼리들이 있다.
+  - 이런 종류의 쿼리들은 일반적으로 하나의 문서에서 답을 찾는 것이 가능했으며, 따라서 쿼리와 유사한 문서를 찾은 이후에 이들을 QA model에서 응답에 맞는 형식으로 재구성하는 방식으로 검색이 이루어졌다.
+  
+  - 그러나 하나의 문서로는 답을 찾을 수 없고, 여러 문서를 연결하거나 집계해서 답변해야 하는 쿼리들이 있다.
     - 또한 한 번의 검색으로는 답변을 생성할 수 없는 쿼리들 역시 존재하는데, 예를 들어 "When did the people who captured Malakoff come to the region where Philipsburg is located?"와 같은 쿼리는 여러 단계의 추론을 거쳐야한다.
     - 그러므로, 이런 복잡한 쿼리에 대한 답변을 생성하기 위해서 최근의 연구는 반복적인 검색과 답변 생성이 필요한 multi-step, multi-reasoning QA에 집중되고 있다.
-    - 그러나 실제 세상에는 이렇게까지 복잡한 처리 과정이 필요하지는 않은 단순한 쿼리들도 많이 존재한다.
+  - 그러나 실제 세상에는 이렇게까지 복잡한 처리 과정이 필요하지는 않은 단순한 쿼리들도 많이 존재한다.
 
 
 
@@ -143,17 +140,13 @@
 
 
 
-
-
-
-
-# CRAG
+## CRAG
 
 > https://arxiv.org/html/2401.15884v3
 
 - CRAG(Corrective Retrieval Augmented Generation)
 
-  - 기존 RAG의 문제점
+  - 해결하고자 하는 문제
 
     - RAG는 LLM을 보완하기 위한 방법이지만, 그 효과는 LLM에 전달하는 문서의 관련성과 정확성에 달려있다.
     - 품질이 낮은 retriever는 대량의 관련 없는 정보를 끌어들이는 경향이 있으며, 이는 모델이 정확한 지식을 습득하는 것을 방해하고 잠재적으로 모델을 오도하여 hallucination과 같은 문제를 일으킬 수 있다.
@@ -198,16 +191,16 @@
   Confidence = Calculate and give a final judgment based on {s⁢c⁢o⁢r⁢e_1,s⁢c⁢o⁢r⁢e_2,…⁢s⁢c⁢o⁢r⁢e_k}
   // Confidence has 3 optional values: [CORRECT], [INCORRECT] or [AMBIGUOUS]
   if Confidence == [CORRECT] then
-       Internal_Knowledge = Knowledge_Refine(x, D)
-       k = Internal_Knowledge
-       else if Confidence == [INCORRECT] then
-            External_Knowledge = Web_Search(W Rewrites x for searching)
-            k = External_Knowledge
-            else if Confidence == [AMBIGUOUS] then
-                  Internal_Knowledge = Knowledge_Refine(x, D)
-                  External_Knowledge = Web_Search(W Rewrites x for searching)
-                  k = Internal_Knowledge + External_Knowledge
-                  end if
+  	Internal_Knowledge = Knowledge_Refine(x, D)
+  	k = Internal_Knowledge
+  else if Confidence == [INCORRECT] then
+  	External_Knowledge = Web_Search(W Rewrites x for searching)
+  	k = External_Knowledge
+  else if Confidence == [AMBIGUOUS] then
+  	Internal_Knowledge = Knowledge_Refine(x, D)
+  	External_Knowledge = Web_Search(W Rewrites x for searching)
+  	k = Internal_Knowledge + External_Knowledge
+  end if
   
   
   // G predicts y given x and k
@@ -240,6 +233,81 @@
 
 
 - Knowledge Refinement
+  - 검색된 문서들에서 가장 핵심적인 knowledge strip을 찾기 위한 방법이다.
+    - Decompose-then-Recompose 방식을 사용한다.
+    - 즉 검색된 문서를 분할하여 분할된 내용 중 관련성이 낮은 부분은 버리고 관련성이 높은 부분들만 다시 합치는 방식을 사용한다.
+  - 먼저 세밀한(fine-grained) 검색 결과를 얻기 위해 검색 결과를 내부 strip으로 분할한다.
+    - 검색된 결과가 한두 문장처럼 짧은 경우에는 그 자체를 하나의 strip으로 간주하고, 그렇지 않은 경우에는 전체 길이에 따라 일반적으로 몇 개의 문장으로 구성된 더 작은 단위로 분할한다.
+    - 각 단위는 하나의 독립적인 정보를 포함한다고 가정하며, 필터링은 이 단위들을 기준으로 수행된다.
+  - 그 후 fine-tuning된 retrieval evaluator를 사용하여 각 knowledge strip의 관련성 점수를 계산한다.
+    - 이 점수를 기반으로 관련 없는 knowledge strip은 걸러낸다.
+    - 관련 있는 것들은 순서대로 이어 붙여 재구성하는데, 이를 internal knowledge라고 한다.
+
+
+
+- Web Search
+
+  - 만약 시스템이 특정 쿼리에 대해 현재 자신이 가지고 있는 지식으로 답할 수 있는지 여부를 판단할 수 있다면 검색 품질을 개선할 수 있다.
+
+    - 현재 자신이 가지고 있는 지식으로 답할 수 있는지 여부를 모른다면 시스템은 자신이 가진 지식 내에서 꾸며낸 답변을 하게 된다.
+    - 그러나 가지고 있는 지식으로 답할 수 있는지 여부 안다면 현재 지식으로 충분한 답변을 생성하지 못 할 경우 외부에서 추가적인 지식을 가져올 수 있다.
+
+  - 정적이고 제한된 corpus에서의 검색은 범위와 다양성 측면에서 최적이 아닌 문서만 반환할 수 있다.
+
+    - 따라서 대규모 웹 검색을 RAG에 통합하여 웹 검색을 통해 추가 지식을 가져오게 해야한다.
+    - 더 구체적으로는 검색 엔진의 일상적인 사용 방식을 모방하기 위해, 사용자가 입력한 쿼리를 키워드로 구성된 쿼리로 재구성한뒤 웹에서 검새한다.
+
+    - 이 때 사용자의 쿼리를 키워드로 구성된 쿼리로 재구성하기 위한 프롬프트는 아래와 같다.
+
+  ```
+  Extract at most three keywords separated by comma from the following dialogues and questions as queries for the web search, including topic background within dialogues and main intent within questions.
+   
+  question: What is Henry Feilden’s occupation?
+   
+  query: Henry Feilden, occupation
+   
+  question: In what city was Billy Carlson born?
+   
+  query: city, Billy Carlson, born
+   
+  question: What is the religion of John Gwynn?
+   
+  query: religion of John Gwynn
+   
+  question: What sport does Kiribati men’s national basketball team play?
+   
+  query: sport, Kiribati men’s national basketball team play
+   
+  question: [question]
+   
+  query:
+  ```
+
+  - CRAG에서는 각 쿼리에 대해 일련의 URL 링크를 생성하기 위해 공개적으로 접근 가능한 상용 웹 검색 API를 사용한다.
+    - 대규모 웹 검색을 통해 얻은 지식은 편향되거나 신뢰할 수 없는 정보를 포함할 수 있기 때문에, 이러한 문제를 완화하기 위해 Wikipedia와 같은 증된 웹 페이지를 주로 사용한다.
+    - 또한 URL 링크를 활용하여 웹 페이지를 탐색하고 내용을 텍스트로 변환한 후, 앞서 살펴본 knowledge refinement 방법을 적용하여 관련 웹 지식, 즉 external knowledge를 도출한다.
+
+
+
+- 요약하면 아래와 같다.
+  - 검색된 문서들에 대해 retrieval evaluator가 관련도를 평가한다.
+  - 관련도 평가 결과에 따라 correct, incorrect, ambiguous 셋 중 하나의 action이 결정된다.
+    - 이 중 incorrect와 ambiguous의 경우 web search를 실행하여 그 결과도 포함시켜 hallucination을 방지한다.
+    - 이 때 web search를 위해 사용자의 쿼리를 키워드 기반 쿼리로 변환하는 query re-writing 과정을 거친다.
+  - 내부 지식에 대한 검색 결과와 web 검색에 대한 검색 결과 모두에 knowledge refinement 방식을 적용하여 관련 있는 strip들만 남긴다.
+    - 이를 통해 LLM에는 관련 있는 strip들만 전달된다.
+
+
+
+- Web search를 제외할 경우(사견)
+  - 논문에서는 테스트 데이터로 범용적인 사실 기반 QA 데이터 셋을 사용했다.
+    - 따라서 논문에서 사용한 것 처럼 Wikipedia와 같은 범용적인 지식들을 제공하는 사이트에 web search를 수행하는 것이 의미가 있을 수 있다.
+  - 그러나 RAG를 범용적인 데이터 셋이 아닌 특정 도메인 기반 데이터셋에 구축해야 한다면 web search를 수행하는 것이 보다 까다로울 수 있을 것 같다.
+    - 특정 도메인에 한정된 정보를 폭 넒게 제공하는 사이트를 찾기도 힘들 뿐더러, 그 중에서 제한 없는 접근이 가능한 곳을 찾아야한다.
+    - 또한 기업 내부 도메인이라면 웹 검색 자체가 불가능할 수도 있다.
+  - 만약 web search를 제외할 경우 3가지 action 중 incorrect, ambiguous에서 추가 작업이 사라져 사실상 action의 구분이 무의미해지게 된다.
+    - 만약 web search가 불가능한 상황이라면 action의 분류는 그대로 하되, action별 추가 작업을 web search에서 다른 작업으로 재정의 하는 과정이 필요할 것 같다.
+  - 다만 web search를 제외하더라도 CRAG에서 retrieval evaluator과 knowledge refinement 매커니즘은 취할 수 있을 것으로 보인다.
 
 
 
