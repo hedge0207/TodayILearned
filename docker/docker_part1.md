@@ -233,6 +233,57 @@
 
 
 
+- sudo 없이 docker 명령어 실행
+
+  - docker group이 있는지 확인
+
+  ```bash
+  $ cat /etc/group | grep docker
+  ```
+
+  - 만일 docker group이 없다면 docker group 생성
+
+  ```bash
+  $ sudo groupadd docker
+  ```
+
+  - docker group에 사용자 추가
+    - `-a`는 그룹에 사용자를 추가하는 옵션이다.
+    - `-G`는 그룹을 지정하는 옵션이다.
+
+  ```bash
+  $ sudo usermod -aG docker <사용자 id>
+  ```
+
+  - 사용자에서 로그아웃 한 후 다시 로그인한다.
+    - ubuntu의 경우 `exit`
+
+  ```bash
+  $ logout
+  ```
+
+  - group에 추가됐는지 확인한다.
+
+  ```bash
+  $ groups
+  ```
+
+  - 만일 추가되지 않았다면 아래 명령어를 통해 재로그인 한다.
+
+  ```bash
+  $ su <사용자 id>
+  ```
+
+  - 간혹 docker.sock의 권한 문제로 sudo 없이 실행이 되지 않을 수 있다.
+    - 이럴 경우 아래와 같이 소켓 파일의 그룹 소유권을 변경하면 된다.
+    - 소유자는 그대로 두고, 소유 그룹만 docker로 변경한다.
+
+  ```bash
+  $ sudo chown root:docker /var/run/docker.sock
+  ```
+
+
+
 - systemd를 사용하여 부팅시 자동으로 실행되도록 설정하기
 
   - 만약 binary가 apt, yum 등의 패키지 매니저로 설치했다면 `/lib/systemd/system` 경로에 자동으로 `docker.socket`, `docker.service`파일이 생성된다.

@@ -805,12 +805,6 @@
 
 # etc
 
-- Docker compose options
-  - tty:true로 주면 docker run 실행시에 -t option을 준 것과 동일하다.
-  - stdin_open:true로 주면 docker run 실행시에 -i option을 준 것과 동일하다.
-
-
-
 - Orphan container
 
   - Docker를 사용하다보면 `Found orphan containers ([<container_name>]) for this project.`과 같은 warning이 발생할 때가 있다.
@@ -921,11 +915,9 @@
 
     - 위 예시의 경우 0002를 출격할 것 같지만, 0002를 출력한다. 즉, 의도한 대로 동작하지 않는다.
       - 반면에 `docker exec -it <container> /bin/bash`와 같이 입력하여 직접 `python main.py`를 실행시키면 0002가 제대로 출력된다.
-
-
     - 아래와 같이 dockefile을 작성한다.
       - `umask 0002`와 python script 실행이 한 세션에서 실행될 수 있도록 한다.
-
+  
   ```dockerfile
   FROM python:3.8.0
   
@@ -940,66 +932,16 @@
 
 
 
-
-
-## sudo 없이 docker 명령어 실행
-
-- docker 명령어는 기본적으로 root 권한으로 실행해야 한다.
-
-  - 따라서 root가 아닌 user로 명령어를 실행하려면 항상 명령어 앞에 sudo를 입력해야한다.
-
-  - 아래 과정을 거치면 sudo를 입력하지 않고도 docker 명령어 실행이 가능하다.
-
-
-
-- sudo 없이 docker 명령어 실행
-
-  - docker group이 있는지 확인
-
-  ```bash
-  $ cat /etc/group | grep docker
-  ```
-
-  - 만일 docker group이 없다면 docker group 생성
-
-  ```bash
-  $ sudo groupadd docker
-  ```
-
-  - docker group에 사용자 추가
-    - `-a`는 그룹에 사용자를 추가하는 옵션이다.
-    - `-G`는 그룹을 지정하는 옵션이다.
-
-  ```bash
-  $ sudo usermod -aG docker <사용자 id>
-  ```
-
-  - 사용자에서 로그아웃 한 후 다시 로그인한다.
-    - ubuntu의 경우 `exit`
-
-  ```bash
-  $ logout
-  ```
-
-  - group에 추가됐는지 확인한다.
-
-  ```bash
-  $ groups
-  ```
-
-  - 만일 추가되지 않았다면 아래 명령어를 통해 재로그인 한다.
-
-  ```bash
-  $ su <사용자 id>
-  ```
-  
-  - 간혹 docker.sock의 권한 문제로 sudo 없이 실행이 되지 않을 수 있다.
-    - 이럴 경우 아래와 같이 소켓 파일의 그룹 소유권을 변경하면 된다.
-    - 소유자는 그대로 두고, 소유 그룹만 docker로 변경한다.
-  
-  ```bash
-  $ sudo chown root:docker /var/run/docker.sock
-  ```
+- Docker container와 page cache
+  - Page cache는 같은 host에서 실행중인 모든 컨테이너가 공유한다.
+    - 따라서 실제 container가 사용하는 page cache의 양은 이보다 더 클 수 있다.
+    - 예를 들어 host가 어떤 파일을 읽어서 page cache에 해당 파일이 올라간 상태에서 컨테이너가 해당 파일을 mount해서 읽을 경우 page cache에서 읽게 되는데, 이는 container의 page cache 사용량에 집계되지 않는다.
+    - 이는 page cache의 정책 때문으로, page cache는 최초로 메모리에 올린 cgroup의 사용량으로 집계된다.
+  - Container가 사용하던 page cache는 container가 정지 되어도 회계 기록(Charge)에서 해제되지는 않는다.
+    - 이는 container가 정지되더라도 cgroup은 남아있기 때문이다.
+    - 즉, docker를 restart 할 경우 charge를 보유한 채 남아있는 기존의 cgroup을 재사용하게 되어 page cache의 사용량은 정지 이전과 동일하게 집계된다.
+    - 반면에 container가 삭제되면 해당 cgroup이 제거되면서 점유하던 page cache의 회계 기록(Charge)이 해제된다. 
+    - 이때 실제 데이터는 메모리에서 즉시 삭제되는 대신 부모 cgroup으로 소유권이 이전(Reparenting)되어 호스트 전체의 캐시로 남는다.
 
 
 
