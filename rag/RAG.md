@@ -315,6 +315,92 @@
 
 
 
+## Self-RAG
+
+> https://arxiv.org/pdf/2310.11511
+
+- Self-RAG
+  - 해결하고자 하는 문제
+    - 기존 RAG는 검색이 필요한지 아닌지 판단하지 않고 항상 검색을 수행한다. 
+    - 예를 들어 "나의 여름 방학 에세이를 써줘" 같은 질문은 사실적 지식이 필요 없는데도 무조건 검색을 수행한다.
+    - 이는 오히려 불필요하거나 관련 없는 정보를 끌어들여 생성 품질을 떨어뜨릴 수 있다.
+    - 또한 생성된 답변이 실제로 검색 문서에 근거하는지 확인하지 않는다.
+  - SELF-RAG는 검색과 자기 반성(self-reflection)을 통해 LLM의 품질과 사실성을 향상시키는 프레임워크이다. 
+    - End-to-end 학습을 통해 언어 모델 $M$이 필요한 경우 검색된 passage를 참고하여 텍스트를 생성하고, 특수 토큰을 생성하는 방법을 학습함으로써 출력을 스스로 평가할 수 있게 한다.
+    - 이러한 reflection 토큰은 검색의 필요성을 알리거나 출력의 관련성, 뒷받침 여부, 완전성을 확인한다.
+
+
+
+- Self-RAG inference
+
+  - Inference 과정
+    - 사용자의 query가 포함된 prompt x에 대해 응답인 y를 생성하는 과정이다.
+    - LM을 M, Retriever를 R, 광범위한 passage collections을  $\{d_1, . . . , d_N\}$라 할때 아래와 같이 표현할 수 있다.
+    - 모든 입력 x와 이전 생성 결과 y<t에 대해, 모델은 검색의 유용성을 평가하기 위해 Retrieve 토큰을 생성한다. 
+    - 검색이 필요하지 않은 경우, 모델은 일반적인 언어 모델처럼 검색 없이 다음 출력 세그먼트를 예측한다.
+    - 검색이 필요할 경우 Retriever에 직전에 생성된 응답$y_{t-1}$과 prompt x를 가지고 passage들을 검색하여 검색 결과 D를 생성한다.
+    - D의 각 passage d에 대해 x와의 연관성을 평가하고, x, d, 그리고 이전까지 생성한 y($y_1, ..., y_{t-1}$)를 고려하여 $y_t$를 생성한다.
+    - 이후 y의 모든 statement들이 d에 의해 뒷받침 되는지, y가 x에 대한 유용한 응답인지를 평가한다.
+    - 그 후 ISREL , ISSUP , ISUSE에 따라 $y_t$를 reranking한다.
+
+  - 아래는 위 과정을 매우 단순하게 구현한 algorithm으로, 매 $y_t$(하나의 세그먼트)마다 아래 과정이 실행된다.
+    - 이 때, 실제로는 검색 여부가 단순히 Retrieve reflection token의 값(`yes`, `no`, `continue`)에 의해서만 정해지는 것은 아니다.
+    - 실제로는 Retrieve reflection token의 값이 `yes`일 확률이 임계치를 넘으면 검색을 수행하도록 설정한다.
+    - 즉 임계치를 통해 얼마나 검색을 적극적으로 수행할지 조정하는 것이 가능하다.
+    - `continue`의 경우 새로 검색을 수행하지는 않고 이전 검색 결과를 그대로 사용한다는 의미이다.
+
+  ```pseudocode
+  if Retrieve == Yes then
+  	# Retrieve
+  	Retrieve relevant text passages D using R given (x, y_{t−1})
+  	
+  	# Generate
+  	M predicts ISREL given x, d and y_t given x, d, y<t for each d ∈ D
+  	
+  	# Cretique
+  	M predicts ISSUP and ISUSE given x, y_t, d for each d ∈ D
+  	Rank y_t based on ISREL , ISSUP , ISUSE
+  else if Retrieve == No then
+  	# Generate
+  	Mgen predicts yt given x
+  	
+  	# Critique
+  	Mgen predicts ISUSE given x, yt
+  ```
+
+  - 평가에 사용되는 reflection 토큰들은 아래와 같다.
+
+  | Type     | Input    | Output                                           | Definition                                    |
+  | -------- | -------- | ------------------------------------------------ | --------------------------------------------- |
+  | Retrieve | x / x, y | yes, no, continue                                | 검색을 수행할지                               |
+  | ISREL    | x, d     | relevant, irrelevant                             | d가 x에 답하기 위한 정보를 제공하는지         |
+  | ISSUP    | x, d, y  | fully supported, partially supported, no support | y의 모든 statement들이 d에 의해 뒷받침 되는지 |
+  | ISUSE    | x, y     | 5, 4, 3, 2, 1                                    | y가 x에 대한 유용한 응답인지                  |
+
+
+
+- Self-RAG Training
+  - Self-RAG training은 아래 세 단계로 이루어진다.
+    - 학습 데이터 생성
+    - Critic LM training
+    - Critic LM을 통한 학습 데이터 생성
+    - Generator LM training
+  - 학습 데이터 생성
+    - 먼저 critic LM을 학습시키기 위한 데이터를 생성해야 한다.
+    - LM을 사용하여 아래와 같이 input으로 질문과 답변을 주고, 출력으로 reflection token(Yes/No, Relevant/Irrelevant 등)을 반환하게 하여 reflection token이 포함된 학습 데이터를 생성한다.
+  - Critic LM training
+    - Generator LM을 학습시키기 위한 데이터를 생성하는 LM이다.
+    - 위에서 생성한 학습 데이터를 가지고 critic LM을 학습시키는데, input으로 질문과 답변을 주고 reflection token 예측하게 한다.
+  - Critic LM을 통한 학습 데이터 생성
+    - Critic LM을 통해 대규모 학습 데이터를 생성한다.
+    - 굳이 학습 데이터를 다시 생성하는 이유는 비용 문제이다.
+    - 앞서 처음에 학습 데이터를 생성할 때는 고성능 모델을 사용해 정교한 학습 데이터를 생성한다.
+    - 이후 상대적으로 저렴한 모델을 critic LM으로 사용하여 대규모 학습 데이터를 생성하도록 한다.
+  - Critic LM이 생성한 학습 데이터로 Generator LM을 학습시킨다.
+    - 최종적으로 Generator LM만을 사용하여 reflection token을 예측하는데 사용한다.
+
+
+
 
 
 
