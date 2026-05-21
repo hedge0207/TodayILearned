@@ -405,3 +405,74 @@
 
 
 
+## Contextual Retrieval
+
+> https://www.anthropic.com/engineering/contextual-retrieval
+
+- Contextual Retrieval
+
+  - 해결하고자 하는 문제
+    - 문서를 chunking해서 임베딩하는 RAG의 특성상 맥락이 사리질 수 있다.
+    - 즉 개별 chunk만 가지고는 어떤 맥락인지를 파악할 수 없게 되는 문제가 발생할 수 있다.
+    - 예를 들어 특정 기업의 재무제표를 청킹했다고 가정해보자.
+    - 만약 "3분기 영업 이익 알려줘"라는 쿼리가 들어올 경우 영업 이익과 관련된 chunk들은 검색 되겠지만 정확히 3분기 영업 이익과 관련된 chunk는 검색되지 않을 수 있고, 최종 답변에도 3분기라는 맥락이 반영되지 않을 수도 있다.
+  - Contextual Retrieval은 chunk와 관련된 context를 chunk 앞에 삽입하여 함께 임베딩함으로써 위 문제를 해결한다.
+    - 아래와 같이 original_chunk 앞에 context를 삽입한다.
+    - 맥락이 사라지는 문제를 개선하기 위한 다른 접근 방식들(Hypothetical Document Embeddings 등)도 과거에 제안된 바 있으나, 이 방식은 해당 방식들과는 차이가 있다.
+
+  ```
+  original_chunk = "The company's revenue grew by 3% over the previous quarter."
+  
+  contextualized_chunk = "This chunk is from an SEC filing on ACME corp's performance in Q2 2023; the previous quarter's revenue was $314 million. The company's revenue grew by 3% over the previous quarter."
+  ```
+
+
+
+- Contextual Retrieval 구현하기
+
+  - 모든 chunk에 context를 사람이 추가하는 것은 현실적으로 불가능하므로, LLM을 통해 추가한다.
+    - 아래와 같은 prompt를 사용한다.
+
+  ```
+  <document> 
+  {{WHOLE_DOCUMENT}} 
+  </document> 
+  Here is the chunk we want to situate within the whole document 
+  <chunk> 
+  {{CHUNK_CONTENT}} 
+  </chunk> 
+  Please give a short succinct context to situate this chunk within the overall document for the purposes of improving search retrieval of the chunk. Answer only with the succinct context and nothing else. 
+  ```
+
+  - 이후의 구현 방식은 일반적인 RAG와 동일하다.
+
+
+
+- 구현시 고려할 사항들
+  - 청크 경계
+    - 문서를 청크로 분할하는 방법에 대해 고려해야햔다.
+    - 청크 크기, 청크 경계, 청크 중첩의 선택이 검색 성능에 영향을 미칠 수 있다.
+  - 임베딩 모델
+    - Contextual Retrieval은 테스트한 모든 임베딩 모델에서 성능을 향상시키지만, 일부 모델이 다른 모델보다 더 많은 이점을 얻을 수 있다.
+    - Gemini와 Voyage 임베딩이 특히 효과적인 것으로 나타났다.
+  - 커스텀 컨텍스트화 프롬프트
+    - 일반적인 프롬프트도 잘 작동하지만, 특정 도메인이나 사용 사례에 맞게 조정된 프롬프트로 더 나은 결과를 얻을 수 있다. 
+    - 예를 들어 지식 베이스의 다른 문서에서만 정의될 수 있는 주요 용어의 용어집을 포함하는 방식을 사용할 수 있다.
+  - 청크 수
+    - 컨텍스트 윈도우에 더 많은 청크를 추가하면 관련 정보를 포함할 가능성이 높아진다. 
+    - 그러나 정보가 너무 많으면 모델이 산만해질 수 있으므로 한계가 있다. 
+    - 5개, 10개, 20개의 청크를 사용해 본 결과 20개가 가장 성능이 좋았지만, 본인의 사용 사례에 맞게 실험해 보는 것이 좋다.
+
+
+
+- 한계
+  - LLM을 사용하여 모든 chunk에 context를 추가해야 하므로 비용이 많이 든다.
+  - 문서의 내용이 일부 수정될 경우의 처리가 문제가 된다.
+    - 기존에는 변경된 부분만 수정하면 됐다.
+    - 그러나 맥락을 고려할 경우 해당 맥락에 포함된 모든 부분을 수정해야 한다.
+  - 청크 자체의 정보보다 맥락 정보가 너무 비대해질 경우 모든 문서가 비슷해질 수 있다.
+
+
+
+
+
