@@ -476,3 +476,112 @@
 
 
 
+## Structured Retrieval-Augmented Generation
+
+> https://arxiv.org/abs/2503.01346
+
+- Structured Retrieval-Augmented Generation(SRAG)
+
+  - 해결하고자 하는 문제
+    - 기존 RAG는 여러 문서에 흩어진 정보를 통합해야 하는 Multi-Entity Question Answering(MEQA) 에 취약하다. 
+    - 예를 들어 "캐나다 출신 튜링상 수상자는 몇 명인가?"와 같은 질문은 수백 개의 문서를 검색하고 집계해야 하는데, 기존 RAG는 방대한 문서를 날것의 텍스트 그대로 LLM에 넘기기 때문에 LLM이 정보를 정확하게 집계하고 추론하는 데 한계가 있다. 
+    - 또한 검색된 문서에 노이즈가 많아 핵심 정보를 식별하기 어렵고, 통계적 분석이나 비교 추론 같은 복잡한 태스크에서 특히 성능이 떨어진다.
+  - SRAG는 비정형 텍스트를 구조화된 테이블로 변환하여 추론하는 RAG 프레임워크이다.
+    - 기존 RAG가 검색된 문서를 날것의 텍스트 그대로 LLM에 넘기는 것과 달리, SRAG는 검색된 엔티티 정보를 관계형 테이블로 정리한 뒤 SQL 기반 추론을 적용한다. 
+    - 이를 통해 검색과 추론을 명확히 분리하여 LLM이 텍스트 집계 대신 구조화된 데이터 분석에 집중할 수 있게 한다.
+
+  ```
+  기존 RAG: 수백 개의 Wikipedia 문서를 텍스트로 LLM에 전달
+  	→ LLM이 직접 집계 시도 
+  	→ 부정확한 답변
+  
+  SRAG: Wikipedia에서 수상자 정보를 검색
+  	→ [이름 | 국적] 테이블 생성
+  	→ SQL: SELECT COUNT(*) WHERE 국적='Canadian'
+  	→ 정확한 답변 도출
+  ```
+
+
+
+- 동작 과정
+
+  > Wikidata를 사용한다.
+
+  - SPARQL 쿼리 생성 및 검색
+    - LLM이 사용자의 쿼리를 분석하여 rough SPARQL 쿼리를 생성한다.
+    - 다만, 이 단계에서 생성된 rough SPARQL에는 엔티티와 속성이 자연어로 표현되어 있으므로, 이를 Wikidata의 ID로 치환하는 과정이 필요하다.
+    - Wikidata API를 통해 각 자연어와 매핑되는 ID로 치환한다.
+    - 최종 완성된 SPARQL 쿼리로 Wikipedia 그래프를 검색하여 관련 엔티티와 웹 페이지를 조회한다.
+
+  ```bash
+  query: "How many Turing Award Winners are Canadian?"
+  
+  # rough SPARQL 생성
+  SELECT ?person ?name
+  WHERE {
+    ?person [award] ["Turing Award"]
+    ?person [nationality] ["Canadian"]
+    ?person [name] ?name
+  }
+  
+  # 자연어를 ID로 치환
+  엔티티 검색:
+  "Turing Award" → Q185667
+  "Canadian"     → Q16
+  속성 검색:
+  "award"        → P166 (award received)
+  "nationality"  → P27  (country of citizenship)
+  "name"         → P1476 (title)
+  
+  # 최종 SPARQL 생성
+  SELECT ?person ?name
+  WHERE {
+    ?person P166 Q185667 .
+    ?person P27  Q16     .
+    ?person P1476 ?name  .
+  }
+  ```
+
+  - 스키마 생성
+    - LLM이 사용자의 쿼리를 분석하여 테이블 스키마를 결정한다.
+    - LLM을 사용하여 생성된 스키마를 검토하고 정제하는데, 아래 세 가지를 중점적으로 검토한다.
+    - 과도하게 단순화되진 않았는지 검토한다. 예를 들어 "field"와 같은 column 명으로는 충분한 정보를 제공하지 못 하므로 `field in Physics`와 같이 구체화한다.
+    - 중복되거나 불필요한 컬림이 있지는 않은지 검토한다.
+    - 필수로 포함되어야 하는데 누락된 컬럼이 있는지 검토한다.
+
+  ```
+  질문: "How many Turing Award Winners are Canadian?"
+  ↓
+  초기 스키마: (name, YearAwarded, last_name)
+  ↓
+  최종 스키마: (name, nationality)
+  ```
+
+  - 테이블 채우기
+    - LLM을 사용하여 검색된 정보들을 가지고 테이블을 채운다.
+    - 이 과정에서 정보의 누락이나 동의어가 각기 다른 값으로 인식되는 등의 문제가 발생할 수 있다.
+
+  ```
+  | name            | nationality |
+  |-----------------|-------------|
+  | Geoffrey Hinton | Canadian    |
+  | Yoshua Bengio   | Canadian    |
+  | Yann LeCun      | American    |
+  | Alan Turing     | British     |
+  | ...             | ...         |
+  ```
+
+  - SQL 실행
+    - LLM이 질문과 테이블 스키마, 데이터 샘플을 참고하여 SQL을 생성한다.
+    - 생성된 SQL을 테이블에 실행하여 최종 답변을 도출한다.
+
+  ```sql
+  SELECT COUNT(*) 
+  FROM table 
+  WHERE nationality = 'Canadian'
+  ```
+
+
+
+
+
