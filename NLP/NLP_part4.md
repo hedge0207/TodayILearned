@@ -427,3 +427,173 @@
 
 
 
+
+
+
+
+# 순환 신경망
+
+- 순환 신경망(Recurrent Neural Network, RM)
+  - 피드 포워드 신경망의 한계
+    - 입력의 길이가 고정되어 있어 자연어 처리를 위한 신경망으로는 한계가 있다.
+    - 결국 다양한 길이의 입력 시퀀스를 처리할 수 있는 인공 신경망이 필요하다.
+  - 시퀀스 모델
+    - RNN은 입력과 출력을 시퀀스 단위로 처리하는 시퀀스 모델이다.
+    - 번역기를 예로 들면 입력은 번역하고자 하는 단어의 시퀀스인 문장이고, 출력인 번역된 문장 역시 단어의 시퀀스이다.
+    - 이와 같이 시퀀스를 처리하기 위해 고안된 모델들을 시퀀스 모델이라 한다.
+    - RNN은 그 중 가장 기본적인 인공 신경망 시퀀스 모델이다.
+  - 셀
+    - RNN은 피드 포워드 신경망과 달리 은닉층에서 활성화 함수를 지난 값이 오직 출력층 방향으로만 향하지 않는다.
+    - RNN은 은닉층의 노드에서 활성화 함수를 통해 나온 결과값을 출력층 방향으로도 보내면서 다시 은닉층 노드의 다음 계산의 입력으로 보내는 특징을 갖고 있다.
+    - 이때 은닉층에서 활성화 함수를 통해 결과를 내보내는 역할을 하는 노드를 셀(cell)이라고 한다.
+    - 셀은 이저의 값을 기억하려고 하는 일종의 메모리 역할을 수행하므로 이를 메모리 셀 또는 RNN 셀이라고 표현한다.
+    - 은닉층의 메모리 셀은 각각의 시점에서 바로 이전 시점에서의 은닉층의 메모레 셀에서 나온 값을 자신의 입력으로 사용하는 재귀적 활동을 한다.
+    - 이는 현재 시점 t에서 메모리 셀이 갖고 있는 값은 과거의 메모리 셀들의 값에 영향을 받은 것임을 의미한다.
+  - 은닉 상태
+    - 메모리 셀이 출력층 방향 또는 다음 시점인 t+1의 자신에게 보내는 값을 은닉 상태(hidden state)라고 한다.
+    - 즉 t시점의 메모리 셀은 t-1 시점의 메모리 셀이 보낸 은닉 상태값을 t 시점의 은닉 상태 계산을 위한 입력값으로 사용한다.
+    - 피드 포워드 신경망에서는 뉴런이라는 단위를 사용했지만 RNN에서는 뉴런이라는 단위 보다 입력층과 출력층에서는 각각 입력 벡터와 출력 벡터, 은닉층에서는 은닉 상태라는 표현을 주로 사용한다.
+  - RNN은 입력과 출력의 길이를 다르게 설계할 수 있으므로 다양한 용도로 사용할 수 있다.
+    - RNN 셀의 각 시점의 입력과 출력의 단위는 사용자가 정의하기 나름이지만 가장 보편적인 단위는 단어 벡터이다.
+    - 예를 들어 하나의 입력에 대해 여러개의 출력을 의미하는 일대다 구조의 모델은 하나의 이미지 입력에 대해서 사진의 제목을 출력하는 이미지 캡셔닝(image captioning)에 사용할 수 있다.
+    - 사진의 제목은 단어들의 나열이므로 시퀀스 출력이다.
+    - 여러 개의 입력에 대해 하나의 출력을 의미하는 다대일 구조의 모델은 입력 문서가 긍정적인지 부정적인지를 판별하는 감성 분류(sentiment classification) 또는 스팸 메일 분류(spam detection)등에 사용할 수 있다.
+    - 문서의 내용이나 메일 내용 역시 단어들의 나열이므로 시퀀스 입력이다.
+    - 다대다 구조의 경우에는 사용자가 문장을 입력하면 대답 문장을 출력하는 챗봇과 입력 문장으로부터 번역된 문장을 출력하는 번역기, 개체명 인식이나 품사 태깅과 같은 작업이 있다.
+  - RNN 수식
+    - 현재 시점 t에서의 은닉 상태값을 $h_t$라고 할 때, 은닉층의 메모리 셀은 $h_t$를 계산하기 ㅜ이해서 총 두개의 가중치를 가진다.
+    - 하나는 입력층을 위한 가중치 $W_x$이고, 다른 하나는 이전 시점 t-1의 은닉 상태값인 $h_{t-1}$을 위한 가중치 $W_h$이다.
+    - 은닉층: $h_t=tanh(W_xx_t+W_hh_t-1{+b})$
+    - 출력층: $y_t=f(W_yh_t+b)$, 단 $f$는 비선형 활성 함수.
+  - RNN 은닉층의 연산을 벡터와 행렬 연산으로 이해하기
+    - 자연어 처리에서 RNN의 입력 $x_t$는 대부분의 경우 단어 벡터로 간주할 수 있는데, 단어 벡터의 차원을 d라 하고, 은닉 상태의 크기를 $D_h$라고 하였을 때 각 벡터와 행렬의 크기는 아래와 같다.
+    - $x_t:(d \times 1),\ W_x:(D_h \times d),\ W_h:(D_h \times D_h), h_{t-1}:(D_h \times 1),\ b:(D_h \times 1)$
+    - 이때 $h_t$를 계산하기 위한 활성화 함수로는 주로 하이퍼볼릭탄젠트 함수(tanh)가 사용된다.
+    - 각각의 가중치 $W_x, W_h, W_y$의 값은 하나의 층에서는 모든 시점에서 값을 동일하게 공유한다.
+    - 하지만 은닉층이 2개 이상을 경우에는 각 은닉층에서의 가중치는 서로 다르다.
+    - 출력층의 결과값인 $y_t$를 계산하기 위한 활성화 함수로 어떤 함수를 사용할지는 문제에 따라 달라진다.
+    - 만약 이진 분류를 해야하는 경우라면 출력층에 로지스틱 회귀를 사용하여 시그모이드 함수를 사용할 수 있고, 다중 클래스 분류를 해야하는 경우라면 출력층에 소프트맥스 회귀를 사용하여 소프트맥스 함수를 사용할 수 있다.
+
+
+
+- Keras로 RNN 구현하기
+
+  - Keras로 RNN 층을 구현하는 코드는 아래와 같다.
+    - RNN 층은 (batch_size,timesteps, input_dims) 크기의 구성된 3D 텐서를 입력으로 받는다.
+    - batch_size는 한 번에 학습하는 데이터의 개수를 의미한다.
+    - hidden_units은 은닉 상태의 크기를 정하는데, 메모리 셀이 다음 시점의 메모리 셀과 출력층으로 보내는 값의 크기(output_dim)와도 동일하다. 
+    - hidden_units을 통해 RNN의 용량(capacity)을 조정한다고 생각하면 되며, 중소형 모델의 경우 보통 128, 256, 512, 1024 등의 값을 가진다.
+    - timesteps은 입력 시퀀스의 길이로 input_length라고 표현하기도 한다. 결국 시점의 수를 뜻한다.
+    - input_dim은 입력의 크기를 의미한다.
+    - 아래 코드는 출력층까지 포함한 인공 신경망 코드가 아니라 주로 은닉층에 사용되는 하나의 RNN 층에 대한 코드이다.
+
+  ```python
+  from tensorflow.keras.layers import SimpleRNN
+  
+  # 아래와 같이 아무 인자 없이 추가할 수도 있고.
+  model.add(SimpleRNN(hidden_units))
+  
+  # input_length와 input_dim을 설정하여 추가할 수도 있고
+  model.add(SimpleRNN(hidden_units, input_length=m, input_dim=n))
+  
+  # input_length와 input_dim을 한 번에 설정하여 추가할 수도 있다.
+  model.add(SimpleRNN(hidden_units, input_shape=(m, n)))
+  ```
+
+  - 위 코드가 반환하는 결과값은 하나의 은닉 상태 또는 정의하기에 따라 여러 개의 시점의 은닉 상태이다.
+
+    - 아래 그림은 전결합층을 출력층으로 사용하였을 경우의 인공 신경망과 은닉층까지만 표현했을 경우의 인공신경망의 차이를 보여준다.
+
+    ![img](NLP_part4.assets/rnn_image7_ver2.png)
+
+  - RNN 층은 사용자의 설정에 따라 두 가지 종류의 출력을 내보낸다.
+
+    - 메모리 셀의 최종 시점의 은닉 상태만 반환하고자 한다면 (batch_size, output_dim) 크기의 2D 텐서를 반환한다.
+    - 그러나 메모리 셀의 각 시점(time step)의 은닉 상태값들을 모아서 전체 시퀀스를 반환하고자 한다면 (batch_size, timesteps, output_dim) 크기의 3D 텐서를 반환한다.
+    - 이는 RNN 층의 `return_sequences` 매개 변수에 True를 설정하여 설정이 가능하다.
+    - `output_dim`은 앞에서 코드에서 정의한 `hiddne_units`의 값으로 설정된다.
+
+  - 아래 그림은 time step이 3일 대, `return_sequences`를  True로 설정했을 때와 그렇지 않았을 때 어떤 차이가 있는지를 보여준다.
+
+    - `return_sequences`를 True로 설정하면 메모리 셀이 모든 시점(time step)에 대해 은닉 상태값을 출력하며, False로 설정할 경우 메모리 셀은 하나의 은닉 상태값만 출력한다.
+    - 그리고 이 하나의 값은 마지막 시점(time step)의 메모리 셀의 은닉 상태값이다.
+    - 마지막 은닉 상태만 전달하도록 하면 다대일 문제를 풀 수 있고, 모든 시점의 은닉 상태를 전달하도록 하면, 다음 층에  RNN 은닉층이 하나 더 있는 경우이거나 다대다 문제를 풀 수 있다.
+
+    ![img](NLP_part4.assets/rnn_image8_ver2.png)
+
+  - `model.add()`를 통해서 층을 추가하는 코드는 `SimpleRNN` 코드와 동일한 형태이다.
+
+    - 출력값이 (batch_size, output_dim) 크기의 2D 텐서일 때, output_dim은  hidden units의 값인 3이다.
+    - 이 경우 batch_size를 현 단계에서는 알 수 없으므로 (None, 3)이 된다.
+
+  ```python
+  from tensorflow.keras.models import Sequential
+  from tensorflow.keras.layers import SimpleRNN
+  
+  model = Sequential()
+  model.add(SimpleRNN(3, input_shape=(2,10)))
+  model.summary()
+  
+  """
+  Model: "sequential"
+  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┓
+  ┃ Layer (type)                         ┃ Output Shape                ┃         Param # ┃
+  ┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━┩
+  │ simple_rnn (SimpleRNN)               │ (None, 3)                   │              42 │
+  └──────────────────────────────────────┴─────────────────────────────┴─────────────────┘
+   Total params: 42 (168.00 B)
+   Trainable params: 42 (168.00 B)
+   Non-trainable params: 0 (0.00 B)
+  """
+  ```
+
+  - 아래와 같이  batch_size를 미리 정의할 수 있다.
+    - 아래와 같이 batch_size를 8로 입력하면 출력의 크기가 (8,3)이 된다.
+
+  ```python
+  from tensorflow.keras.models import Sequential
+  from tensorflow.keras.layers import SimpleRNN, Input
+  
+  model = Sequential()
+  model.add(Input(batch_shape=(8, 2, 10)))
+  model.add(SimpleRNN(3))
+  model.summary()
+  
+  """
+  Model: "sequential"
+  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┓
+  ┃ Layer (type)                         ┃ Output Shape                ┃         Param # ┃
+  ┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━┩
+  │ simple_rnn (SimpleRNN)               │ (8, 3)                      │              42 │
+  └──────────────────────────────────────┴─────────────────────────────┴─────────────────┘
+   Total params: 42 (168.00 B)
+   Trainable params: 42 (168.00 B)
+   Non-trainable params: 0 (0.00 B)
+  """
+  ```
+
+  - `return_sequences`를  True로 설정
+    - `return_sequences`를  True로 설정하면 출력값은 (batch_size, timesteps, output_dim) 크기의 3D텐서가 된다.
+
+  ```python
+  from tensorflow.keras.models import Sequential
+  from tensorflow.keras.layers import SimpleRNN, Input
+  
+  model = Sequential()
+  model.add(Input(batch_shape=(8, 2, 10)))
+  model.add(SimpleRNN(3, return_sequences=True))
+  model.summary()
+  
+  """
+  Model: "sequential"
+  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┓
+  ┃ Layer (type)                         ┃ Output Shape                ┃         Param # ┃
+  ┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━┩
+  │ simple_rnn (SimpleRNN)               │ (8, 2, 3)                   │              42 │
+  └──────────────────────────────────────┴─────────────────────────────┴─────────────────┘
+   Total params: 42 (168.00 B)
+   Trainable params: 42 (168.00 B)
+   Non-trainable params: 0 (0.00 B)
+  """
+  ```
+
