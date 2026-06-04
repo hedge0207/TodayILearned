@@ -585,3 +585,110 @@
 
 
 
+
+
+# Recursive Abstractive Processing for Tree-Organized Retrieval
+
+> https://arxiv.org/html/2401.18059v1
+
+- Recursive Abstractive Processing for Tree-Organized Retrieval(RAPTOR)
+  - 해결하고자 하는 문제
+    - 기존의 RAG는 짧고 연속적인 텍스트 청크 몇 개만을 검색하므로전체 맥락을 표현하고 활용할 수 없다.
+    - 이는 특히 전체 텍스트의 여러 부분을 통합해서 답변해야 하는 주제와 관련된 쿼리에서 특히 두드러진다.
+    - "신데렐라는 어떻게 해피엔딩을 맞이했는가?"라는 질문을 생각해보면, 상위 k개의 짧고 연속적인 텍스트를 검색하는 방식으로는 이 질문에 답하기에 충분한 맥락을 포함하지 못할 것이다.
+  - RAPTOR는 이를 해결하기 위해 계층 구조를 고안했다.
+    - Chunk들을 클러스터링하고, 각 클러스터에 대한 요약을 생성한다.
+    - 이후 cluster들을 묶어 다시 클러스터링하고, 각 클러스터에 대한 요약을 생성하는 작업을 반복한다.
+    - 위 과정을 반복하여 tree 구조를 생성한다.
+    - 이 구조는 RAPTOR가 서로 다른 수준의 텍스트를 나타내는 청크들을 LLM의 컨텍스트에 로드할 수 있게 해주어, 다양한 수준의 질문에 효과적이고 효율적으로 답할 수 있게 한다.
+
+
+
+- Tree 구성 과정
+  - 먼저 텍스트를 분할한 후 분할 된 텍스트들을 임베딩한다.
+    - RAPTOR 트리 구성은 기존의 검색 증강 기법과 유사하게 검색 corpus를 100개의 토큰으로 이루어진  짧고 연속적인 텍스트로 분할하는 것으로 시작한다.
+    - 문장이 100 토큰 제한을 초과하는 경우, 문장 중간에서 자르는 대신 청크 내 텍스트의 문맥적, 의미적 일관성을 보존하기 위해 해당 문장 전체를 다음 청크로 이동시킨다. 
+    - 이렇게 분할된 청크들을 임베딩한다.
+  - 이후 유사한 chunk들을 클러스터링한다.
+    - Clustering algorithm(GMMs 기반)을 사용하여 청크들을 클러스터링 수행하고, LLM을 사용하여 클러스터링 된 청크들에 대한 요약을 생성한다.
+    - 요약된 텍스트를 임베딩하여 다시 클러스터링을 수행하고, 요약하는 과정을 더 이상 클러스터링이 불가능해질 때 까지 반복한다.
+  - Clustering algorithm을 단순화하면 아래와 같다.
+    - 벡터 임베딩은 차원이 너무 높아 거리 계산이 부정확해지므로, UMAP으로 차원을 먼저 줄인다.
+    - BIC를 사용하여 최적의 클러스터 수를 결정하고, GMM으로 청크들을 클러스터링하는데, 이때 하나의 청크가 여러 클러스터에 속할 수 있다(soft clustering).
+
+
+
+- Querying
+
+  - 아래 두 가지 전략을 사용하여 tree를 순회하는 방식으로 동작한다.
+  - Tree traversal
+    - Query와 가장 유사한  top-k개의 root node를 찾는다.
+    - 이 노드들의 자식 노드들이 다음 layer에서의 순회 후보 node들이 된다.
+    - 다음 layer에서의 순회 후보 node들 중 쿼리와 유사한 노드들을 순회하는 과정을 leaf node에 도달할 때 까지 반복한다.
+    - 최종적으로 선택된 모든 노드의 텍스트가 이어 붙여져 검색된 컨텍스트를 형성한다.
+    - 이때, depth에 제한을 둴 leaf에 도달하지 않더라도 종료되도록 하거나 k 값을 조정하는 방식으로 탐색의 범위를 제한할 수 있다.
+
+  ```pseudocode
+  function TraverseTree(tree, query, k)
+    	S_current ← tree.layer[0]
+  	for layer in range(tree.num_layers) do
+     		top_k ← []
+     		for node in S_current do
+       		score ← dot_product(query, node)
+       		top_k.append((node, score))
+     		end for
+      S_layer ← sorted(top_k)[:k].nodes
+      S_current ← S_layer
+    end for
+    return S_0 ∪ S_1 ∪ S_2 ∪ … ∪ S_d
+  end function
+  ```
+
+  - Collapsed tree
+    - Tree의 모든 node들을 동시에 고려하는 방법이다.
+    - 레이어별로 탐색하는 대신, 이 방법은 다층 트리를 단일 레이어로 평탄화하여 모든 노드를 동일한 수준에서 비교한다.
+    - 먼저 전체 RAPTOR 트리를 단일 레이어로 평탄화하여 새로운 노드 집합 C를 만든다.
+    - C는 원본 트리의 모든 레이어에서 온 노드들을 포함한다.
+    - 다음으로 query와 C에 있는 모든 노드 간의 유사도를 계산한다.
+    - 마지막으로 query와 유사도 점수가 가장 높은 상위 k개의 노드를 선택한다. 
+    - 모델의 입력 제한을 초과하지 않도록 미리 정의된 최대 토큰 수에 도달할 때까지 결과 집합에 노드를 계속 추가한다.
+
+  ```pseudocode
+  function CollapsedTree(tree,query,k,max_tokens)
+  	tree ← flatten(tree)⊳ Flatten tree into 1D
+  	top_nodes ← []
+  	for node in tree do
+  		top_nodes.append((node, dot_product(query, node))
+  	end for
+  	
+  	top_nodes ← sorted(top_nodes)
+  	result ← []
+  	total_tokens ← 0
+  	
+  	for node in top_nodes do
+  		if total_tokens+node.token_size < max_tokens then
+  			result.append(node)
+  		end if
+  		total_tokens ← total_tokens+node.token_size
+  	end for
+  	return result
+  end function
+  ```
+
+  - 두 방식의 비교
+    - Collapse tree 방식이 tree traversal 방식에 비해 더 높은 정확도를 보였다.
+    - 이는 모든 노드를 동시에 검색함으로써 주어진 질문에 대해 적절한 수준의 세분화된 정보를 검색할 수 있었기 때문으로 보인다.
+    - 그러나 collapsed tree 방법의 한 가지 단점은 트리의 모든 노드에 대해 코사인 유사도 검색을 수행해야 한다는 것이다.
+  - 위 테스트 결과 최종적으로 collapse tree 방식을 채택한다.
+    - 구체적으로는 최대 2000 토큰의 collapsed tree를 사용하며, 이는 대략 상위 20개 노드를 검색하는 것과 동일하다.
+    - 다만, querying에 collapsed tree를 사용한다고 해서 tree를 구축하는 과정의 의미없어지는 것은 아니다.
+    - Tree를 구축하면서 각 계층에 대한 요약 정보로 새로운 node를 생성하고 이를 검색에 활용할 수 있기 때문이다.
+
+
+
+
+
+
+
+
+
