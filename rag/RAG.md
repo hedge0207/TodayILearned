@@ -690,5 +690,65 @@
 
 
 
+# Precise Zero-Shot Dense Retrieval without Relevance Labels
+
+> https://arxiv.org/pdf/2212.10496
+
+- Hypothetical Document Embeddings(HyDE)
+  - 해결하고자 하는 문제
+    - Dense retrieval은 효과가 입증되었지만, 여전히 relevance label이 없는 상태에서 완전한 제로샷 밀집 검색 시스템을 효과적으로 구축하는 것은 여전히 어려운 과제이다.
+    - 따라서 학습데이터와 학습 없이도 모델이 잘 모르는 분야에 대한 검색 시스템을 효과적으로 구축할 수 있는 방법이 필요하다.
+    - 또한 짧고 추상적인 '질문' 벡터와 길고 구체적인 '답변' 벡터는 벡터 공간에서 서로 멀리 떨어져 있는 경우가 많다.
+  - HyDE
+    - 주어진 쿼리에 대해 HyDE는 먼저 명령 수행 언어 모델(e.g. InstructGPT)에 제로샷으로 가상의 문서(hypothetical document)를 생성하도록 지시한다.
+    - 이 문서는 실제 문서와 관련된 내용을 담고 있지만 실제 문서가 아니며 잘못된 세부 정보를 포함할 수 있다.
+    - 그 후 비지도 대조 학습 인코더(예: Contriever)로 이 문서를 임베딩하는데, 이 과정에서 잘못된 세부 정보는 인코더의 dense bottleneck에 의해 걸러지고 핵심 의미만 남게 된다.
+    - 이후 검색시에는 이 벡터와 가장 유사한 진짜 문서들을 찾는다.
+
+
+
+- 동작 방식
+
+  - 가상 문서 생성
+    - LLM(InstructGPT)에 쿼리와 함께 아래와 같은 instruction을 제공한다.
+    - 태스크에 따라 instruction이 달라진다.
+
+  ```
+  # 웹 검색의 경우
+  Please write a passage to answer the question
+  Question: [QUESTION]
+  Passage:
+  
+  # 과학 논문 검색의 경우
+  Please write a scientific paper passage to answer the question
+  Question: [QUESTION]
+  Passage:
+  
+  # 다국어 검색의 경우
+  Please write a passage in Korean to answer the question in detail.
+  Question: [QUESTION]
+  Passage:
+  ```
+
+  - 가상 문서 임베딩
+    - 생성된 가상 문서를 비지도 학습 인코더(Contriever)로 embedding한다.
+    - 이 과정에서 가상 문서의 세부적인 오류보다 핵심 의미가 벡터에 반영된다고 가정한다.
+    - 여러 개의 가상 문서를 생성해 벡터를 평균내는 방식을 사용하기도 한다.
+  - 실제 문서 검색
+    - 가상 문서의 벡터와 코퍼스 내 실제 문서들의 벡터 간 유사도를 계산해 가장 관련성 높은 문서를 반환한다.
+
+
+
+- 가상 문서 임베딩 과정에서 dense bottleneck으로 인해 세부 오류는 걸러질 것이라고 가정한다.
+  - 임베딩 모델(Encoder)은 수천 개의 단어로 된 텍스트를 받아서 아주 작은 크기(예: 768개나 1536개의 숫자)의 벡터로 응충한다. 
+    - 이때 "수익이 100조다"라는 구체적인 숫자(틀릴 수 있는 정보)보다는, "이 글은 기업의 재무 수익에 관한 전문적인 보고서다"라는 거시적인 의미(Semantic)를 우선적으로 벡터에 담는다.
+    - 결국 벡터 공간에서는 LLM이 지어낸 구체적인 거짓말들은 사라지고 그 글이 가진 '본질적인 주제'만 남게된다.
+  - 즉 인코더의 한계를 역이용하여 핵심만 남긴다.
+    - Encoder의 한계를 역이용한다는 특성으로 인해 역설적으로 encoder가 발전할수록 HyDE의 효과는 감소할 수 있다.
+    - 다만 인코더의 성능이 아무리 좋아져도 '고정된 크기의 벡터(Fixed-size Vector)'라는 근본적인 한계는 사라지지 않는다.
+    - 또한 여전히 인코더는 지엽적인 수치보다는 지식의 구조적 패턴을 우선순위에 두고 압축하며, 이는 encoder가 발전한다 해도 마찬가지이다.
+
+
+
 
 
