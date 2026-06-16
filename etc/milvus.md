@@ -171,6 +171,24 @@
 
 
 
+- Milvus는 인덱스 타입에 따라 데이터를 메모리에 올리는 방식이 다르다.
+  - FLAT, IVF_FLAT, HNSW의 경우 데이터를 전부 메모리에 올려서 사용한다.
+  - DISK_ANN의 경우 디스크 기반 검색으로, 메모리 사용을 최소화한다.
+
+
+
+- Milvus에서 refine_type을 지정할 경우 refine_type으로 지정한 vector도 memory에 올라가게 된다.
+  - 이는 refine을 위해 refine_type에 해당하는 vector도 메모리에 올려야 하기 때문이다.
+    - 예를들어 index를 SQ8로 생성하고 refine type을 FP32로 지정했다면, int8로 quantization 된 vector와 원본 벡터인 float32 type 벡터가 모두 memory에 로드된다.
+    - 실제 테스트를 해보면 1024차원 vector 2M개(약 8GB)를 refine type 없이 SQ8 quantization해서 index를 생성한후 load하면 약 4.5GB의 메모리를 점유하는데, refine type을 fp32로 설정하면 약 10GB를 점유한다. 
+    - Memory 사용량이 크게 증가하지만 refine type의 벡터 크기(예시의 경우 8GB)만큼 증가하지는 않는다.
+  - 메모리 사용량의 감소라는 quantization의 이점은 줄어들지만 검색 latnecy는 줄어들게 된다.
+    - 더 낮은 정밀도를 가진 데이터로 빠르게 검색하고 더 높은 정밀도를 가진 데이터로 refine 과정을 거치기 때문이다.
+    - 따라서 극단적으로는 FP32를 refine type으로 지정한다고 해도, 메모리는 quantization을 하지 않는 것 보다 더 쓴다고 해도, 보다 빠른 검색이 가능해진다.
+    - 또한 위처럼 원본 벡터(float32)가 아닌, 약간 더 높은 정밀도(e.g. VF_RABITQ + SQ8)를 refine type으로 지정하면 여전히 원본 벡터보다는 메모리를 덜 사용하면서도 보다 빠른 검색이 가능해진다.
+
+
+
 - Data query
   - Data query는 target vector와 가장 가까운 k개의 vector를 찾거나 target vector와 일정 거리 내에 있는 모든 vector를 찾는 과정을 말한다.
     - Vector들은 자신들의 primary key와 field들과 함께 반환된다.
