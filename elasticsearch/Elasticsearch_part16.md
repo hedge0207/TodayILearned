@@ -1,3 +1,235 @@
+# Rescore
+
+- Rescore
+  - Query 결과를 rescore하는 기능이다.
+  - 각 shard가 검색 결과를 반환하기 전에 실행된다.
+  - 각 샤드 별 검색 결과 중 top-k개만을 대상으로 수행되며, k 값은 `window_size` parameter로 조정한다.
+
+
+
+- Query rescorer
+
+  - 본 query를 통해 계산된 점수와 rescore query를 통해 계산된 점수를 결합하여 최종 점수를 산출한다.
+    - 각 점수의 가중치를 조정하여 최종 점수 산출에 어떤 쿼리의 점수를 더 많이 반영할지를 조절할 수 있다.
+    - `query_weight`와  `rescore_query_weight`의 기본값은 모두 1이다.
+  - `score_mode`를 통해 두 점수가 결합되는 방식을 지정할 수 있다.
+    - `total`: 두 점수를 합산한다(default)
+    - `multiply`: 두 점수를 곱한다.
+    - `avg`: 두 점수의 평균을 낸다.
+    - `max`, `min`: 두 점수 중 최댓값, 최솟값을 사용한다.
+
+  ```json
+  // POST /_search
+  {
+     "query" : {
+        "match" : {
+           "message" : {
+              "operator" : "or",
+              "query" : "the quick brown"
+           }
+        }
+     },
+     "rescore" : {
+        "window_size" : 10,
+        "query" : {
+           "rescore_query" : {
+              "match_phrase" : {
+                 "message" : {
+                    "query" : "the quick brown",
+                    "slop" : 2
+                 }
+              }
+           },
+           "query_weight" : 0.7,
+           "rescore_query_weight" : 1.2
+        }
+     }
+  }
+  ```
+
+
+
+- 아래와 같이 여러 개의 rescorer를 적용하는 것도 가능하다.
+
+  - 이 경우 첫 번째 rescorer는 본 쿼리의 점수와 결합되고, 두 번째 rescorer는 본 쿼리와 결합된 첫 번째 rescorer의 점수와 결합된다.
+
+  ```json
+  // POST /_search
+  {
+    "query": {
+      "match": {
+        "message": {
+          "operator": "or",
+          "query": "the quick brown"
+        }
+      }
+    },
+    "rescore": [
+      {
+        "window_size": 10,
+        "query": {
+          "rescore_query": {
+            "match_phrase": {
+              "message": {
+                "query": "the quick brown",
+                "slop": 2
+              }
+            }
+          },
+          "query_weight": 0.7,
+          "rescore_query_weight": 1.2
+        }
+      },
+      {
+        "window_size": 5,
+        "query": {
+          "score_mode": "multiply",
+          "rescore_query": {
+            "function_score": {
+              "script_score": {
+                "script": {
+                  "source": "Math.log10(doc.count.value + 2)"
+                }
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+  ```
+
+
+
+- Script rescorer
+
+  > 9.2부터 사용 가능하다.
+
+  - Script를 통해 최종 점수를 계산한다.
+    - Script에서 원본 문서의 field와 원 쿼리를 통해 계산된 점수에 접근이 가능하다.
+
+  ```json
+  // POST /_search
+  {
+     "query" : {
+        "match" : {
+           "message" : {
+              "operator" : "or",
+              "query" : "the quick brown"
+           }
+        }
+     },
+     "rescore" : {
+        "window_size" : 10,
+        "script" : {
+           "script" : {
+              "source": "doc['num_likes'].value * params.multiplier + _score",
+              "parameters": {
+                 "multiplier": 0.1
+              }
+           }
+        }
+     }
+  }
+  ```
+
+
+
+- Learning to rank rescorer
+
+  > License가 필요하다.
+
+  - LTR model을 사용하여 점수를 계산한다.
+
+  ```json
+  // GET my-index/_search
+  {
+    "query": {
+      "multi_match": {
+        "fields": ["title", "content"],
+        "query": "the quick brown fox"
+      }
+    },
+    "rescore": {
+      "learning_to_rank": {
+        "model_id": "ltr-model",
+        "params": {
+          "query_text": "the quick brown fox"
+        }
+      },
+      "window_size": 100
+    }
+  }
+  ```
+
+
+
+- kNN query에서의 rescoring
+
+  - 아래와 같이 int8로 quantization 된 vector를 대상으로 빠르게 검색하고, top-k개를 대상으로 원본 벡터를 사용해 정확하게 비교하는 방식으로 사용하는 것도 가능하다.
+
+  ```json
+  // POST quantized-image-index/_search
+  {
+    "knn": {
+      "field": "image-vector",
+      "query_vector": [0.1, -2],
+      "k": 15,
+      "num_candidates": 100
+    },
+    "fields": [ "title" ],
+    "rescore": {
+      "window_size": 10,
+      "query": {
+        "rescore_query": {
+          "script_score": {
+            "query": {
+              "match_all": {}
+            },
+            "script": {
+              "source": "cosineSimilarity(params.query_vector, 'image-vector') + 1.0",
+              "params": {
+                "query_vector": [0.1, -2]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  ```
+
+  - 단, 9.1 이상부터는 아래와 같이 `rescore_vector`를 사용하면 보다 단순하게 사용할 수 있다.
+    - 먼저 각 샤드마다 `num_candidates` 만큼의 후보를 검색한다.
+    - 이후 각 샤드마다 top `k * oversample` 만큼의 후보를 원본 벡터를 사용하여 rescoring한다.
+    - 각 샤드 마다 top `k` rescoring된 후보를 반환한다.
+    - 예를 들어 아래 예시의 경우 각 샤드마다 100개의 후보 문서를 찾는다.
+    - 그 후 각 샤드마다 top 20개 (`oversample * k`)의 후보에 대해 원본 문서를 사용한 rescoring을 실행한다.
+    - 각 샤드 마다 top 10 (`k`)의 rescoring된 후보를 반환한다.
+    - 모든 샤드의 rescoring된 후보들을 병합하여 top 10 (`k`) 개의 문서를 반환한다.
+
+  ```json
+  // POST image-index/_search
+  {
+    "knn": {
+      "field": "image-vector",
+      "query_vector": [-5, 9, -12],
+      "k": 10,
+      "num_candidates": 100,
+      "rescore_vector": {
+        "oversample": 2.0
+      }
+    },
+    "fields": [ "title", "file-type" ]
+  }
+  ```
+
+
+
+
+
+
+
 # 검색 시스템 평가
 
 - 사전 지식
