@@ -266,7 +266,7 @@
     - 예를 들어 Elasticsearch에서 dot_product는 element_type이 float일 경우 `(1 + dot_product(query, vector)) / 2`와 같이 계산한다.
     - 반면에 `max_inner_product`는 `max_inner_product(query, vector) + 1`와 같이 계산된다.
     - 이 때 정규화된 상태에서는 `max_inner_product(query, vector)`의 값과 `dot_product(query, vector)`의 값이 동일하므로 이를 x로 두면 dot_product는 `(1+x)/2`가 되고, `max_inner_product`의 값은 `1+x`가 되어 Elasticsearch 계산 결과는 항상 `max_inner_product`가 `dot_product`의 두 배가 된다.
-    - 마찬가지 이유료 dot_product의 element_type이 float일 경우에는 cosine과 동일한 점수가 나오지만, bytes일 경우에는 점수가 달라지게 된다.
+    - 마찬가지 이유로 dot_product의 element_type이 float일 경우에는 cosine과 동일한 점수가 나오지만, bytes일 경우에는 점수가 달라지게 된다.
 
 
 
@@ -1358,6 +1358,26 @@
     - 그러나 HNSW의 특성상 오히려 품질이 떨어질 가능성이 높다.
     - 특히 정답군이 한 segment에 집중된 경우 예컨대 어떤 쿼리의 진짜 top-10이 우연히 segment A에 8개 모여있고, segment A의 HNSW가 성기게 연결되어 있다면 정답을 못 찾는 경우가 발생할 수 있다.
     - 따라서 segment 수가 늘수록 동일한 num_candidates로 얻는 recall이 점점 감소하므로 이를 보정하기 위해 num_candidates를 늘려야 할 수 있다.
+
+
+
+- `num_candidates`, `k`, `size`
+  - `num_candidates`와 `k`
+    - `num_candidates`는 세그먼트 당 적용되는 설정이다.
+    - `k`는 샤드 당 적용되는 설정이다.
+  - `k`와 `size`
+    - knn query의 경우 k를 별도로 설정하지 않으면 `size`와 같은 값으로 설정된다.
+    - `k`는 샤드에 적용되는 설정이고, `size`는 coordinator node에서 최종 응답으 생성할 때 적용되는 설정이다.
+  - 예시1
+    - `num_candidates`가 10, segment의 개수가 5, `k`가 20, shard의 개수가 3, `size`가 5일때.
+    - 5개의 샤드가 각각 10개씩 자신이 속한 샤드로 검색 결과를 보낸다.
+    - 각 샤드는 50개의 결과중 20개를 뽑아 coordinator node로 보낸다.
+    - coordinator node는 60개의 결과 중 5개를 뽑아 최종 응답으로 반환한다.
+  - 예시2
+    - `num_candidates`가 10, segment의 개수가 5, `k`가 5, shard의 개수가 2, `size`가 20일때.
+    - 5개의 샤드가 각각 10개씩 자신이 속한 샤드로 검색 결과를 보낸다.
+    - 각 샤드는 50개의 결과중 5개를 뽑아 coordinator node로 보낸다.
+    - coordinator node는 10개의 결과 전부를 최종 응답으로 반환한다.
 
 
 
