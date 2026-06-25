@@ -387,22 +387,6 @@
 
 
 
-- kNN
-  - query로 들어온 vector값과 가장 가까운 k개의 문서를 찾아준다.
-    - Elasticsearch에서 vector화 시키는 기능을 제공하지는 않기에 vector화는 다른 방법을 이용하여 진행한 뒤, vector 값을 색인해야 한다.
-    - 검색 대상이 되는 vector와 검색할 vector 값은 같은 차원이어야 한다.
-
-  - Elasticsearch는 2 종류의 kNN search method를 제공한다.
-    - Exact, brute-force kNN
-    - Approximate kNN(ES 8.4 기준으로 아직 preview 상태)
-
-  - Approximate kNN의 경우 아래와 같은 장단점이 있다.
-    - 검색 속도가 Exact kNN에 비해 빠르다.
-    - 인덱싱 속도는 Exact kNN에 비해 느리다.
-    - 정확도가 떨어질 수 있다.
-
-
-
 - 선형 탐색 구현하기
 
   - 아래와 같이 index를 생성하고 데이터를 삽입한다.
@@ -470,6 +454,10 @@
     }
   }
   ```
+  
+  - 일반적으로 1만개 미만의 데이터를 대상으로는 exact search를 사용하는 것이 낫다.
+    - exact match의 경우 vector 검색이 수행될 문서를 대상으로 사전 filtering이 가능하므로, filtering 이후의 결과값이 1만개 이하라면 exact search를 사용하는 것을 고려해볼만 하다.
+  - `index`를 true로 설정하고 `index_type`을 flat으로 설정한 뒤 knn search를 실행해도 exact match가 가능하다.
 
 
 
@@ -696,80 +684,6 @@
     - 또한 활성화 되더라도 특정 노드의 직접 이웃 중 10% 이상이 필터에서 제외될 때만 수행한다.
     - 또한 이미 `neighborCount * 1.0 / (1.0 - neighborFilterRatio)` 개 이상을 평가한 경우에는 확장 탐색을 수행하지 않는다.
   - 다만, filtering을 하지 않았을 때 만큼 속도가 빨라지지는 않는다.
-
-
-
-
-- Exact kNN search
-
-  - 정확한 결과를 보장하지만, 데이터의 크기가 커질수록 정확도가 떨어질 수 있다.
-
-  - vector data 색인하기
-    - `dense_vector` type으로 색인한다.
-    - `dims` 옵션에 검색할 query와 같은 차원을 입력한다(4096을 초과해서 설정할 수 없다).
-    - 만일 approximate kNN을 사용할 것이 아니라면 `index` 옵션을 false로 설정하면 된다(기본값은 true).
-
-  ```json
-  // PUT product-index
-  {
-    "mappings": {
-      "properties": {
-        "product-vector": {
-          "type": "dense_vector",
-          "dims": 5,
-          "index": false
-        },
-        "price": {
-          "type": "long"
-        }
-      }
-    }
-  }
-  ```
-
-  - vector 값을 색인한다.
-
-  ```json
-  // POST product-index/_bulk?refresh=true
-  { "index": { "_id": "1" } }
-  { "product-vector": [230.0, 300.33, -34.8988, 15.555, -200.0], "price": 1599 }
-  { "index": { "_id": "2" } }
-  { "product-vector": [-0.5, 100.0, -13.0, 14.8, -156.0], "price": 799 }
-  { "index": { "_id": "3" } }
-  { "product-vector": [0.5, 111.3, -13.0, 14.8, -156.0], "price": 1099 }
-  ```
-
-  - `script_score` query를 사용하여 검색한다.
-
-  ```json
-  POST product-index/_search
-  {
-    "query": {
-      "script_score": {
-        "query" : {
-          "bool" : {
-            "filter" : {
-              "range" : {
-                "price" : {
-                  "gte": 1000
-                }
-              }
-            }
-          }
-        },
-        "script": {
-          "source": "cosineSimilarity(params.queryVector, 'product-vector') + 1.0",
-          "params": {
-            "queryVector": [-0.5, 90.0, -10, 14.8, -156.0]
-          }
-        }
-      }
-    }
-  }
-  ```
-  
-  - 일반적으로 1만개 미만의 데이터를 대상으로는 exact search를 사용하는 것이 낫다.
-    - exact match의 경우 vector 검색이 수행될 문서를 대상으로 사전 filtering이 가능하므로, filtering 이후의 결과값이 1만개 이하라면 exact search를 사용하는 것을 고려해볼만 하다.
 
 
 
