@@ -495,7 +495,7 @@
 
   - `.service` 파일을 수정했을 경우 아래 명령어로 변경 사항을 적용한다.
     - 이 명령어를 실행한다고 실행중인 service가 정지되진 않는다.
-    - unit file을 수정하거나 unit file을 새로 생성하거나 삭제했을 경우, 아래 명령어를 실행해야 변경사항이 systemd에 반영된다.
+    - unit file(`.service`, `.socket` 등)을 수정하거나 unit file을 새로 생성하거나 삭제했을 경우, 아래 명령어를 실행해야 변경사항이 systemd에 반영된다.
   
   ```bash
   $ systemctl daemon-reload
@@ -551,6 +551,27 @@
 
 
 
+- 특정 유이 정상적으로 설정 됐는지 확인하는 방법
+
+  - `systemd-analyze`를 사용한다.
+    - `systemd` 자체에 내장되어 있어 별도의 설치 없이 사용이 가능하다.
+    - 만약 실행 결과 아무것도 출력되지 않는다면 이상 없다는 의미이다.
+
+  ```bash
+  $ systemd-analyze verify <unit_file> 
+  ```
+
+  - 혹은 아래와 같이 각 옵션별로도 확인이 가능하다.
+
+  ```bash
+  $ systemctl show <unit_file> -p <option>
+  
+  # After를 확인하는 예시
+  $ systemctl show foo.service -p After
+  ```
+
+
+
 - 옵션들
 
   > Unit, Service, Install로 나뉘며 아래 옵션들 외에도 많은 옵션이 존재한다.
@@ -563,12 +584,47 @@
 
     - simple: 기본값으로, 유닛이 시작된 즉시 systemd는 유닛의 시작이 완료됐다고 판단한다.
     - forking: 자식 프로세스 생성이 완료되는 단계까지를 systemd가 시작이 완료됐다고 판단한다.
-
   - ExecStart
     - 시작 명령을 정의한다.
   - ExecStop
     - 중지 명령을 정의한다.
     - WorkingDirectory: 해당 동작을 수행할 Directory를 지정한다.
+  - After
+    - 해당 유닛보다 먼저 시작될 유닛을 지정한다.
+    - 예를 들어 아래와 같이 설정한 경우 foo.service가 bar.service보다 먼저 실행되는 것이 보장된다.
+    - foo.service가 실행에 성공했는지 여부와 무관하게 foo.service가 실행됐다면, bar.service가 실행된다.
+    - 만약 지정한 유닛이 존재하지 않을 경우 `Failed to add dependency on ...`과 같은 에러가 로그로 남지만 실행은 정상적으로 된다.
+  
+  ```bash
+  # bar.service
+  
+  [Unit]
+  After=foo.service
+  ```
+  
+  - Wants
+    - 해당 유닛과 함께 실행되었으면 하는 유닛을 지정한다.
+    - 순서는 보장하지 않는다(동시에 실행될 수도 있다).
+    - 예를 들어, 아래와 같이 설정한 경우 bar.service는 foo.service의 성공 여부, 존재 여부와 무관하게 함께 실행된다.
+  
+  ```bash
+  # bar.service
+  
+  [Unit]
+  Wants=foo.service
+  ```
+  
+  - Requires
+    - 해당 유닛과 함께 실행되어야 하는 유닛을 지정한다(강한 의존성).
+    - 순서는 보장하지 않는다(동시에 실행될 수도 있다).
+    - 예를 들어, 아래와 같이 설정한 경우 foo.service가 존재하지 않거나 실행에 실패하는 경우, bar.service도 실행에 실패한다.
+  
+  ```bash
+  # bar.service
+  
+  [Unit]
+  Requires=foo.service
+  ```
 
 
 
@@ -583,7 +639,6 @@
   ```bash
   $ chmod 744 run.sh
   ```
-  
   
 
 
@@ -665,7 +720,10 @@
   $ journalctl --no-pager
   ```
 
-  
+
+
+
+
 
 # umask
 

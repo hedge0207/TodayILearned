@@ -326,12 +326,16 @@
 
   ```bash
   # 부모 프로세스의 파일 디스크립터 사용
-  ExecStart=/user/bin/dockerd -H fd://
+  ExecStart=/usr/bin/dockerd -H fd://
+  ```
   
-  # 기본값은 아래와 같다(-H 옵션을 설정하지 않아도 동일하다).
+  - `-H` 옵션을 설정하지 않을 경우 기본값은 아래와 같다.
+  
+  ```bash
+  # -H 옵션을 설정하지 않을 경우, 아래와 같이 설정된다.
   ExecStart=/user/bin/dockerd -H unix:///var/run/docker.sock
   ```
-
+  
   
 
 
