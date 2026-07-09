@@ -431,6 +431,12 @@
 <br/>
 
 # NLP
+## LLM
+- DSPy
+
+<br/>
+<br/>
+
 ## NLP_part1
 - 텍스트 전처리
 
@@ -457,6 +463,8 @@
 
 ## NLP_part4
 - 다층 퍼셉트론으로 텍스트 분류하기
+
+- 순환 신경망
 
 <br/>
 <br/>
@@ -1327,6 +1335,8 @@
 <br/>
 
 ## Elasticsearch_part16
+- Rescore
+
 - 검색 시스템 평가
 
 - Elasticsearch as GraphDB
@@ -2483,6 +2493,12 @@
 <br/>
 <br/>
 
+## lang_chain
+- LangChain
+
+<br/>
+<br/>
+
 ## packages_part1
 - argparse
 
@@ -2675,7 +2691,28 @@
 <br/>
 
 # rag
-## RAG
+<br/>
+<br/>
+
+## RAG_part1
+- RAG
+
+- Recursive Abstractive Processing for Tree-Organized Retrieval
+
+- Precise Zero-Shot Dense Retrieval without Relevance Labels
+
+<br/>
+<br/>
+
+## RAG_part2
+- Generating Diverse Q&A Benchmarks for RAG Evaluation with DataMorgana
+
+- RAGAS(Automated Evaluation of Retrieval Augmented Generation)
+
+- ARES(An Automated Evaluation Framework for Retrieval-Augmented Generation Systems)
+
+- RAGalyst: Automated Human-Aligned Agentic Evaluation for Domain-Specific RAG
+
 <br/>
 <br/>
 
