@@ -24,7 +24,7 @@
 
   - 두 개의 layer로 구성된다.
     - Data layer: Client-server 통신을 위한 JSON-RPC 기반의 프로토콜을 정의한다.
-    - Transport layer: Cleint와 server 사이의 데이터 교환을 위한 통신 메커니즘과 채널을 정의하고, 둘 사이의 인증을 관리한다.
+    - Transport layer: Client와 server 사이의 데이터 교환을 위한 통신 메커니즘과 채널을 정의하고, 둘 사이의 인증을 관리한다.
 
   - Data layer는 아래와 같은 것들을 포함한다.
     - Lifecycle Management: Client와 server 간의 연결 초기화(initialization), capability(기능) 협상, 연결 종료를 처리한다.
@@ -294,4 +294,166 @@
           app.conversation.notify_llm_of_new_capabilities()
   ```
 
+
+
+
+- MCP Server Elasticsearch사용해보기
+
+  > https://github.com/elastic/mcp-server-elasticsearch
+
+  - Elasticsearch는 자체적으로 개발한 MCP server를 제공한다.
+    - Elasticsearch 8부터 사용이 가능하다.
+    - 단, 위 github README에서도 확인할 수 있듯, 위 MCP server는 depreacted되었다.
+    - Elasticsearch 9.2 이상부터는 [Elastic Agent Builder](https://www.elastic.co/docs/explore-analyze/ai-features/elastic-agent-builder)를 사용하는 것이 권장된다.
+  - MCP Server Elasticsearch docker image 받기
+
+  ```bash
+  $ docker pull docker.elastic.co/mcp/elasticsearch
+  ```
+
+  - MCP Server Elasticsearch docker container 실행하기
+    - Elasticsearch는 이미 실행중이라고 가정한다.
+    - `command`로 http와 stdio 중 어떤 걸로 실행할지 설정해야한다.
+
+  ```yaml
+  services:
+    es-mcp:
+      image: docker.elastic.co/mcp/elasticsearch:latest
+      container_name: es-mcp
+      environment:
+        - ES_URL=http://localhost:9200
+      command: http
+      ports:
+        - 8080:8080
+  ```
+
+  - MCP Server로 요청 보내서 실행 가능한 action들 확인하기
+
+  ```python
+  import json
   
+  import requests
+  
+  
+  url = "http://loclahost:8080/mcp"
+  
+  payload = {
+      "jsonrpc": "2.0",
+      "method": "tools/list",
+      "params": {},
+      "id": 1
+  }
+  
+  headers = {
+      "Accept": "application/json, text/event-stream",
+      "Content-Type": "application/json"
+  }
+  res = requests.post(url, json=payload, headers=headers)
+  
+  print(f"Status Code: {res.status_code}")
+  for line in res.text.splitlines():
+      if line.startswith("data:"):
+          json_str = line[5:].strip()
+          try:
+              data = json.loads(json_str)
+              print(json.dumps(data, indent=2, ensure_ascii=False))
+          except json.JSONDecodeError as e:
+              print(f"JSON 파싱 실패: {e}")
+  ```
+
+  - Python MCP SDK 설치
+
+  ```bash
+  $ pip install "mcp[cli]==2.0.0b1"
+  ```
+
+  - Python MCP SDK로 MCP server에 요청 보내기
+
+  ```python
+  import asyncio
+  
+  from mcp import Client
+  
+  
+  async def main():
+      async with Client("http://localhost:8080/mcp") as client:
+          tools = await client.list_tools()
+          for tool in tools.tools:
+              print(tool)
+              print("-" * 100)
+  
+  asyncio.run(main())
+  ```
+
+  - LM과 함께 사용하기
+    - Model로는 llama3.2를 사용한다.
+
+  ```python
+  import asyncio
+  import json
+  
+  from openai import OpenAI
+  from mcp import Client
+  
+  
+  MODEL_NAME = "llama3.2:latest"
+  client = OpenAI(base_url="http://localhost:11434/v1", api_key="None")
+  
+  # openai spec에 맞게 형식을 변환한다.
+  def convert_mcp_tool_to_openai(mcp_tool):
+      return {
+          "type": "function",
+          "function": {
+              "name": mcp_tool.name,
+              "description": mcp_tool.description,
+              "parameters": mcp_tool.input_schema
+          }
+      }
+  
+  async def main(user_prompt: str):
+      async with Client("http://localhost:8080/mcp") as mcp_client:
+          tools = await mcp_client.list_tools()
+          # MCP server Elasticsearch에서 제공하는 tool들의 목록을 openai spec에 맞게 변환한다.
+          openai_tools = [convert_mcp_tool_to_openai(tool) for tool in tools.tools]
+  		
+          # prompt를 작성한다.
+          messages = [
+              {"role": "system", "content": "You are an expert Elasticsearch data exploration assistant. Actively utilize the provided tools as required."},
+              {"role": "user", "content": user_prompt}
+          ]
+  
+          response = client.chat.completions.create(
+              model=MODEL_NAME,
+              messages=messages,
+              tools=openai_tools,
+              tool_choice="auto",
+          )
+          response_message = response.choices[0].message
+          tool_calls = response_message.tool_calls
+          if tool_calls:
+              for tool_call in tool_calls:
+                  tool_name = tool_call.function.name
+                  tool_args = json.loads(tool_call.function.arguments)
+                  # MCP server Elasticsearch를 호출하여 결과를 받아온다.
+                  mcp_result = await mcp_client.call_tool(tool_name, arguments=tool_args)
+                  # 받아온 결과를 messages에 추가한다.
+                  messages.append({
+                      "role": "tool",
+                      "tool_call_id": tool_call.id,
+                      "name": tool_name,
+                      "content": str(mcp_result.content)
+                  })
+              final_response = client.chat.completions.create(
+                  model=MODEL_NAME,
+                  messages=messages
+              )
+              # 최종 응답을 확인한다.
+              print(final_response.choices[0].message.content)
+          else:
+              print(response_message.content)
+  
+  asyncio.run(main("How many indices have index names starting with 'msmarco'?"))
+  ```
+
+
+
