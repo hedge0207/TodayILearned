@@ -5,8 +5,10 @@
 - MCP(Model Context Protocol)
 
   - AI application을 외부 시스템과 연동하기 위한 open source 표준이다.
+    - 이름 그대로 Model이 다른 소스로부터 Context를 얻기 위한 표준화된 Protocol이다.
     - MCP를 사용하면 Claude나 ChatGPT 같은 AI application이 DB나 local file 같은 data source, 검색 엔진 같은 tool들에 접근할 수 있게 된다.
     - AI application을 위한 USB-C port라고 생각하면 되는데, USB-C가 전자기기에 연결하기 위한 표준화된 방법을 제공하는 것 처럼 MCP는 AI application이 외부 시스템과 연결되기 위한 표준화된 방법을 제공한다.
+    
   - MCP의 구조
     - MCP는 client - server 구조를 따른다.
     - 하나의 MCP host(AI application)가 하나 이상의 MCP server와 연결을 확립하는 방식이다.
@@ -15,7 +17,7 @@
     - MCP host: 하나 이상의 MCP client를 관리하고 조정하는 AI application.
     - MCP client: MCP server와 연결을 유지하고, MCP host가 사용할 context를 MCP server로부터 받아오는 역할을 한다.
     - MCP server: MCP client에게 context를 제공하는 program
-
+  
   ![image-20260716140453667](RAG_part3.assets/image-20260716140453667.png)
 
 
@@ -260,7 +262,7 @@
 
   - Real-time Updates (Notifications)
     - MCP는 실시간 notification을 지원하여, server가 명시적인 요청 없이도 변경 사항을 client에게 알릴 수 있게 해준다.
-    - Server에서 사용 가능한 tool이 변경될 때(e.g. 새로운 기능 추가, 기존 tool이 수정, 특정 tool 일시 정지)  server는 연결된 client에게 이3를 미리 알릴 수 있다
+    - Server에서 사용 가능한 tool이 변경될 때(e.g. 새로운 기능 추가, 기존 tool이 수정, 특정 tool 일시 정지)  server는 연결된 client에게 이를 미리 알릴 수 있다
     - Client가 notification을 수신하면, client는 일반적으로 업데이트된 tool 목록을 요청하는 방식으로 반응한다.
     - 이를 통해 client가 파악하고 있는 사용 가능한 tool 정보를 최신 상태로 유지하는 갱신 주기(refresh cycle)가 만들어진다.
 
@@ -453,6 +455,239 @@
               print(response_message.content)
   
   asyncio.run(main("How many indices have index names starting with 'msmarco'?"))
+  ```
+  
+  - MCP server를 통한 검색은 아래와 같은 과정을 거친다.
+  
+  > https://www.elastic.co/search-labs/kr/blog/model-context-protocol-elasticsearch
+  
+  ![es_mcp_server](RAG_part3.assets/es_mcp_server.png)
+
+
+
+
+
+
+
+## FastMCP
+
+- FastMCP
+
+  - MCP server 및 client를 보다 간편하게 개발할 수 있게 해주는 framework이다.
+    - MCP 개발 과정에서 작성하게 되는 보일러 플레이트들을 상당 부분 작성하지 않아도 되도록 해준다.
+
+  ```bash
+  $ pip install fastmcp
+  ```
+
+  - MCP server 개발하기
+    - 가상의 DB에서 데이터를 조회하는 MCP server를 FastMCP를 사용하여 개발한다.
+    - Decorator를 추가하여 간단하게 MCP server 개발이 가능하다.
+    - 각 메서드의 docstring이 tools 조회시 description에 들어가게 된다.
+
+  ```python
+  # server.py
+  from datetime import datetime, timezone
+  
+  from fastmcp import FastMCP
+  
+  
+  mcp = FastMCP("simple-directory-server")
+  
+  
+  _EMPLOYEE_DB = {
+      "John": {"team": "platform", "role": "Backend engineer"},
+      "Will": {"team": "data", "role": "ML engineer"},
+      "Nick": {"team": "infra", "role": "SRE"},
+  }
+  
+  
+  @mcp.tool()
+  def search_employee(name: str) -> str:
+      """Searches internal employee information by name."""
+      info = _EMPLOYEE_DB.get(name)
+      if not info:
+          return f"'{name}' not found"
+      return f"{name} | {info['team']} | {info['role']}"
+  
+  
+  @mcp.tool()
+  def get_current_time() -> str:
+      """Returns the current server time in ISO 8601 format."""
+      return datetime.now(timezone.utc).isoformat()
+  
+  
+  if __name__ == "__main__":
+      mcp.run(transport="streamable-http")
+  ```
+
+  - 아래와 같이 실행한다.
+    - 위 코드를 실행하면 기본값인 8000 포트로 MCP server가 실행된다.
+
+  ```bash
+  $ python server.py
+  ```
+
+  - MCP server에서 tool list 확인하기
+    - Initialize를 통해 mcp-session-id를 받아온 후, 받아온 mcp-session-id를 요청 header에 담아서 보낸다.
+    - 단, MCP server 실행시 `mcp.run(transport="streamable-http", stateless_http=True)`와 같이 stateless로 실행했다면 session id가 필요 없으므로 initialize 없이 바로 실행해도 된다.
+
+  ```python
+  import json
+  
+  import requests
+  
+  
+  url = "http://localhost:8000/mcp"
+  
+  
+  def initialize() -> str:
+      headers = {
+          "Accept": "application/json, text/event-stream",
+          "Content-Type": "application/json"
+      }
+      
+      payload = {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "method": "initialize",
+          "params": {
+              "protocolVersion": "2025-06-18",
+              "capabilities": {},
+              "clientInfo": {"name": "curl-cli", "version": "1.0"}
+          }
+      }
+  
+      res = requests.post(url, headers=headers, json=payload)
+      return res.headers["mcp-session-id"]
+  
+  
+  def list_tools(session_id: str):
+      headers = {
+          "Accept": "application/json, text/event-stream",
+          "Content-Type": "application/json",
+          "mcp-session-id": session_id
+      }
+      payload = {
+          "jsonrpc": "2.0",
+          "method": "tools/list",
+          "params": {},
+          "id": 1
+      }
+      res = requests.post(url, headers=headers, json=payload)
+      for line in res.text.splitlines():
+          if line.startswith("data:"):
+              json_str = line[5:].strip()
+              print(json.dumps(json.loads(json_str), indent=4, ensure_ascii=False))
+  
+  
+  session_id = initialize()
+  list_tools(session_id)
+  ```
+
+  - MCP client 개발하기
+    - Client istance를 생성하고 server를 호출하는 방식은 `mcp` package와 크게 다르지 않다.
+    - Initialize 과정은 자동으로 처리해주기에 명시적으로 수행할 필요는 없다.
+
+  ```python
+  import asyncio
+  from fastmcp import Client
+  
+  
+  client = Client("http://localhost:8000/mcp")
+  
+  
+  async def main():
+      async with client:
+  
+          tools = await client.list_tools()
+          # tool 목록
+          for t in tools:
+              print(f"- {t.name}: {t.description}")
+  
+          # MCP server에서 name이 John인 직원 조회
+          result = await client.call_tool("search_employee", {"name": "John"})
+          print(result.content[0].text)
+  
+          # MCP server에서 현재 시각 조회
+          result = await client.call_tool("get_current_time", {})
+          print(result.content[0].text)
+  
+  
+  asyncio.run(main())
+  ```
+
+  - Output
+    - MCP server의 각 메서드에 작성한 docstring이 description의 값으로 추가된 것을 확인할 수 있다.
+
+  ```json
+  {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+          "tools": [
+              {
+                  "name": "search_employee",
+                  "description": "Searches internal employee information by name.",
+                  "inputSchema": {
+                      "additionalProperties": false,
+                      "properties": {
+                          "name": {
+                              "type": "string"
+                          }
+                      },
+                      "required": [
+                          "name"
+                      ],
+                      "type": "object"
+                  },
+                  "outputSchema": {
+                      "properties": {
+                          "result": {
+                              "type": "string"
+                          }
+                      },
+                      "required": [
+                          "result"
+                      ],
+                      "type": "object",
+                      "x-fastmcp-wrap-result": true
+                  },
+                  "_meta": {
+                      "fastmcp": {
+                          "tags": []
+                      }
+                  }
+              },
+              {
+                  "name": "get_current_time",
+                  "description": "Returns the current server time in ISO 8601 format.",
+                  "inputSchema": {
+                      "additionalProperties": false,
+                      "properties": {},
+                      "type": "object"
+                  },
+                  "outputSchema": {
+                      "properties": {
+                          "result": {
+                              "type": "string"
+                          }
+                      },
+                      "required": [
+                          "result"
+                      ],
+                      "type": "object",
+                      "x-fastmcp-wrap-result": true
+                  },
+                  "_meta": {
+                      "fastmcp": {
+                          "tags": []
+                      }
+                  }
+              }
+          ]
+      }
+  }
   ```
 
 
