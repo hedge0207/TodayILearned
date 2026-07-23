@@ -692,3 +692,303 @@
 
 
 
+
+
+### FastAPI와 FastMCP 통합하기
+
+- FastMCP는 FastAPI application과 통합
+
+  - FastMCP는 두 가지 통합 방식을 제공한다.
+    - FastAPI application으로부터 MCP server를 생성하는 방식(기존  FastAPI app을 미러링해서 별도의  MCP server 실행).
+    - FastAPI application에 MCP server를 mount하는 방식(MCP server를 기존  FastAPI의 router 중 하나로 편입).
+  - 권장하는 방식
+    - FastMCP 문서에서는는 FastAPI application으로부터 MCP server를 생성하는 방식은 프로토타입 용으로는 괜찮다고 말한다.
+    - 그러나 실무에서 LLM은 자동 변환된 OpenAPI 서버보다, 잘 설계되고 엄선된(curated) MCP 서버에서 훨씬 더 나은 성능을 내기에 API를 LLM 클라이언트에 그대로 미러링하는 용도로는 권장하지 않는다.
+  - 통합 방식을 테스트하기 위해 간단한 FastAPI app을 생성한다.
+
+  ```python
+  from typing import Optional
+  
+  from fastapi import FastAPI, APIRouter, HTTPException
+  from pydantic import BaseModel
+  import uvicorn
+  
+  
+  app = FastAPI()
+  
+  
+  EMPLOYEE_DB = [
+      {"id": 1, "name": "John", "team": "platform", "role": "Backend engineer"},
+      {"id": 2, "name": "Will", "team": "data", "role": "ML engineer"},
+      {"id": 3, "name": "Nick", "team": "infra", "role": "SRE"},
+  ]
+  
+  
+  class SearchRequest(BaseModel):
+      id_: int
+      name: Optional[str] = None
+  
+  
+  class EmployeeResponse(BaseModel):
+      id: int
+      name: str
+      team: str
+      role: str
+  
+  
+  router = APIRouter(prefix="/employees")
+  
+  @router.post("")
+  def search_employee(request: SearchRequest) -> EmployeeResponse:
+      """Searches internal employee information by name."""
+      request = request.model_dump()
+      id_ = request["id_"]
+      name = request.get("name")
+      for row in EMPLOYEE_DB:
+          if id_ == row["id"]:
+              if name is None:
+                  return row
+              else:
+                  if name == row["name"]:
+                      return row
+              break
+  
+      raise HTTPException(status_code=404, detail="Employee not found")
+  
+  app.include_router(router)
+  
+  if __name__ == "__main__":
+      uvicorn.run(app)
+  ```
+
+
+
+- FastAPI application으로부터 MCP server를 생성하는 방식.
+
+  - 아래와 같이 간단하게 생성이 가능하다.
+    - 위에서 생성한 app을 `FastMCP.from_fastapi()` 메서드의 인자로 전달해 실행한다.
+
+  ```python
+  from fastmcp import FastMCP
+  
+  from app import app
+  
+  
+  mcp = FastMCP.from_fastapi(app=app)
+  
+  
+  if __name__ == "__main__":
+      mcp.run(transport="streamable-http", port=8001)
+  ```
+
+  - MCP client를 통해 정상 작동하는지 확인한다.
+
+  ```python
+  import asyncio
+  from fastmcp import Client
+  
+  
+  client = Client("http://localhost:8001/mcp")
+  
+  async def main():
+      async with client:
+  
+          tools = await client.list_tools()
+          # tool 목록
+          for t in tools:
+              print(f"{t.name}: {t.description}")
+          print("="*100)
+  
+          result = await client.call_tool("search_employee_search_post", {"id_": 1, "name": "John"})
+          print(result.content)
+  
+  asyncio.run(main())
+  
+  """
+  Output:
+  
+  search_employee_search_post: Searches internal employee information by name.
+  ====================================================================================================
+  [TextContent(type='text', text='{"id":1,"name":"John","team":"platform","role":"Backend engineer"}', annotations=None, meta=None)]
+  """
+  ```
+
+  - FastAPI에 정의된 것 외에 component를 추가하는 것도 가능하다.
+
+  ```python
+  from fastmcp import FastMCP
+  
+  from app import app, EMPLOYEE_DB, EmployeeResponse
+  
+  
+  mcp = FastMCP.from_fastapi(app=app)
+  
+  @mcp.tool
+  def get_employee_by_id(id_: int) -> EmployeeResponse | None:
+      "Get a employee by ID"
+      for row in EMPLOYEE_DB:
+          if row["id"] == id_:
+              return row
+      return None
+              
+  
+  if __name__ == "__main__":
+      mcp.run(transport="streamable-http", port=8001)
+  ```
+
+  - MCP client에서 새로 추가된 component를 테스트한다.
+
+  ```python
+  import asyncio
+  from fastmcp import Client
+  
+  
+  client = Client("http://localhost:8001/mcp")
+  
+  
+  async def main():
+      async with client:
+  
+          tools = await client.list_tools()
+          # tool 목록
+          for t in tools:
+              print(f"{t.name}: {t.description}")
+          print("="*100)
+  
+          result = await client.call_tool("get_employee_by_id", {"id_": 1})
+          print(result.content)
+  
+  
+  asyncio.run(main())
+  
+  """
+  Output:
+  
+  get_employee_by_id: Get a employee by ID
+  search_employee_search_post: Searches internal employee information by name.
+  ====================================================================================================
+  [TextContent(type='text', text='{"id":1,"name":"John","team":"platform","role":"Backend engineer"}', annotations=None, meta=None)]
+  """
+  ```
+
+  - Primitive 지정하기
+    - 기본적으로 모든 FastAPI path function은 MCP primitive중 tool로 변환된다.
+    - 즉 `@mcp.tool` 데코레이터를 추가한 것 처럼 동작한다.
+    - Tool 이외에 다른 primitive를 지정하고 싶다면 `RouteMap`, `MCPType`을 사용하면 된다.
+    - 아래와 같이 특정 HTTP method인 특정 url 경로가 어떤  MCP primitive로 변환될지를 설정할 수 있다.
+
+  ```python
+  from fastmcp import FastMCP
+  from fastmcp.server.providers.openapi import RouteMap, MCPType
+  
+  from app import app, EMPLOYEE_DB, EmployeeResponse
+  
+  
+  mcp = FastMCP.from_fastapi(
+      app=app,
+      route_maps=[
+          # GET with path params → ResourceTemplates
+          RouteMap(
+              methods=["GET"], 
+              pattern=r".*\{.*\}.*", 
+              mcp_type=MCPType.RESOURCE_TEMPLATE
+          ),
+          # Other GETs → Resources
+          RouteMap(
+              methods=["GET"], 
+              pattern=r".*", 
+              mcp_type=MCPType.RESOURCE
+          )
+      ]
+  )
+  
+  # Now:
+  # - GET /employees → Resource
+  # - GET /employees/{id} → ResourceTemplate
+  # - POST/PUT/DELETE → Tools
+  ```
+
+
+
+- FastAPI application에 MCP server를 mount하는 방식.
+
+  - FastMCP는 서버를 생성하는 것 외에도, 기존의 FastAPI application에 MCP 서버를 추가할 수 있는 기능을 지원한다.
+    - MCP ASGI application을 기존 FastAPI application에 mount하는 방식이다.
+  - 아래와 같이  MCP app을 생성하고
+
+  ```python
+  import random
+  
+  from fastmcp import FastMCP
+  
+  
+  mcp = FastMCP()
+  
+  @mcp.tool
+  def get_random_message_for_employee(name: str):
+      "Get random message for employee"
+      messages = ["Hello!", "Goodbye!"]
+      return f"{random.choice(messages)} {name}."
+  
+  mcp_app = mcp.http_app(path='/mcp')
+  ```
+
+  - 위에서 작성한  FastAPI app에 mount한다.
+
+  ```python
+  from typing import Optional
+  
+  from fastapi import FastAPI, APIRouter, HTTPException
+  from pydantic import BaseModel
+  import uvicorn
+  
+  from mount import mcp_app
+  
+  # lifespan을 추가하고
+  app = FastAPI(lifespan=mcp_app.lifespan)
+  
+  
+  # ...
+  
+  # FastAPI application에 mount한다.
+  app.mount("/messages", mcp_app)
+  
+  if __name__ == "__main__":
+      uvicorn.run(app)
+  ```
+
+  - MCP client로 테스트한다.
+    - 위에서 mount할 때 추가한 경로 뒤에  `/mcp`를 붙인다.
+
+  ```python
+  import asyncio
+  from fastmcp import Client
+  
+  
+  client = Client("http://localhost:8000/messages/mcp")
+  
+  
+  async def main():
+      async with client:
+  
+          tools = await client.list_tools()
+          # tool 목록
+          for t in tools:
+              print(f"{t.name}: {t.description}")
+          print("="*100)
+  
+          result = await client.call_tool("get_random_message_for_employee", {"name": "John"})
+          print(result.content)
+  
+  asyncio.run(main())
+  
+  
+  """
+  Output:
+  
+  get_random_message_for_employee: Get random message for employee
+  ====================================================================================================
+  [TextContent(type='text', text='Hello! John.', annotations=None, meta=None)]
+  """
+  ```
+
