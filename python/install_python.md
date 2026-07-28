@@ -52,6 +52,7 @@
   - `make`를 통해 소스 파일을 컴파일한다(skip 가능).
     - make과정이 끝나면 `setup.py` 파일이 생성된다.
     - `test`를 통해 test도 가능하다.
+    - Skip할 경우 `make install` 혹은 `make altinstall` 실행시 함께 실행된다.
   
   
   ```bash
@@ -66,7 +67,9 @@
   
   - 설치하기
     - `altinstall` 옵션은 기존에 설치된 Python과의 충돌을 피하기 위한 옵션이다.
-    - `install`을 입력해도 되지만, 이 경우 기존 Python에 덮어 씌워진다.
+    - `install`을 입력해도 되지만, 이 경우 `./configure` 명령어 실행시 `--prefix`로 입력한 경로에 python, python3 심볼릭 링크를 생성한다.
+    - 즉, `prefix`를  `/usr/bin`또는 `/usr/local/bin` 등으로 설정할 경우 기존 버전과 링크되어 있던 python, python3가 새로 설치된 버전과 연결되게 된다.
+    - 따라서 python, python3 실행시에 기존 버전을 그대로 사용하고자 할 경우에는 `altinstall`을 실행해야한다.
   
   ```bash
   $ make altinstall
