@@ -50,7 +50,7 @@
   - Kubernetes를 직접 설정하는 방법을 설명한 tutorial이다.
     - Kubernetes 클러스터를 구성하기 위해 필요한 모든 구성 요소를 단계별로 직접 설정하는 방법을 가이드해준다.
     - 실제 운영에서는 앞에서 살펴본 각종 도구를 사용하는 것이 권장된다.
-    - 그러나Kubernetes 운영에 필요한 전문적인 지식 습득을 위해서는 세부 설정에 대한 이해가 필요할 수 있다.
+    - 그러나 Kubernetes 운영에 필요한 전문적인 지식 습득을 위해서는 세부 설정에 대한 이해가 필요할 수 있다.
   - 위 가이드를 실습하면 Kubernetes의 전체적인 구성을 이해할 수 있어 Kubernetes에 대한 더 많은 지식을 얻을 수 있다.
 
 
@@ -271,8 +271,8 @@
   - Pod를 public internet으로 expose하기
     - `--type=LoadBalancer` flag는 Service를 cluster 외부로 expose하겠다는 것을 의미한다.
 
-  ```
-  kubectl expose deployment hello-node --type=LoadBalancer --port=8080
+  ```bash
+  $ kubectl expose deployment hello-node --type=LoadBalancer --port=8080
   ```
 
   - 생성한 service 확인하기

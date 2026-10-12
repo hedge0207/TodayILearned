@@ -282,6 +282,18 @@
   - Docker network 내부에서 container에게 할당되는 IP는 container가 정지되면 할당 해제되고, 다시 실행되면 새로 할당된다.
     - 따라서 정지 후 재실행하면 기존 IP address와 다른 IP를 할당받을 수도 있다.
     - 그러나 컨테이너 내부에서 DNS(docker service name)로 요청을 보내면 Docker가 service name에 해당하는 IP address로 바인딩해주기에 통신에는 영향이 없다.
+  - Docker container 내에서 `host.docker.internal`는 host를 가리키는 특수 DNS이다.
+    - 컨테이너 안에서 `localhost`나 `127.0.0.1`은 컨테이너 자신을 뜻한다.
+    - 따라서 호스트에서 실행 중인 서비스(예: 로컬 DB, API 서버)에 접근하려면 호스트의 IP가 필요한데, 이 IP는 환경마다 다르므로 `host.docker.internal`이라는 이름을 대신 사용한다.
+    - 단, Windows, Mac등의 docker desktop에서만 자동으로 생성되며, Linux에서는 수동으로 매핑해야한다.
+    - 수동 매핑은 아래와 같이 하면 된다.
+      - Contaier를 실행할 때, 아래와 같이 매핑한다.
+      - `host-gateway`는 실제 주소가 아니라 Docker 데몬이 특정 IP로 바꿔 넣는 예약어다.
+      - Docker 데몬이 컨테이너를 만들 때 `host-gateway`를 호스트에 도달할 수 있는 IP로 치환해서 컨테이너의 `/etc/hosts`에 기록한다.
+  
+  ```bash
+  $ docker run --add-host=host.docker.internal:host-gateway myimage
+  ```
 
 
 

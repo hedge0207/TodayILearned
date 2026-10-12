@@ -6,7 +6,7 @@
     - Java Byte Code를 운영체제에 맞게 해석해주는 역할을 한다.
     - 즉,  Java와 OS 사이에서 중개자 역할을 수행하여 OS에 독립적인 플랫폼을 갖게 해준다.
   - 구체적인 구현체를 의미하기도 하지만 스펙에 가까운 개념이다.
-    - JVM은 어떠해야 한다는 스펙에 따라 각 vendor(Oracle, IBM)들이 스펙에 맞개 개발한 JVM을 제공한다.
+    - JVM은 어떠해야 한다는 스펙에 따라 각 vendor(Oracle, IBM)들이 스펙에 맞게 개발한 JVM을 제공한다.
   - 구조
     - Class Loader
     - Runtime Data Areas
@@ -124,7 +124,7 @@
     - 이로 인해 mmap systemcall을 직접 호출할 수 있다.
   - 이로 인해 kernel 수준의 file system cache를 사용할 수 있게 된다.
     - Lucene에서 생성한 segment도 file이기 때문에 file system cache의 이점을 누릴 수 있다.
-    - Java heap memory에 의존하지 않으면서도 kernel 수준에서 간접적으로 물리 memory를 사용할 수 있게 돈다.
+    - Java heap memory에 의존하지 않으면서도 kernel 수준에서 간접적으로 물리 memory를 사용할 수 있게 된다.
     - 이 때문에 Elasticsearch에서 heap 설정 시 OS에게 물리 memory의 50%를 양보하는 것이다.
   - Elasticsearch에서 Lucene이 원활하게 동작하기 위해서는 가상 메모리 설정 중 mmap 크기 항목을 변경해야한다.
     - 대부분의 운영체제에서 이 값의 크기가 너무 작기 때문이다.
@@ -147,7 +147,7 @@
     - 스레드가 시작될 때 생성되며, Thread가 어떤 명령어로 실행되어야 할지를 기록하는 영역.
     - 현재 수행중인 JVM 명령의 주소를 갖는다.
   - Stack Area
-    - 프로그램 실행 과정에서 임시로 할당되었따가 메소드를 빠져나가면 바로 소멸되는 특성의 데이터를 저장하기 위한 영역.
+    - 프로그램 실행 과정에서 임시로 할당되었다가 메소드를 빠져나가면 바로 소멸되는 특성의 데이터를 저장하기 위한 영역.
     - 지역 변수, 매개 변수, 메서드 정보, 연산 중 발생하는 임시 데이터 등이 저장된다.
     - 메서드 호출 시마다 각각의 스택 프레임이 생성되며, 메서드 수행이 끝나면 프레임 별로 삭제한다.
   - Native method stack
@@ -196,7 +196,7 @@
     - 여러 번의 Minor GC를 거치고도 살아남은 객체들은 Old Generation으로 이동한다.
     - 한 번의 Minor GC에서 살아남을 때 마다 age가 1씩 추가되는 데 age가 몇일 때 부터 Old 영역으로 이동시킬지를 설정 가능하다.
     - Old 영역에서 메모리가 가득 차면 **Major GC**가 발생한다.
-  - Perm(Permenet)
+  - Perm(Permanent)
     - 이 영역은 Java8부터 삭제되었다.
 
 
@@ -305,7 +305,7 @@
     - ES의 경우 OOM이 발생한 노드는 클러스터에서 이탈하게 된다.
   - Stop-The-World
     - GC 작업 중에는 다른 스레드들이 메모리에 데이터를 쓰지 못하도록 막는다.
-    - GC가 진행되는 동안에너는 다른 스레드들이 동작하지 못하기 때문에 애플리케이션이 응답 불가 현상을 일으키고 이를 **Stop-The-World** 현상이라 한다.
+    - GC가 진행되는 동안에는 다른 스레드들이 동작하지 못하기 때문에 애플리케이션이 응답 불가 현상을 일으키고 이를 **Stop-The-World** 현상이라 한다.
     - 특히 old GC는 비워야 할 메모리의 양이 매우 많기 때문에 경우에 따라서는 초 단위의 GC 수행 시간이 소요되기도 한다.
     - 이럴 경우 ES 클러스터가 초 단위의 응답 불가 현상을 겪게 된다.
 
@@ -366,7 +366,7 @@
     - Compressed OOP,  Zero Based Heap Memory의 임계치가 모두 32GB 정도이기에 32GB를 넘을 경우 성능이 저하될 수 있다.
   - 힙 메모리가 가능한 32GB를 넘지 않도록 권고하는 이유
     - JVM은 연산을 위한 데이터들을 저장하기 위한 공간으로 힙 메모리를 사용한다.
-    - 이 때 힙 메모리에 저장되는 데이터들을 오브젝트라 부르고, 이 오브젝트에 접근하기 위한 메모리상의 주소를 OOP(Ordinaty Object Pointer)라는 구조체에 저장한다.
+    - 이 때 힙 메모리에 저장되는 데이터들을 오브젝트라 부르고, 이 오브젝트에 접근하기 위한 메모리상의 주소를 OOP(Ordinary Object Pointer)라는 구조체에 저장한다.
     - 각각의 OOP는 시스템 아키텍처에 따라 32 비트 혹은 64 비트의 주소 공간을 가리킬 수 있는데, 32비트라면 최대 4GB까지의 주소 공간을 가리킬 수 있는 반면 64 비트는 이론상 16EB까지의 주소 공간을 가리킬 수 있다.
     - 하지만 64 비트의 경우 32비트보다 더 넓은 주소 공간을 가리키기 위해 더 많은 연산과 더 많은 메모리 공간을 필요로 하기 때문에 성능 측면에서는 32 비트보다 떨어질 수밖에 없다.
     - 그래서 JVM은 시스템 아키텍처가 64 비트라고 하더라도 확보해야 할 힙 메모리 영역이 4GB보다 작다면 32 비트 기반의 OOP를 사용해서 성능을 확보한다.
@@ -414,7 +414,7 @@
   - 운영체제 입장에서 봤을 때 swapping은 많은 resource를 사용하는 작업이다.
   - Elasticsearch가 동작하는 데 필요한 memory도 swapping으로 인해 언제든지 disk로 swapping될 수 있다.
     - Swapping이 발생할 경우 node 안정성에 치명적이기 때문에 이를 최대한 피해야한다.
-    - Memory를 많이 사용하는 Elasticsearch의 특성상 swapping 작업에 읳 garbage collection이 비정상적으로 수 분 동안 지속되거나 node의 응답이 느려질 수 있다.
+    - Memory를 많이 사용하는 Elasticsearch의 특성상 swapping 작업에 의해 garbage collection이 비정상적으로 수 분 동안 지속되거나 node의 응답이 느려질 수 있다.
     - 또한 cluster의 연결이 불안정해질 수 있다.
   - 운영체제 차원에서 swapping을 막는 방법
     - 일시적으로 비활성화 하거나 파일을 수정하여 영구적으로 비활성화 할 수 있다.
@@ -443,17 +443,17 @@
 
   - Elasticsearch 차원에서 swapping 최소화
     - 위 두 방법은 모두 루트 권한이 필요하기에, 루트 권한이 없다면 사용할 수 없는 방법이다.
-    - Elasticsearch는 `bootstrap.memory_lock` 설정이 가능한데, 이를 활성화하면 `mlockall()` 함수와 동일한 방식으로 application 차원에서 swapping을 최대한 방지할 수 있따.
+    - Elasticsearch는 `bootstrap.memory_lock` 설정이 가능한데, 이를 활성화하면 `mlockall()` 함수와 동일한 방식으로 application 차원에서 swapping을 최대한 방지할 수 있다.
     - `mlockall()`은 호출한 프로세스의 페이징을 금지시키고 모든 memory가 램에 상주하는 것을 보장한다.
     - 다만, memory 사용량이 많아지면 이 설정을 무시하고 swapping이 발생할 수 있다.
 
   ```bash
   $ vi /<path>/elasticsearch.yml
   
-  boostrap.memory_lock: true
+  bootstrap.memory_lock: true
   ```
 
-  - `boostrap.memory_lock`이 잘 설정 됐는지 확인
+  - `bootstrap.memory_lock`이 잘 설정 됐는지 확인
     - 위와 같이 설정해도 실패하는 경우가 있으므로 반드시 확인해야한다.
     - 실패할 경우 WARN level로 로그가 남게 된다.
 
